@@ -402,6 +402,25 @@ vector_difference_algorithm =
          }?
       }
    )
+viscous_dissipation_algorithm =
+   (
+      ## algorithm for calculating the viscous dissipation.
+       element algorithm {
+         attribute name { "viscous_dissipation" },
+         attribute material_phase_support { "single "}
+      }
+   )
+adiabatic_heating_algorithm =
+   (
+      ## algorithm for calculating adiabatic_heating.
+       element algorithm {
+         attribute name { "adiabatic_heating" },
+         attribute material_phase_support { "single "},
+          element T_zero {
+            real
+          }
+      }
+   )
 
 # Time aggregated diagnostics
 
@@ -1365,6 +1384,8 @@ scalar_diagnostic_algorithms |= scalar_sum_algorithm
 scalar_diagnostic_algorithms |= scalar_difference_algorithm
 scalar_diagnostic_algorithms |= tidal_harmonic_algorithm
 scalar_diagnostic_algorithms |= particle_reynolds_number_algorithm
+scalar_diagnostic_algorithms |= viscous_dissipation_algorithm
+scalar_diagnostic_algorithms |= adiabatic_heating_algorithm
 
 vector_diagnostic_algorithms = vector_scalar_time_averaged_algorithm
 vector_diagnostic_algorithms |= vector_time_averaged_algorithm

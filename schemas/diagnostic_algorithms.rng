@@ -538,6 +538,31 @@ this option to these these internal algorithms.</a:documentation>
       </optional>
     </element>
   </define>
+  <define name="viscous_dissipation_algorithm">
+    <element name="algorithm">
+      <a:documentation>algorithm for calculating the viscous dissipation.</a:documentation>
+      <attribute name="name">
+        <value>viscous_dissipation</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single </value>
+      </attribute>
+    </element>
+  </define>
+  <define name="adiabatic_heating_algorithm">
+    <element name="algorithm">
+      <a:documentation>algorithm for calculating adiabatic_heating.</a:documentation>
+      <attribute name="name">
+        <value>adiabatic_heating</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single </value>
+      </attribute>
+      <element name="T_zero">
+        <ref name="real"/>
+      </element>
+    </element>
+  </define>
   <!-- Time aggregated diagnostics -->
   <!-- Temporal maximum diagnostic algorithm. -->
   <define name="temporalmax_algorithm">
@@ -1887,6 +1912,12 @@ This field needs to be interpolated between adapts.</a:documentation>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="particle_reynolds_number_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="viscous_dissipation_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="adiabatic_heating_algorithm"/>
   </define>
   <define name="vector_diagnostic_algorithms">
     <ref name="vector_scalar_time_averaged_algorithm"/>
