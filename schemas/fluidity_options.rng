@@ -3048,11 +3048,28 @@ parts.</a:documentation>
                 <empty/>
               </element>
             </optional>
+            <optional>
+              <element name="exclude_mass_terms">
+                <a:documentation>Exclude the mass terms from the continuity equation</a:documentation>
+                <empty/>
+              </element>
+            </optional>
           </element>
           <ref name="comment"/>
         </element>
         <element name="control_volumes">
           <a:documentation>Use a control volume discretisation.</a:documentation>
+          <optional>
+            <element name="mass_terms">
+              <a:documentation>Discretisation options for the mass terms.</a:documentation>
+              <optional>
+                <element name="exclude_mass_terms">
+                  <a:documentation>Exclude the mass terms from the continuity equation</a:documentation>
+                  <empty/>
+                </element>
+              </optional>
+            </element>
+          </optional>
           <ref name="spatial_control_volume_options"/>
         </element>
       </choice>

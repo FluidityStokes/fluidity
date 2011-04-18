@@ -91,7 +91,7 @@
       logical :: assemble_schur_auxiliary_matrix
 
       ! Do we want to use the compressible projection method?
-      logical :: use_compressible_projection
+      logical :: compressible_eos
       ! Does problem feature a free surface?
       logical :: have_free_surface
       ! Are we doing a full Schur solve?
@@ -432,11 +432,9 @@
                end select
             end if
 
-            if (has_boundary_condition(u, "free_surface")) then
-               have_free_surface = .true.
-            endif
+            have_free_surface = has_boundary_condition(u, "free_surface")
 
-            if (have_free_surface .or. use_compressible_projection) then
+            if (have_free_surface .or. compressible_eos) then
                ! With free surface or compressible-projection pressures are at integer
                ! time levels and we apply a theta-weighting to the pressure gradient term
                ! Also, obtain theta-weighting to be used in divergence term
@@ -631,7 +629,7 @@
                   prognostic_p_istate = istate
                end if
 
-               if(use_compressible_projection) then
+               if(compressible_eos) then
                   allocate(ctp_m(istate)%ptr)
                   call allocate(ctp_m(istate)%ptr, ct_m(istate)%ptr%sparsity, (/1, u%dim/), name="CTP_m")
                   if(cv_pressure) then
@@ -685,12 +683,9 @@
 
                if(full_schur) then
                   ! Decide whether we need to assemble an auxiliary matrix for full_projection solve:
-                  if(apply_kmk) then
-                     assemble_schur_auxiliary_matrix = .true.
-                  end if
-                  if (has_boundary_condition(u, "free_surface")) then
-                     assemble_schur_auxiliary_matrix = .true.
-                  end if
+                  assemble_schur_auxiliary_matrix = apply_kmk &
+                                                    .or. have_free_surface &
+                                                    .or. compressible_eos
 
                   ! If schur_auxiliary_matrix is needed then assemble it:
                   if(assemble_schur_auxiliary_matrix) then
@@ -712,6 +707,18 @@
                                           theta_divergence, get_cmc=.true., rhs=ct_rhs(istate))
                      end if
                   end if
+                 if(compressible_eos) then
+                   if(cv_pressure) then
+                     call assemble_compressible_projection_cv(state, schur_auxiliary_matrix, dt, theta_pg, &
+                                                              theta_divergence, assemble_schur_auxiliary_matrix)
+                   else if(cg_pressure) then
+                     call assemble_compressible_projection_cg(state, schur_auxiliary_matrix, dt, theta_pg, &
+                                                              theta_divergence, assemble_schur_auxiliary_matrix)
+                   else
+                     ! developer error... out of sync options input and code
+                     FLAbort("Unknown pressure discretisation for compressible projection.")
+                   end if
+                 end if
                end if
 
                !! Assemble the appropriate projection matrix (CMC)
@@ -973,7 +980,7 @@
 
                      call profiler_toc(u, "assembly")
 
-                     if(use_compressible_projection) then
+                     if(compressible_eos) then
                         call deallocate(ctp_m(istate)%ptr)
                         deallocate(ctp_m(istate)%ptr)
                      end if
@@ -1195,14 +1202,13 @@
 
 
          ! Are we using a compressible projection?
-         use_compressible_projection = have_option(trim(p%option_path)//&
-                                       "/prognostic/scheme&
-                                       &/use_compressible_projection_method")
+         compressible_eos = have_option("/material_phase["//int2str(istate-1)//&
+                                       "]/equation_of_state/compressible")
 
          get_cmc_m(istate) = get_cmc_m(istate) .or. &
                      have_option(trim(p%option_path)//&
                      "/prognostic/scheme/update_discretised_equation") .or. &
-                     use_compressible_projection
+                     compressible_eos
 
          get_ct_m = get_ct_m .or. &
                      have_option(trim(p%option_path)//&
@@ -1527,15 +1533,15 @@
 
          cmc_m => extract_csr_matrix(state(istate), "PressurePoissonMatrix", stat)
 
-         if(use_compressible_projection) then
+         if(compressible_eos) then
             call allocate(compress_projec_rhs, p%mesh, "CompressibleProjectionRHS")
 
             if(cv_pressure) then
-               call assemble_compressible_projection_cv(state, cmc_m, compress_projec_rhs, dt, &
-                                                      theta_pg, theta_divergence, get_cmc_m(istate))
+               call assemble_compressible_projection_cv(state, cmc_m, dt, &
+                                                      theta_pg, theta_divergence, get_cmc_m(istate), rhs=compress_projec_rhs)
             else if(cg_pressure) then
-               call assemble_compressible_projection_cg(state, cmc_m, compress_projec_rhs, dt, &
-                                                      theta_pg, theta_divergence, get_cmc_m(istate))
+               call assemble_compressible_projection_cg(state, cmc_m, dt, &
+                                                      theta_pg, theta_divergence, get_cmc_m(istate), rhs=compress_projec_rhs)
             else
                ! Developer error... out of sync options input and code
                FLAbort("Unknown pressure discretisation for compressible projection.")
@@ -1670,7 +1676,7 @@
          call addto(p, delta_p, scale=1.0/(theta_pg*dt))
          ewrite_minmax(p%val)
 
-         if(use_compressible_projection) then
+         if(compressible_eos) then
             call update_compressible_density(state)
          end if
 
@@ -1827,13 +1833,6 @@
                      ewrite(-1,*) "mass_terms/lump_mass_matrix"
                      FLExit("Good luck!")
                   end if
-
-               else if(have_option("/material_phase["//int2str(i)//&
-                                 "]/scalar_field::Pressure/prognostic&
-                                 &/scheme/use_compressible_projection_method")) then
-                  ewrite(-1,*) "You must lump the velocity mass matrix with the"
-                  ewrite(-1,*) "compressible projection method."
-                  FLExit("Sorry.")
                end if
 
             end if

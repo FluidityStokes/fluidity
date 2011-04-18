@@ -1525,40 +1525,6 @@ prognostic_pressure_field =
                    }
                  )
                }?
-            }|
-            ## Use the compressible projection method to determine the
-            ## pressure and satisfy continuity and the eos.
-            ## This is only currently compatible with control volume
-            ## pressure spatial discretisations and requires a
-            ## multimaterial eos.
-            element use_compressible_projection_method {
-               (
-                  ## Variable (normally a density) used to normalise
-                  ## each materials contribution
-                  ## to the C_P^T matrix.  Leave unselected for no normalisation.
-                  ## Selects the MaterialDensity field.
-                  element normalisation {
-                     attribute name{ "MaterialDensity" },
-                     empty
-                  }|
-                  ## Variable (normally a density) used to normalise
-                  ## each materials contribution
-                  ## to the C_P^T matrix.  Leave unselected for no normalisation.
-                  ## Selects the bulk Density field.
-                  element normalisation {
-                     attribute name{ "Density" },
-                     empty
-                  }|
-                  ## Variable (normally a density) used to normalise
-                  ## each materials contribution
-                  ## to the C_P^T matrix.  Leave unselected for no normalisation.
-                  ## Allows the selection of an arbitrary field.
-                  element normalisation {
-                     attribute name{ string },
-                     empty
-                  }
-               )?
-
             }
          ),
          ## rediscretise the equations at every timestep and iteration

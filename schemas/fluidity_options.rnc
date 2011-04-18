@@ -2217,12 +2217,23 @@ prognostic_density_field =
                   ## Lump the mass matrix
                   element lump_mass_matrix {
                      empty
+                  }?,
+                  ## Exclude the mass terms from the continuity equation
+                  element exclude_mass_terms {
+                     empty
                   }?
                },
                comment
             }|
             ## Use a control volume discretisation.
             element control_volumes {
+              ## Discretisation options for the mass terms.
+              element mass_terms {
+                 ## Exclude the mass terms from the continuity equation
+                 element exclude_mass_terms {
+                    empty
+                 }?
+              }?,
               spatial_control_volume_options
             }
          ),
