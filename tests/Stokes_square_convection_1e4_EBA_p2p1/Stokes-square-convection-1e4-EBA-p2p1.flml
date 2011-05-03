@@ -73,7 +73,7 @@
     </finish_time>
     <adaptive_timestep>
       <requested_cfl>
-        <real_value rank="0">2.0</real_value>
+        <real_value rank="0">3.0</real_value>
       </requested_cfl>
       <courant_number name="ControlVolumeCFLNumber">
         <mesh name="CoordinateMesh"/>
@@ -84,7 +84,7 @@
     </adaptive_timestep>
     <steady_state>
       <tolerance>
-        <real_value rank="0">1.0e-10</real_value>
+        <real_value rank="0">1.0e-4</real_value>
         <infinity_norm/>
       </tolerance>
     </steady_state>
@@ -92,7 +92,7 @@
   <physical_parameters>
     <gravity>
       <magnitude>
-        <real_value rank="0">1.0</real_value>
+        <real_value rank="0">0.25</real_value>
         <comment>Rayleigh number</comment>
       </magnitude>
       <vector_field name="GravityDirection" rank="1">
@@ -128,10 +128,9 @@
               <real_value rank="0">0.0</real_value>
             </reference_temperature>
             <thermal_expansion_coefficient>
-              <real_value rank="0">0.25</real_value>
+              <real_value rank="0">1.0</real_value>
             </thermal_expansion_coefficient>
           </temperature_dependency>
-          <subtract_out_hydrostatic_level/>
         </linear>
       </fluids>
     </equation_of_state>
@@ -150,9 +149,9 @@
               <inner_matrix name="FullMomentumMatrix">
                 <solver>
                   <iterative_method name="cg"/>
-                  <preconditioner name="sor"/>
+                  <preconditioner name="mg"/>
                   <relative_error>
-                    <real_value rank="0">1.0E-10</real_value>
+                    <real_value rank="0">1.0e-7</real_value>
                   </relative_error>
                   <max_iterations>
                     <integer_value rank="0">1000</integer_value>
@@ -164,7 +163,7 @@
                   </diagnostics>
                 </solver>
               </inner_matrix>
-              <preconditioner_matrix name="ScaledPressureMassMatrix"/>
+              <preconditioner_matrix name="DiagonalSchurComplement"/>
             </full_schur_complement>
           </use_projection_method>
         </scheme>
@@ -172,7 +171,7 @@
           <iterative_method name="cg"/>
           <preconditioner name="jacobi"/>
           <relative_error>
-            <real_value rank="0">1.0e-8</real_value>
+            <real_value rank="0">1.0e-5</real_value>
           </relative_error>
           <max_iterations>
             <integer_value rank="0">10000</integer_value>
@@ -197,10 +196,27 @@
         <consistent_interpolation/>
       </prognostic>
     </scalar_field>
+    <scalar_field name="Density" rank="0">
+      <diagnostic>
+        <algorithm name="Internal" material_phase_support="multiple"/>
+        <mesh name="VelocityMesh"/>
+        <output/>
+        <stat/>
+        <convergence>
+          <include_in_convergence/>
+        </convergence>
+        <detectors>
+          <include_in_detectors/>
+        </detectors>
+        <steady_state>
+          <include_in_steady_state/>
+        </steady_state>
+      </diagnostic>
+    </scalar_field>
     <vector_field name="Velocity" rank="1">
       <prognostic>
         <mesh name="VelocityMesh"/>
-        <equation name="Boussinesq"/>
+        <equation name="LinearMomentum"/>
         <spatial_discretisation>
           <continuous_galerkin>
             <stabilisation>
@@ -230,9 +246,9 @@
         </temporal_discretisation>
         <solver>
           <iterative_method name="cg"/>
-          <preconditioner name="sor"/>
+          <preconditioner name="mg"/>
           <relative_error>
-            <real_value rank="0">1.0e-10</real_value>
+            <real_value rank="0">1.0e-7</real_value>
           </relative_error>
           <max_iterations>
             <integer_value rank="0">1000</integer_value>
@@ -280,7 +296,7 @@
             <value name="WholeMesh">
               <isotropic>
                 <constant>
-                  <real_value rank="0">0.0001</real_value>
+                  <real_value rank="0">2.5e-5</real_value>
                 </constant>
               </isotropic>
             </value>
@@ -327,7 +343,7 @@
         </spatial_discretisation>
         <temporal_discretisation>
           <theta>
-            <real_value rank="0">0.5</real_value>
+            <real_value rank="0">1.0</real_value>
           </theta>
         </temporal_discretisation>
         <solver>
@@ -349,7 +365,7 @@
         <initial_condition name="WholeMesh">
           <python>
             <string_value lines="20" type="python">def val(x, t):
-	return 1.0 - x[1]</string_value>
+	return 0.5 + (x[0]*0.5)</string_value>
           </python>
         </initial_condition>
         <boundary_conditions name="HotBase">
@@ -396,6 +412,7 @@
         </tensor_field>
         <scalar_field name="Source" rank="0">
           <diagnostic>
+            <mesh name="CoordinateMesh"/>
             <algorithm name="viscous_dissipation" material_phase_support="single "/>
             <output/>
             <stat/>
@@ -406,6 +423,7 @@
         </scalar_field>
         <scalar_field name="Absorption" rank="0">
           <diagnostic>
+            <mesh name="VelocityMesh"/>
             <algorithm name="adiabatic_heating" material_phase_support="single ">
               <T_zero>
                 <real_value rank="0">0.0</real_value>

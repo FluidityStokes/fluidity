@@ -157,8 +157,8 @@ contains
        val = 0.
        do dim2 = 1, velocity%dim
           do dim1 = 1, velocity%dim
-             val = val + ((node_val(viscosity_component,node) * & 
-                 & node_val(strain_rate_tensor,dim1,dim2,node)) * &
+             val = val + ( 2. * node_val(viscosity_component,node) * & 
+                 & node_val(strain_rate_tensor,dim1,dim2,node)      * &
                  & node_val(velocity_gradient_tensor,dim1,dim2,node))
           end do
        end do
@@ -186,7 +186,7 @@ contains
 
     real :: gamma ! thermal expansion coefficient
     real :: gravity_magnitude ! gravity_magnitude
-    real :: Cp, depth, dissipation_number, T_zero, rho_ref
+    real :: depth, dissipation_number, T_zero, Cp, rho_ref
     integer :: node
 
     ! Extract temperature from state:
@@ -217,7 +217,7 @@ contains
 
     ! Calculate and set adiabatic heating:
     do node = 1, node_count(s_field)
-       call set(s_field, node, gamma*gravity_magnitude*rho_ref*node_val(velocity_component,node)*(node_val(temperature,node) + T_zero))
+       call set(s_field, node, gamma*gravity_magnitude*depth*node_val(velocity_component,node)) !*(node_val(temperature,node) + T_zero))
     end do
 
   end subroutine calculate_adiabatic_heating
