@@ -538,31 +538,6 @@ this option to these these internal algorithms.</a:documentation>
       </optional>
     </element>
   </define>
-  <define name="viscous_dissipation_algorithm">
-    <element name="algorithm">
-      <a:documentation>algorithm for calculating the viscous dissipation.</a:documentation>
-      <attribute name="name">
-        <value>viscous_dissipation</value>
-      </attribute>
-      <attribute name="material_phase_support">
-        <value>single </value>
-      </attribute>
-    </element>
-  </define>
-  <define name="adiabatic_heating_algorithm">
-    <element name="algorithm">
-      <a:documentation>algorithm for calculating adiabatic_heating.</a:documentation>
-      <attribute name="name">
-        <value>adiabatic_heating</value>
-      </attribute>
-      <attribute name="material_phase_support">
-        <value>single </value>
-      </attribute>
-      <element name="T_zero">
-        <ref name="real"/>
-      </element>
-    </element>
-  </define>
   <!-- Time aggregated diagnostics -->
   <!-- Temporal maximum diagnostic algorithm. -->
   <define name="temporalmax_algorithm">
@@ -1206,7 +1181,8 @@ for material i and \nu^i is the viscosity of material i</a:documentation>
       <a:documentation>Algorithm for the diagnostic value coded in Python. 
 The object 'state' has the attributes 'scalar_fields', 'vector_fields'
 and 'tensor_fields';
-'field' is the diagnostic field to be set</a:documentation>
+'field' is the diagnostic field to be set.
+'time' and 'dt' are the current time and timestep.</a:documentation>
       <attribute name="name">
         <value>scalar_python_diagnostic</value>
       </attribute>
@@ -1238,7 +1214,8 @@ Water::Velocity</a:documentation>
       <a:documentation>Algorithm for the diagnostic value coded in Python. 
 The object 'state' has the attributes 'scalar_fields', 'vector_fields'
 and 'tensor_fields';
-'field' is the diagnostic field to be set</a:documentation>
+'field' is the diagnostic field to be set.
+'time' and 'dt' are the current time and timestep.</a:documentation>
       <attribute name="name">
         <value>vector_python_diagnostic</value>
       </attribute>
@@ -1270,7 +1247,8 @@ Water::Velocity</a:documentation>
       <a:documentation>Algorithm for the diagnostic value coded in Python. 
 The object 'state' has the attributes 'scalar_fields', 'vector_fields'
 and 'tensor_fields';
-'field' is the diagnostic field to be set</a:documentation>
+'field' is the diagnostic field to be set.
+'time' and 'dt' are the current time and timestep.</a:documentation>
       <attribute name="name">
         <value>tensor_python_diagnostic</value>
       </attribute>
@@ -1719,6 +1697,31 @@ The mesh must be directly extruded.</a:documentation>
       </attribute>
     </element>
   </define>
+  <define name="viscous_dissipation_algorithm">
+    <element name="algorithm">
+      <a:documentation>algorithm for calculating the viscous dissipation.</a:documentation>
+      <attribute name="name">
+        <value>viscous_dissipation</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single </value>
+      </attribute>
+    </element>
+  </define>
+  <define name="adiabatic_heating_algorithm">
+    <element name="algorithm">
+      <a:documentation>algorithm for calculating adiabatic_heating.</a:documentation>
+      <attribute name="name">
+        <value>adiabatic_heating</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single </value>
+      </attribute>
+      <element name="T_zero">
+        <ref name="real"/>
+      </element>
+    </element>
+  </define>
   <!-- Time averaged fields -->
   <define name="scalar_time_averaged_algorithm">
     <element name="algorithm">
@@ -1818,31 +1821,67 @@ This field needs to be interpolated between adapts.</a:documentation>
     </element>
   </define>
   <define name="scalar_diagnostic_algorithms">
-    <ref name="scalar_squared_time_averaged_algorithm"/>
+    <ref name="viscous_dissipation_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
-    <ref name="scalar_time_averaged_algorithm"/>
-  </define>
-  <define name="scalar_diagnostic_algorithms" combine="choice">
-    <ref name="column_id_algorithm"/>
+    <ref name="universal_numbering_diagnostic_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="universal_column_id_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
-    <ref name="scalar_python_diagnostic_algorithm"/>
+    <ref name="tidal_harmonic_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="tensor_second_invariant_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="temporalmin_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="temporalmax_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="scalar_time_averaged_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="scalar_sum_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="scalar_squared_time_averaged_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="scalar_potential_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="scalar_laplacian_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="scalar_galerkin_projection_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="scalar_difference_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="scalar_copy_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
-    <ref name="extract_scalar_component_algorithm"/>
+    <ref name="scalar_advection_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="projection_scalar_potential_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="particle_reynolds_number_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="node_halo_diagnostic_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="lumped_mass_smoothed_scalar_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="l2norm_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="helmholtz_smoothed_scalar_algorithm"/>
@@ -1851,13 +1890,22 @@ This field needs to be interpolated between adapts.</a:documentation>
     <ref name="helmholtz_anisotropic_smoothed_scalar_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
-    <ref name="scalar_galerkin_projection_algorithm"/>
+    <ref name="grad_normal_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
-    <ref name="temporalmax_algorithm"/>
+    <ref name="finite_element_divergence_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
-    <ref name="temporalmin_algorithm"/>
+    <ref name="extract_scalar_component_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="element_universal_numbering_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="element_ownership_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="element_halo_diagnostic_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="div_algorithm"/>
@@ -1866,70 +1914,46 @@ This field needs to be interpolated between adapts.</a:documentation>
     <ref name="curl_2d_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
-    <ref name="finite_element_divergence_algorithm"/>
-  </define>
-  <define name="scalar_diagnostic_algorithms" combine="choice">
-    <ref name="scalar_advection_algorithm"/>
-  </define>
-  <define name="scalar_diagnostic_algorithms" combine="choice">
-    <ref name="scalar_laplacian_algorithm"/>
-  </define>
-  <define name="scalar_diagnostic_algorithms" combine="choice">
-    <ref name="scalar_potential_algorithm"/>
-  </define>
-  <define name="scalar_diagnostic_algorithms" combine="choice">
-    <ref name="projection_scalar_potential_algorithm"/>
-  </define>
-  <define name="scalar_diagnostic_algorithms" combine="choice">
-    <ref name="grad_normal_algorithm"/>
-  </define>
-  <define name="scalar_diagnostic_algorithms" combine="choice">
-    <ref name="node_halo_diagnostic_algorithm"/>
-  </define>
-  <define name="scalar_diagnostic_algorithms" combine="choice">
-    <ref name="universal_numbering_diagnostic_algorithm"/>
-  </define>
-  <define name="scalar_diagnostic_algorithms" combine="choice">
-    <ref name="element_halo_diagnostic_algorithm"/>
-  </define>
-  <define name="scalar_diagnostic_algorithms" combine="choice">
-    <ref name="element_ownership_algorithm"/>
-  </define>
-  <define name="scalar_diagnostic_algorithms" combine="choice">
-    <ref name="element_universal_numbering_algorithm"/>
-  </define>
-  <define name="scalar_diagnostic_algorithms" combine="choice">
-    <ref name="l2norm_algorithm"/>
-  </define>
-  <define name="scalar_diagnostic_algorithms" combine="choice">
-    <ref name="scalar_sum_algorithm"/>
-  </define>
-  <define name="scalar_diagnostic_algorithms" combine="choice">
-    <ref name="scalar_difference_algorithm"/>
-  </define>
-  <define name="scalar_diagnostic_algorithms" combine="choice">
-    <ref name="tidal_harmonic_algorithm"/>
-  </define>
-  <define name="scalar_diagnostic_algorithms" combine="choice">
-    <ref name="particle_reynolds_number_algorithm"/>
-  </define>
-  <define name="scalar_diagnostic_algorithms" combine="choice">
-    <ref name="viscous_dissipation_algorithm"/>
+    <ref name="column_id_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="adiabatic_heating_algorithm"/>
   </define>
-  <define name="vector_diagnostic_algorithms">
-    <ref name="vector_scalar_time_averaged_algorithm"/>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="scalar_python_diagnostic_algorithm"/>
   </define>
-  <define name="vector_diagnostic_algorithms" combine="choice">
+  <define name="vector_diagnostic_algorithms">
     <ref name="vector_time_averaged_algorithm"/>
   </define>
   <define name="vector_diagnostic_algorithms" combine="choice">
-    <ref name="vector_python_diagnostic_algorithm"/>
+    <ref name="vector_sum_algorithm"/>
+  </define>
+  <define name="vector_diagnostic_algorithms" combine="choice">
+    <ref name="vector_scalar_time_averaged_algorithm"/>
+  </define>
+  <define name="vector_diagnostic_algorithms" combine="choice">
+    <ref name="vector_potential_algorithm"/>
+  </define>
+  <define name="vector_diagnostic_algorithms" combine="choice">
+    <ref name="vector_laplacian_algorithm"/>
+  </define>
+  <define name="vector_diagnostic_algorithms" combine="choice">
+    <ref name="vector_galerkin_projection_algorithm"/>
+  </define>
+  <define name="vector_diagnostic_algorithms" combine="choice">
+    <ref name="vector_difference_algorithm"/>
   </define>
   <define name="vector_diagnostic_algorithms" combine="choice">
     <ref name="vector_copy_algorithm"/>
+  </define>
+  <define name="vector_diagnostic_algorithms" combine="choice">
+    <ref name="vector_advection_algorithm"/>
+  </define>
+  <define name="vector_diagnostic_algorithms" combine="choice">
+    <ref name="perp_algorithm"/>
+  </define>
+  <define name="vector_diagnostic_algorithms" combine="choice">
+    <ref name="lumped_mass_smoothed_vector_algorithm"/>
   </define>
   <define name="vector_diagnostic_algorithms" combine="choice">
     <ref name="helmholtz_smoothed_vector_algorithm"/>
@@ -1938,55 +1962,28 @@ This field needs to be interpolated between adapts.</a:documentation>
     <ref name="helmholtz_anisotropic_smoothed_vector_algorithm"/>
   </define>
   <define name="vector_diagnostic_algorithms" combine="choice">
-    <ref name="lumped_mass_smoothed_vector_algorithm"/>
-  </define>
-  <define name="vector_diagnostic_algorithms" combine="choice">
-    <ref name="vector_galerkin_projection_algorithm"/>
-  </define>
-  <define name="vector_diagnostic_algorithms" combine="choice">
     <ref name="grad_algorithm"/>
-  </define>
-  <define name="vector_diagnostic_algorithms" combine="choice">
-    <ref name="perp_algorithm"/>
-  </define>
-  <define name="vector_diagnostic_algorithms" combine="choice">
-    <ref name="finite_element_divergence_transpose_algorithm"/>
-  </define>
-  <define name="vector_diagnostic_algorithms" combine="choice">
-    <ref name="curl_algorithm"/>
-  </define>
-  <define name="vector_diagnostic_algorithms" combine="choice">
-    <ref name="vector_advection_algorithm"/>
-  </define>
-  <define name="vector_diagnostic_algorithms" combine="choice">
-    <ref name="vector_laplacian_algorithm"/>
-  </define>
-  <define name="vector_diagnostic_algorithms" combine="choice">
-    <ref name="vector_potential_algorithm"/>
   </define>
   <define name="vector_diagnostic_algorithms" combine="choice">
     <ref name="geostrophic_velocity_algorithm"/>
   </define>
   <define name="vector_diagnostic_algorithms" combine="choice">
+    <ref name="finite_element_divergence_transpose_algorithm"/>
+  </define>
+  <define name="vector_diagnostic_algorithms" combine="choice">
     <ref name="eigenvalues_symmetric_algorithm"/>
   </define>
   <define name="vector_diagnostic_algorithms" combine="choice">
-    <ref name="vector_sum_algorithm"/>
+    <ref name="curl_algorithm"/>
   </define>
   <define name="vector_diagnostic_algorithms" combine="choice">
-    <ref name="vector_difference_algorithm"/>
+    <ref name="vector_python_diagnostic_algorithm"/>
   </define>
   <define name="tensor_diagnostic_algorithms">
-    <ref name="vector_squared_time_averaged_algorithm"/>
-  </define>
-  <define name="tensor_diagnostic_algorithms" combine="choice">
-    <ref name="tensor_python_diagnostic_algorithm"/>
+    <ref name="tensor_squared_time_averaged_algorithm"/>
   </define>
   <define name="tensor_diagnostic_algorithms" combine="choice">
     <ref name="tensor_copy_algorithm"/>
-  </define>
-  <define name="tensor_diagnostic_algorithms" combine="choice">
-    <ref name="field_tolerance_algorithm"/>
   </define>
   <define name="tensor_diagnostic_algorithms" combine="choice">
     <ref name="strain_rate_algorithm"/>
@@ -1996,5 +1993,11 @@ This field needs to be interpolated between adapts.</a:documentation>
   </define>
   <define name="tensor_diagnostic_algorithms" combine="choice">
     <ref name="helmholtz_anisotropic_smoothed_tensor_algorithm"/>
+  </define>
+  <define name="tensor_diagnostic_algorithms" combine="choice">
+    <ref name="field_tolerance_algorithm"/>
+  </define>
+  <define name="tensor_diagnostic_algorithms" combine="choice">
+    <ref name="tensor_python_diagnostic_algorithm"/>
   </define>
 </grammar>
