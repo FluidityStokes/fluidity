@@ -1708,18 +1708,29 @@ The mesh must be directly extruded.</a:documentation>
       </attribute>
     </element>
   </define>
-  <define name="adiabatic_heating_algorithm">
+  <define name="adiabatic_heating_coefficient_algorithm">
     <element name="algorithm">
-      <a:documentation>algorithm for calculating adiabatic_heating.</a:documentation>
+      <a:documentation>algorithm for calculating adiabatic_heating coefficient,
+needed when applying adiabatic heating absorption term.</a:documentation>
       <attribute name="name">
-        <value>adiabatic_heating</value>
+        <value>adiabatic_heating_coefficient</value>
       </attribute>
       <attribute name="material_phase_support">
         <value>single </value>
       </attribute>
-      <element name="T_zero">
-        <ref name="real"/>
-      </element>
+    </element>
+  </define>
+  <define name="adiabatic_heating_absorption_algorithm">
+    <element name="algorithm">
+      <a:documentation>algorithm for calculating the adiabatic heating coefficient
+which is subsequently multiplied by T for output purposes.
+This is thus the full absorption term:</a:documentation>
+      <attribute name="name">
+        <value>adiabatic_heating_absorption</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single </value>
+      </attribute>
     </element>
   </define>
   <!-- Time averaged fields -->
@@ -1917,7 +1928,10 @@ This field needs to be interpolated between adapts.</a:documentation>
     <ref name="column_id_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
-    <ref name="adiabatic_heating_algorithm"/>
+    <ref name="adiabatic_heating_coefficient_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="adiabatic_heating_absorption_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="scalar_python_diagnostic_algorithm"/>

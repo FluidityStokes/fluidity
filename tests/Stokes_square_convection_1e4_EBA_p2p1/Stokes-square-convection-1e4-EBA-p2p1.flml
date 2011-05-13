@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <fluidity_options>
   <simulation_name>
-    <string_value lines="1">stokes-1e4-p2p1</string_value>
+    <string_value lines="1">stokes-1e4-p2p1-EBA</string_value>
     <comment>This case compares to case 1(a) in the benchmark paper of Blankenbach et al. 1989.</comment>
   </simulation_name>
   <problem_type>
@@ -93,7 +93,7 @@
     <gravity>
       <magnitude>
         <real_value rank="0">0.25</real_value>
-        <comment>Rayleigh number</comment>
+        <comment>Equivalent to Dissipation Number</comment>
       </magnitude>
       <vector_field name="GravityDirection" rank="1">
         <prescribed>
@@ -148,8 +148,8 @@
             <full_schur_complement>
               <inner_matrix name="FullMomentumMatrix">
                 <solver>
-                  <iterative_method name="cg"/>
-                  <preconditioner name="mg"/>
+                  <iterative_method name="preonly"/>
+                  <preconditioner name="lu"/>
                   <relative_error>
                     <real_value rank="0">1.0e-7</real_value>
                   </relative_error>
@@ -171,7 +171,7 @@
           <iterative_method name="cg"/>
           <preconditioner name="jacobi"/>
           <relative_error>
-            <real_value rank="0">1.0e-5</real_value>
+            <real_value rank="0">1.0e-8</real_value>
           </relative_error>
           <max_iterations>
             <integer_value rank="0">10000</integer_value>
@@ -245,8 +245,8 @@
           </relaxation>
         </temporal_discretisation>
         <solver>
-          <iterative_method name="cg"/>
-          <preconditioner name="mg"/>
+          <iterative_method name="preonly"/>
+          <preconditioner name="lu"/>
           <relative_error>
             <real_value rank="0">1.0e-7</real_value>
           </relative_error>
@@ -423,12 +423,7 @@
         </scalar_field>
         <scalar_field name="Absorption" rank="0">
           <diagnostic>
-            <mesh name="VelocityMesh"/>
-            <algorithm name="adiabatic_heating" material_phase_support="single ">
-              <T_zero>
-                <real_value rank="0">0.0</real_value>
-              </T_zero>
-            </algorithm>
+            <algorithm name="adiabatic_heating_coefficient" material_phase_support="single "/>
             <output/>
             <stat/>
             <detectors>
@@ -499,6 +494,23 @@
         </detectors>
         <steady_state>
           <exclude_from_steady_state/>
+        </steady_state>
+      </diagnostic>
+    </scalar_field>
+    <scalar_field name="Adiabatic_Source" rank="0">
+      <diagnostic>
+        <algorithm name="adiabatic_heating_absorption" material_phase_support="single "/>
+        <mesh name="CoordinateMesh"/>
+        <output/>
+        <stat/>
+        <convergence>
+          <include_in_convergence/>
+        </convergence>
+        <detectors>
+          <include_in_detectors/>
+        </detectors>
+        <steady_state>
+          <include_in_steady_state/>
         </steady_state>
       </diagnostic>
     </scalar_field>

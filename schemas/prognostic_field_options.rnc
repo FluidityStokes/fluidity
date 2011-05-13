@@ -251,7 +251,7 @@ prognostic_scalar_field =
                (
                   scalar_python_diagnostic_algorithm |
                   internal_algorithm |
-		  adiabatic_heating_algorithm
+		  adiabatic_heating_coefficient_algorithm
                ),
                diagnostic_scalar_field_no_adapt
             }

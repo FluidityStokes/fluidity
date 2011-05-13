@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>1
+<?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE testproblem SYSTEM "regressiontest.dtd">
 <testproblem>
   <name>p2p1-Stokes-square-convection-1e4-EBA</name>
@@ -14,29 +14,47 @@
 
 <variable name="nu_top" language="python">
 from fluidity_tools import stat_parser as stat
-nu_top = abs(stat("stokes-1e4-EBA-p2p1.stat")["Fluid"]["Temperature"]["surface_integral%TopH"][-1])
+nu_top = abs(stat("stokes-1e4-p2p1-EBA.stat")["Fluid"]["Temperature"]["surface_integral%TopH"][-1])
 </variable>
 
 <variable name="max_div" language="python">
 from fluidity_tools import stat_parser as stat
-max_div = max(max(abs(stat("stokes-1e4-EBA-p2p1.stat")["Fluid"]["FiniteElementDivergence"]["max"])), max(abs(stat("stokes-1e4-EBA-p2p1.stat")["Fluid"]["FiniteElementDivergence"]["min"])))
+max_div = max(max(abs(stat("stokes-1e4-p2p1-EBA.stat")["Fluid"]["FiniteElementDivergence"]["max"])), max(abs(stat("stokes-1e4-p2p1-EBA.stat")["Fluid"]["FiniteElementDivergence"]["min"])))
 </variable>
 
 <variable name="rms_vel" language="python">
 from fluidity_tools import stat_parser as stat
-rms_vel= stat("stokes-1e4-EBA-p2p1.stat")["Fluid"]["Velocity%magnitude"]["l2norm"][-1]
+rms_vel= stat("stokes-1e4-p2p1-EBA.stat")["Fluid"]["Velocity%magnitude"]["l2norm"][-1]
+</variable>
+
+<variable name="adiabatic_source" language="python">
+from fluidity_tools import stat_parser as stat
+adiabatic_source= stat("stokes-1e4-p2p1-EBA.stat")["Fluid"]["Adiabatic_Source"]["integral"][-1]
+</variable>
+
+<variable name="viscous_dissipation" language="python">
+from fluidity_tools import stat_parser as stat
+viscous_dissipation= stat("stokes-1e4-p2p1-EBA.stat")["Fluid"]["TemperatureSource"]["integral"][-1]
 </variable>
 
 </variables>
 
 <pass_tests>
 
-<test name="Surface Nusselt Number Validity: 4.5 .lt. Nu .lt. 4.8" language="python">
-assert(abs(nu_top-4.65) &lt; 0.15)
+<test name="Surface Nusselt Number Validity: 3.85 .lt. Nu .lt. 4.15" language="python">
+assert(abs(nu_top-4.00) &lt; 0.15)
 </test>
 
-<test name="RMS Velocity Validity: 41.0 .lt. V_RMS .lt. 44.0" language="python">
-assert(abs(rms_vel-42.5) &lt; 1.5)
+<test name="RMS Velocity Validity: 38.0 .lt. V_RMS .lt. 41.0" language="python">
+assert(abs(rms_vel-39.5) &lt; 1.5)
+</test>
+
+<test name="Adiabatic_Source Validity: 0.7 .lt. Adiabatic_Source .lt. 0.9" language="python">
+assert(abs(adiabatic_source-0.8) &lt; 0.1)
+</test>
+
+<test name="Viscous_Dissipation Validity: 0.7 .lt. Adiabatic_Source .lt. 0.9" language="python">
+assert(abs(viscous_dissipation-0.8) &lt; 0.1)
 </test>
 
 <test name="Divergence small .lt. 1.0E-3" language="python">

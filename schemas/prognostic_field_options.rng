@@ -328,7 +328,7 @@ elements when buoyancy is a discontinuous field.</a:documentation>
             <choice>
               <ref name="scalar_python_diagnostic_algorithm"/>
               <ref name="internal_algorithm"/>
-              <ref name="adiabatic_heating_algorithm"/>
+              <ref name="adiabatic_heating_coefficient_algorithm"/>
             </choice>
             <ref name="diagnostic_scalar_field_no_adapt"/>
           </element>

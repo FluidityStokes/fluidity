@@ -1264,15 +1264,23 @@ viscous_dissipation_algorithm =
          attribute material_phase_support { "single "}
       }
    )
-adiabatic_heating_algorithm =
+adiabatic_heating_coefficient_algorithm =
    (
-      ## algorithm for calculating adiabatic_heating.
+      ## algorithm for calculating adiabatic_heating coefficient,
+      ## needed when applying adiabatic heating absorption term.
        element algorithm {
-         attribute name { "adiabatic_heating" },
-         attribute material_phase_support { "single "},
-          element T_zero {
-            real
-          }
+         attribute name { "adiabatic_heating_coefficient" },
+         attribute material_phase_support { "single "}
+      }
+   )
+adiabatic_heating_absorption_algorithm =
+   (
+      ## algorithm for calculating the adiabatic heating coefficient
+      ## which is subsequently multiplied by T for output purposes.
+      ## This is thus the full absorption term:
+       element algorithm {
+         attribute name { "adiabatic_heating_absorption" },
+         attribute material_phase_support { "single "}
       }
    )
 
@@ -1387,7 +1395,8 @@ scalar_diagnostic_algorithms |= element_halo_diagnostic_algorithm
 scalar_diagnostic_algorithms |= div_algorithm
 scalar_diagnostic_algorithms |= curl_2d_algorithm
 scalar_diagnostic_algorithms |= column_id_algorithm
-scalar_diagnostic_algorithms |= adiabatic_heating_algorithm
+scalar_diagnostic_algorithms |= adiabatic_heating_coefficient_algorithm
+scalar_diagnostic_algorithms |= adiabatic_heating_absorption_algorithm
 scalar_diagnostic_algorithms |= scalar_python_diagnostic_algorithm
 
 vector_diagnostic_algorithms = vector_time_averaged_algorithm
