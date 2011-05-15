@@ -706,19 +706,19 @@
                                           schur_auxiliary_matrix, dt, theta_pg, &
                                           theta_divergence, get_cmc=.true., rhs=ct_rhs(istate))
                      end if
+                     if(compressible_eos) then
+                       if(cv_pressure) then
+                         call assemble_compressible_projection_cv(state, schur_auxiliary_matrix, dt, theta_pg, &
+                                                                  theta_divergence, assemble_schur_auxiliary_matrix)
+                       else if(cg_pressure) then
+                         call assemble_compressible_projection_cg(state, schur_auxiliary_matrix, dt, theta_pg, &
+                                                                  theta_divergence, assemble_schur_auxiliary_matrix)
+                       else
+                         ! developer error... out of sync options input and code
+                         FLAbort("Unknown pressure discretisation for compressible projection.")
+                       end if
+                     end if
                   end if
-                 if(compressible_eos) then
-                   if(cv_pressure) then
-                     call assemble_compressible_projection_cv(state, schur_auxiliary_matrix, dt, theta_pg, &
-                                                              theta_divergence, assemble_schur_auxiliary_matrix)
-                   else if(cg_pressure) then
-                     call assemble_compressible_projection_cg(state, schur_auxiliary_matrix, dt, theta_pg, &
-                                                              theta_divergence, assemble_schur_auxiliary_matrix)
-                   else
-                     ! developer error... out of sync options input and code
-                     FLAbort("Unknown pressure discretisation for compressible projection.")
-                   end if
-                 end if
                end if
 
                !! Assemble the appropriate projection matrix (CMC)
