@@ -397,6 +397,8 @@ contains
 
       ! integrate by parts
       logical :: integrate_by_parts
+      ! use the reference density
+      logical :: use_reference_density
 
       integer, dimension(:,:), allocatable :: field_bc_type
       type(vector_field) :: field_bc
@@ -404,6 +406,7 @@ contains
       integer, dimension(:), allocatable :: density_bc_type
       type(scalar_field) :: density_bc
       
+      character(len=OPTION_PATH_LEN) :: density_option_path
       integer :: stat
 
       ! =============================================================
@@ -415,35 +418,48 @@ contains
       coordinate=> extract_vector_field(state, "Coordinate")
       
       density => extract_scalar_field(state, "Density")
-      olddensity => extract_scalar_field(state, "OldDensity")
+      density_option_path = density%option_path
+
+      use_reference_density=have_option(trim(complete_field_path(density_option_path, stat=stat))//&
+          &"/spatial_discretisation/use_reference_density")
+
+      if(use_reference_density) then
+        density => extract_scalar_field(state, "CompressibleReferenceDensity")
+        olddensity => extract_scalar_field(state, "OldCompressibleReferenceDensity", stat=stat)
+        if(stat/=0) then
+          olddensity => density
+        end if
+      else
+        olddensity => extract_scalar_field(state, "OldDensity")
+      end if
       
       pressure => extract_scalar_field(state, "Pressure")
       
       velocity=>extract_vector_field(state, "Velocity")
       nonlinearvelocity=>extract_vector_field(state, "NonlinearVelocity") ! maybe this should be updated after the velocity solve?
       
-      integrate_by_parts=have_option(trim(complete_field_path(density%option_path, stat=stat))//&
+      integrate_by_parts=have_option(trim(complete_field_path(density_option_path, stat=stat))//&
           &"/spatial_discretisation/continuous_galerkin/advection_terms/integrate_advection_by_parts")&
           .or. have_option(trim(complete_field_path(velocity%option_path, stat=stat))//&
           &"/spatial_discretisation/discontinuous_galerkin")
 
       ewrite(2,*) "Compressible divergence is integrated by parts: ", integrate_by_parts
 
-      if(have_option(trim(density%option_path) // "/prognostic/spatial_discretisation/&
+      if(have_option(trim(density_option_path) // "/prognostic/spatial_discretisation/&
                       &continuous_galerkin/stabilisation/streamline_upwind")) then
         ewrite(2, *) "Streamline upwind stabilisation"
         FLExit("SU stabilisation broken with continuity at the moment.")
         stabilisation_scheme = STABILISATION_STREAMLINE_UPWIND
-        call get_upwind_options(trim(density%option_path) // & 
+        call get_upwind_options(trim(density_option_path) // & 
                                 "/prognostic/spatial_discretisation/continuous_galerkin/&
                                 &stabilisation/streamline_upwind", &
                                 & nu_bar_scheme, nu_bar_scale)
-      else if(have_option(trim(density%option_path) // &
+      else if(have_option(trim(density_option_path) // &
                           "/prognostic/spatial_discretisation/continuous_galerkin/&
                           &stabilisation/streamline_upwind_petrov_galerkin")) then
         ewrite(2, *) "SUPG stabilisation"
         stabilisation_scheme = STABILISATION_SUPG
-        call get_upwind_options(trim(density%option_path) // & 
+        call get_upwind_options(trim(density_option_path) // & 
                                 "/prognostic/spatial_discretisation/continuous_galerkin/&
                                 &stabilisation/streamline_upwind_petrov_galerkin", &
                                 & nu_bar_scheme, nu_bar_scale)
@@ -452,7 +468,7 @@ contains
         stabilisation_scheme = STABILISATION_NONE
       end if
 
-      call get_option(trim(complete_field_path(density%option_path, stat=stat))//&
+      call get_option(trim(complete_field_path(density_option_path, stat=stat))//&
           &"/temporal_discretisation/theta", theta)
       call get_option("/timestepping/timestep", dt)
       

@@ -2195,7 +2195,15 @@ prognostic_density_field =
          ##  0. < TBETA < 1.
          element conservative_advection {
            real
-         }
+         },
+         ## Rather than assmeble the continuity equation using
+         ## the main density field, instead extract the CompressibleReferenceDensity
+         ## field and assemble it using that.
+         ##
+         ## Note that this normally only makes sense with exclude_mass_terms switched on!
+         element use_reference_density {
+           empty
+         }?
       },
       element temporal_discretisation {
          ## Implicit/explicit control (TTHETA)

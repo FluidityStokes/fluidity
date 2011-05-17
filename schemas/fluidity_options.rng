@@ -3020,6 +3020,16 @@ parts.</a:documentation>
  0. &lt; TBETA &lt; 1.</a:documentation>
         <ref name="real"/>
       </element>
+      <optional>
+        <element name="use_reference_density">
+          <a:documentation>Rather than assmeble the continuity equation using
+the main density field, instead extract the CompressibleReferenceDensity
+field and assemble it using that.
+
+Note that this normally only makes sense with exclude_mass_terms switched on!</a:documentation>
+          <empty/>
+        </element>
+      </optional>
     </element>
     <element name="temporal_discretisation">
       <element name="theta">
