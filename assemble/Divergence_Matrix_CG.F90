@@ -64,7 +64,7 @@ contains
                                              test_mesh, field, option_path, &
                                              div_mass, grad_mass, &
                                              div_mass_lumped,&
-                                             grad_mass_lumped, get_ct,
+                                             grad_mass_lumped, get_ct, &
                                              implicit_pressure_buoyancy)
 
       ! inputs/outputs

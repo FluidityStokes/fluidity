@@ -61,6 +61,7 @@
     use Coordinates
     use multiphase_module
     use edge_length_module
+    use equation_of_state, only: compressible_eos
 
     implicit none
 
@@ -113,7 +114,7 @@
     logical :: have_surface_fs_stabilisation
     logical :: les_second_order, les_fourth_order, wale, dynamic_les
     logical :: on_sphere
-    logical :: compressible_eos, implicit_pressure_buoyancy
+    logical :: implicit_pressure_buoyancy
     
     logical :: move_mesh
     
@@ -254,6 +255,9 @@
       type(scalar_field), pointer :: vfrac
       type(scalar_field) :: nvfrac ! Non-linear version
 
+      ! Pressure dependence on density
+      type(scalar_field), pointer :: drhodp
+
       ewrite(1,*) 'Entering construct_momentum_cg'
     
       assert(continuity(u)>=0)
@@ -332,8 +336,8 @@
       end if
       ewrite_minmax(buoyancy)
 
-      compressible_eos = have_option(trim(state%option_path)//"/equation_of_state/compressible")
-      if(compressible_eos.and.have_gravity) then
+      if(have_option(trim(state%option_path)//"/equation_of_state/compressible")&
+        .and.have_gravity) then
         implicit_pressure_buoyancy = have_option(trim(p%option_path)// &
                                      "/prognostic/spatial_discretisation/compressible/implicit_pressure_buoyancy")
         if(implicit_pressure_buoyancy) then

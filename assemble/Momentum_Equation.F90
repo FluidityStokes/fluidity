@@ -700,7 +700,7 @@
                if(full_schur) then
                   ! Decide whether we need to assemble an auxiliary matrix for full_projection solve:
                   assemble_schur_auxiliary_matrix = apply_kmk &
-                                                    .or. have_free_surface &
+                                                    .or. has_boundary_condition(u, "free_surface") &
                                                     .or. compressible_eos
 
                   ! If schur_auxiliary_matrix is needed then assemble it:
