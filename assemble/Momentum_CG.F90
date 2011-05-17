@@ -113,6 +113,7 @@
     logical :: have_surface_fs_stabilisation
     logical :: les_second_order, les_fourth_order, wale, dynamic_les
     logical :: on_sphere
+    logical :: compressible_eos, implicit_pressure_buoyancy
     
     logical :: move_mesh
     
@@ -334,6 +335,22 @@
         gravity_magnitude = 0.0
       end if
       ewrite_minmax(buoyancy%val)
+
+      compressible_eos = have_option(trim(state%option_path)//"/equation_of_state/compressible")
+      if(compressible_eos.and.have_gravity) then
+        implicit_pressure_buoyancy = have_option(trim(p%option_path)// &
+                                     "/prognostic/spatial_discretisation/compressible/implicit_pressure_buoyancy")
+        if(implicit_pressure_buoyancy) then
+          allocate(drhodp)
+          call allocate(drhodp, density%mesh, "MomentumCGdrhodp")
+          call compressible_eos(state, drhodp=drhodp)
+        else
+          drhodp => dummyscalar
+        end if
+      else
+        implicit_pressure_buoyancy = .false.
+        drhodp => dummyscalar
+      end if
 
       viscosity=>extract_tensor_field(state, "Viscosity", stat)
       have_viscosity = stat == 0
@@ -685,7 +702,7 @@
               mnu, tnu, leonard, alpha, &
               gp, surfacetension, &
               assemble_ct_matrix, cg_pressure, on_sphere, depth, &
-              alpha_u_field, abs_wd, temperature, nvfrac)
+              alpha_u_field, abs_wd, temperature, nvfrac, drhodp)
       end do element_loop
 
       if (have_wd_abs) then
@@ -869,6 +886,11 @@
           call deallocate(tnu_av); deallocate(tnu_av)
           call deallocate(leonard_av); deallocate(leonard_av)
         end if
+      end if
+
+      if(implicit_pressure_buoyancy) then
+        call deallocate(drhodp)
+        deallocate(drhodp)
       end if
 
       call deallocate(dummytensor)
@@ -1135,7 +1157,7 @@
                                             mnu, tnu, leonard, alpha, &
                                             gp, surfacetension, &
                                             assemble_ct_matrix, cg_pressure, on_sphere, depth, &
-                                            alpha_u_field, abs_wd, temperature, nvfrac)
+                                            alpha_u_field, abs_wd, temperature, nvfrac, drhodp)
 
       !!< Assembles the local element matrix contributions and places them in big_m
       !!< and rhs for the continuous galerkin momentum equations
@@ -1181,6 +1203,9 @@
 
       ! Volume fraction field
       type(scalar_field), intent(in) :: nvfrac
+
+      ! Buoyancy density dependence on pressure
+      type(scalar_field), intent(in) :: drhodp
 
       integer, dimension(:), pointer :: u_ele, p_ele
       real, dimension(u%dim, ele_loc(u, ele)) :: oldu_val
@@ -1300,6 +1325,13 @@
             else
                grad_p_u_mat = shape_dshape(p_shape, du_t, detwei)
             end if
+         end if
+
+         if(implicit_pressure_buoyancy) then
+           grad_p_u_mat = grad_p_u_mat + &
+                          shape_shape_vector(p_shape, u_shape, &
+                                             detwei*ele_val_at_quad(drhodp, ele)*gravity_magnitude, &
+                                             ele_val_at_quad(gravity, ele))
          end if
       !else
       !  grad_p_u_mat = 0.0

@@ -349,18 +349,7 @@ contains
             FLExit("No multimaterial MaterialDensity or fluid eos provided")
           else
             if(have_option(trim(option_path)//'/compressible')) then
-              call allocate(eosdensity, mesh, "LocalCompressibleEOSDensity")
-            
-              call compressible_eos(state(state_order(i)), density=eosdensity)
-              
-              if(present(bulk_density)) then
-                call set(bulk_density, eosdensity)
-              end if
-              if(present(buoyancy_density)) then
-                call set(buoyancy_density, eosdensity)
-              end if
-            
-              call deallocate(eosdensity)
+              call compressible_eos(state(state_order(i)), density=bulk_density, buoyancy_density=buoyancy_density)
             else
               tmpdensity => extract_scalar_field(state(state_order(i)), "Density", stat)
               if(stat==0) then

@@ -1393,6 +1393,18 @@ Fix for low reynolds numbers by adding the viscous terms to the inversed lumped 
           <empty/>
         </element>
       </choice>
+      <optional>
+        <element name="compressible">
+          <a:documentation>Discretisation options controlling compressible flows</a:documentation>
+          <optional>
+            <element name="implicit_pressure_buoyancy">
+              <a:documentation>Include buoyancy's dependence on pressure in the lhs of
+the momentum equation and the projection step too.</a:documentation>
+              <empty/>
+            </element>
+          </optional>
+        </element>
+      </optional>
     </element>
     <optional>
       <choice>

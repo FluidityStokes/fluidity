@@ -682,7 +682,11 @@ start =
                         ## border length per unit volume (lambda). 
                         element foam {
                            empty
-                        }  
+                        }|
+                        ## 
+                        element linearised_mantle {
+                           empty
+                        }
                      }
                   )
                )

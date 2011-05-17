@@ -251,6 +251,8 @@
          type(state_type), dimension(:), pointer :: submaterials
          ! The index of the current phase (i.e. state(istate)) in the submaterials array
          integer :: submaterials_istate 
+         ! Whether when we assemble C^T we want to use an implicit buoyancy term
+         logical :: implicit_pressure_buoyancy
 
          ewrite(1,*) 'Entering solve_momentum'
 

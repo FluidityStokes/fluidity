@@ -816,6 +816,10 @@ Plateau border cross sectional area and the local Plateau
 border length per unit volume (lambda). </a:documentation>
                       <empty/>
                     </element>
+                    <element name="linearised_mantle">
+                      <a:documentation/>
+                      <empty/>
+                    </element>
                   </choice>
                 </element>
               </choice>

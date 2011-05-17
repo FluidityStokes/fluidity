@@ -64,7 +64,8 @@ contains
                                              test_mesh, field, option_path, &
                                              div_mass, grad_mass, &
                                              div_mass_lumped,&
-                                             grad_mass_lumped, get_ct) 
+                                             grad_mass_lumped, get_ct,
+                                             implicit_pressure_buoyancy)
 
       ! inputs/outputs
       ! bucket full of fields
@@ -86,6 +87,8 @@ contains
       type(scalar_field), intent(inout), optional :: div_mass_lumped, grad_mass_lumped
 
       logical, intent(in), optional :: get_ct
+
+      logical, intent(in), optional :: implicit_pressure_buoyancy
 
       ! local
 

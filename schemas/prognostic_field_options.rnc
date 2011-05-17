@@ -1157,7 +1157,15 @@ prognostic_pressure_field =
             element control_volumes {
                empty
             }
-         )
+         ),
+         ## Discretisation options controlling compressible flows
+         element compressible {
+           ## Include buoyancy's dependence on pressure in the lhs of
+           ## the momentum equation and the projection step too.
+           element implicit_pressure_buoyancy {
+             empty
+           }?
+         }?
       },
       (
          ## Reference node (Node at which pressure = 0.) Note that the node number must be less than the total number of nodes.
