@@ -426,6 +426,9 @@ contains
       real :: dt
 
       type(cv_options_type) :: dens_options
+      character(len=OPTION_PATH_LEN) :: dens_option_path
+      ! use the reference density
+      logical :: use_reference_density
 
       integer, dimension(:,:), allocatable :: velocity_bc_type
       real, dimension(:,:), allocatable :: velocity_bc_val
@@ -436,6 +439,7 @@ contains
       
       ! temporary hack to get around compiler failure to construct arrays of characters
       character(len=OPTION_PATH_LEN), dimension(1) :: option_path_array
+      integer :: stat
 
       ! =============================================================
       ! Subroutine to construct the matrix CTP_m (a.k.a. C1/2/3TP).
@@ -450,7 +454,20 @@ contains
                      quaddegree, default=1)
       
       dens=>extract_scalar_field(state, "Density")
-      olddens=>extract_scalar_field(state, "OldDensity")
+      dens_option_path = dens%option_path
+
+      use_reference_density=have_option(trim(dens_option_path)//&
+          &"/prognostic/spatial_discretisation/use_reference_density")
+
+      if(use_reference_density) then
+        dens => extract_scalar_field(state, "CompressibleReferenceDensity")
+        olddens => extract_scalar_field(state, "OldCompressibleReferenceDensity", stat=stat)
+        if(stat/=0) then
+          olddens => dens
+        end if
+      else
+        olddens => extract_scalar_field(state, "OldDensity")
+      end if
       
       u=>extract_vector_field(state, "NonlinearVelocity") ! maybe this should be updated after the velocity solve?
       ug=>extract_vector_field(state, "GridVelocity")
@@ -479,7 +496,7 @@ contains
 
       ! get all the relevent options for density
       ! handily wrapped in a new type...
-      dens_options = get_cv_options(dens%option_path, dens%mesh%shape%numbering%family, mesh_dim(dens))
+      dens_options = get_cv_options(dens_option_path, dens%mesh%shape%numbering%family, mesh_dim(dens))
 
       if(need_upwind_values(dens_options)) then
 
@@ -494,7 +511,7 @@ contains
       end if
 
       ! find courant number (if needed)
-      option_path_array(1) = trim(dens%option_path)  ! temporary hack for compiler failure
+      option_path_array(1) = trim(dens_option_path)  ! temporary hack for compiler failure
       call cv_disc_get_cfl_no(option_path_array, &
                       state, dens%mesh, cfl_no)
 
