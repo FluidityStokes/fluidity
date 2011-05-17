@@ -254,8 +254,6 @@
          type(state_type), dimension(:), pointer :: submaterials
          ! The index of the current phase (i.e. state(istate)) in the submaterials array
          integer :: submaterials_istate 
-         ! Whether when we assemble C^T we want to use an implicit buoyancy term
-         logical :: implicit_pressure_buoyancy
 
          ewrite(1,*) 'Entering solve_momentum'
 
@@ -615,6 +613,11 @@
                call assemble_divergence_matrix_cg(ct_m(istate)%ptr, state(istate), ct_rhs=ct_rhs(istate), &
                test_mesh=p%mesh, field=u, get_ct=reassemble_ct_m)
             end if
+
+            if(compressible_eos) then
+               call include_implicit_pressure_buoyancy(ct_m(istate)%ptr, state(istate), p, u, reassemble_ct_m)
+            end if
+
             call profiler_toc(p, "assembly")
 
             call profiler_tic(u, "assembly")

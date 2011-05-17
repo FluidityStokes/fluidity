@@ -277,7 +277,7 @@ contains
   
   subroutine compressible_eos(state, density, pressure, drhodp, buoyancy_density)
 
-    type(state_type), intent(inout) :: state
+    type(state_type), intent(in) :: state
     type(scalar_field), intent(inout), optional :: density, pressure, drhodp, buoyancy_density
 
     character(len=OPTION_PATH_LEN) :: eos_path
@@ -368,7 +368,7 @@ contains
   subroutine compressible_eos_stiffened_gas(state, drhodp, &
     density, pressure, buoyancy_density)
     ! Standard stiffened gas equation
-    type(state_type), intent(inout) :: state
+    type(state_type), intent(in) :: state
     type(scalar_field), intent(inout) :: drhodp
     type(scalar_field), intent(inout), optional :: density, pressure, buoyancy_density
     
@@ -500,7 +500,7 @@ contains
     ! Eq. of state commonly used in atmospheric applications. See
     ! Giraldo et. al., J. Comp. Phys., vol. 227 (2008), 3849-3877. 
     ! density= P_0/(R*T)*(P/P_0)^((R+c_v)/c_p)
-    type(state_type), intent(inout) :: state
+    type(state_type), intent(in) :: state
     type(scalar_field), intent(inout) :: drhodp
     type(scalar_field), intent(inout), optional :: density, pressure, buoyancy_density
       
@@ -629,7 +629,7 @@ contains
     ! Foam EoS Used with compressible simulations of liquid drainage in foams.
     ! It describes the liquid content in the foam as the product of the  Plateau 
     ! border cross sectional area and the local Plateau  border length per unit volume (lambda).
-    type(state_type), intent(inout) :: state
+    type(state_type), intent(in) :: state
     type(scalar_field), intent(inout) :: drhodp
     type(scalar_field), intent(inout), optional :: density, pressure, buoyancy_density
 
@@ -714,7 +714,7 @@ contains
 !  subroutine compressible_eos_linearised_mantle(state, drhodp, &
 !    density, pressure, buoyancy_density)
 !    ! Linearised mantle equation of state
-!    type(state_type), intent(inout) :: state
+!    type(state_type), intent(in) :: state
 !    type(scalar_field), intent(inout) :: drhodp
 !    type(scalar_field), intent(inout), optional :: density, pressure, buoyancy_density
 !    

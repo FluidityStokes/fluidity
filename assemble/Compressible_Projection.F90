@@ -45,7 +45,8 @@ module compressible_projection
   character(len=255), private :: message
 
   private
-  public :: assemble_compressible_projection_cv, assemble_compressible_projection_cg, update_compressible_density
+  public :: assemble_compressible_projection_cv, assemble_compressible_projection_cg, &
+            update_compressible_density, include_implicit_pressure_buoyancy, compressible_projection_check_options
 
   ! Stabilisation schemes
   integer, parameter :: STABILISATION_NONE = 0, &
@@ -632,6 +633,96 @@ contains
     end if
   
   end subroutine update_compressible_density
+
+  subroutine include_implicit_pressure_buoyancy(ct_m, state, pressure, velocity, get_ct)
+    !!< Add the dependency of the buoyancy density on pressure directly into the divergence matrix
+    !!< (As this is only used with compressible this is only actually used as a gradient matrix)
+    type(block_csr_matrix), intent(inout) :: ct_m
+    type(state_type), intent(in) :: state
+    type(scalar_field), intent(in) :: pressure
+    type(vector_field), intent(in) :: velocity
+    logical, intent(in) :: get_ct
+
+    type(scalar_field), pointer :: buoyancy
+    type(vector_field), pointer :: gravity, coordinate
+    type(scalar_field) :: drhodp
+
+    integer, dimension(:), pointer :: pressure_nodes, velocity_nodes
+    real, dimension(:), allocatable :: detwei
+    real, dimension(:,:,:), allocatable :: ele_mat
+
+    real :: gravity_magnitude
+    integer :: ele, dim, stat
+    logical :: have_gravity, have_compressible_eos, implicit_pressure_buoyancy
+
+    ! nothing to do if we're not assembly ct_m
+    if(.not.get_ct) return
+
+    call get_option("/physical_parameters/gravity/magnitude", gravity_magnitude, &
+         stat=stat)
+    have_gravity = stat == 0
+
+    ! nothing to do if we don't have gravity turned on
+    if(.not.have_gravity) return
+
+    have_compressible_eos = have_option(trim(state%option_path)//"/equation_of_state/compressible")
+
+    ! nothing to do if we're not compressible
+    if(.not.have_compressible_eos) return
+
+    implicit_pressure_buoyancy = have_option(trim(pressure%option_path)// &
+                                 "/prognostic/spatial_discretisation/compressible/implicit_pressure_buoyancy")
+
+    ! nothing to do if we don't have the option turned on
+    if(.not.implicit_pressure_buoyancy) return
+  
+    ! made it in!
+    ewrite(1,*) 'Including implicit pressure buoyancy term in ct_m'
+
+    buoyancy=>extract_scalar_field(state, "VelocityBuoyancyDensity")
+    gravity=>extract_vector_field(state, "GravityDirection", stat)
+    coordinate=>extract_vector_field(state, "Coordinate")
+
+    call allocate(drhodp, buoyancy%mesh, "Implicitdrhodp")
+    call compressible_eos(state, drhodp=drhodp)
+
+    allocate(detwei(ele_ngi(velocity, 1)), &
+             ele_mat(velocity%dim, ele_loc(pressure, 1), ele_loc(velocity, 1)))
+
+    element_loop: do ele = 1, ele_count(pressure)
+      pressure_nodes=>ele_nodes(pressure, ele)
+      velocity_nodes=>ele_nodes(velocity, ele)
+
+      call transform_to_physical(coordinate, ele, detwei=detwei)
+
+      ele_mat = ele_mat + &
+                shape_shape_vector(ele_shape(pressure, ele), ele_shape(velocity, ele), &
+                                   detwei*ele_val_at_quad(drhodp, ele)*gravity_magnitude, &
+                                   ele_val_at_quad(gravity, ele))
+
+      do dim = 1, velocity%dim
+        call addto(ct_m, 1, dim, pressure_nodes, velocity_nodes, ele_mat(dim,:,:))
+      end do
+
+    end do element_loop
+    
+  end subroutine include_implicit_pressure_buoyancy
+  
+  subroutine compressible_projection_check_options
+
+    integer :: iphase
+    character(len=OPTION_PATH_LEN) :: pressure_option_path
+
+    do iphase = 1, option_count("/material_phase")
+      pressure_option_path = "/material_phase["//int2str(iphase-1)//"]/scalar_field::Pressure"
+      if(have_option(trim(pressure_option_path)//"/spatial_discretisation/compressible/implicit_pressure_buoyancy")) then
+        if(have_option(trim(pressure_option_path)//"/spatial_discretisation/control_volumes")) then
+          FLExit("Compressible option implicit_pressure_buoyancy does not work with control volume Pressure discretisations.")
+        end if
+      end if
+    end do
+
+  end subroutine compressible_projection_check_options
 
 end module compressible_projection
 
