@@ -1256,6 +1256,33 @@ universal_column_id_algorithm =
       }
    )
 
+viscous_dissipation_algorithm =
+   (
+      ## algorithm for calculating the viscous dissipation.
+       element algorithm {
+         attribute name { "viscous_dissipation" },
+         attribute material_phase_support { "single "}
+      }
+   )
+adiabatic_heating_coefficient_algorithm =
+   (
+      ## algorithm for calculating adiabatic_heating coefficient,
+      ## needed when applying adiabatic heating absorption term.
+       element algorithm {
+         attribute name { "adiabatic_heating_coefficient" },
+         attribute material_phase_support { "single "}
+      }
+   )
+adiabatic_heating_absorption_algorithm =
+   (
+      ## algorithm for calculating the adiabatic heating coefficient
+      ## which is subsequently multiplied by T for output purposes.
+      ## This is thus the full absorption term:
+       element algorithm {
+         attribute name { "adiabatic_heating_absorption" },
+         attribute material_phase_support { "single "}
+      }
+   )
 
 # Time averaged fields
 
@@ -1336,7 +1363,8 @@ vector_scalar_time_averaged_algorithm =
       }
    )
 
-scalar_diagnostic_algorithms = universal_numbering_diagnostic_algorithm
+scalar_diagnostic_algorithms = viscous_dissipation_algorithm
+scalar_diagnostic_algorithms |= universal_numbering_diagnostic_algorithm
 scalar_diagnostic_algorithms |= universal_column_id_algorithm
 scalar_diagnostic_algorithms |= tidal_harmonic_algorithm
 scalar_diagnostic_algorithms |= tensor_second_invariant_algorithm
@@ -1367,6 +1395,8 @@ scalar_diagnostic_algorithms |= element_halo_diagnostic_algorithm
 scalar_diagnostic_algorithms |= div_algorithm
 scalar_diagnostic_algorithms |= curl_2d_algorithm
 scalar_diagnostic_algorithms |= column_id_algorithm
+scalar_diagnostic_algorithms |= adiabatic_heating_coefficient_algorithm
+scalar_diagnostic_algorithms |= adiabatic_heating_absorption_algorithm
 scalar_diagnostic_algorithms |= scalar_python_diagnostic_algorithm
 
 vector_diagnostic_algorithms = vector_time_averaged_algorithm

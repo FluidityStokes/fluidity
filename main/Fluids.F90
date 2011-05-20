@@ -449,8 +449,6 @@ contains
     end if
 
 
-
-
     ! radiation eigenvalue run solve
     if(have_option("/embedded_models/radiation")) then
        call radiation_solve(particles, &

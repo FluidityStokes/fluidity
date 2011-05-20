@@ -54,7 +54,8 @@ module momentum_diagnostics
             calculate_imposed_material_velocity_absorption, &
             calculate_scalar_potential, calculate_projection_scalar_potential, &
             calculate_vector_potential, calculate_geostrophic_velocity, &
-            calculate_hessian
+            calculate_hessian, calculate_viscous_dissipation, calculate_adiabatic_heating_coefficient, &
+            calculate_adiabatic_heating_absorption
            
   
 contains
@@ -66,15 +67,17 @@ contains
     type(vector_field), pointer :: source_field
     type(vector_field), pointer :: positions
 
+    ! Extract positions field:
     positions => extract_vector_field(state, "Coordinate")
+    ! Extract source field:
     source_field => vector_source_field(state, t_field)
-
+    ! Check that source field is not on a discontinuous mesh:
     call check_source_mesh_derivative(source_field, "strain_rate")
-
+    ! Calculate strain_rate tensor:
     call strain_rate(source_field, positions, t_field)
 
   end subroutine calculate_strain_rate
-
+  
   subroutine calculate_hessian(state, t_field)
     ! Compute Hessian of a scalar field
     type(state_type), intent(inout) :: state
@@ -91,7 +94,7 @@ contains
     call compute_hessian(source_field, positions, t_field)
 
   end subroutine calculate_hessian
-  
+
   subroutine calculate_tensor_second_invariant(state, s_field)
     type(state_type), intent(inout) :: state
     type(scalar_field), intent(inout) :: s_field
@@ -103,6 +106,163 @@ contains
     call tensor_second_invariant(source_field, s_field)
 
   end subroutine calculate_tensor_second_invariant
+
+  subroutine calculate_viscous_dissipation(state, s_field)
+    ! A routine to calculate the viscous dissipation. Currently
+    ! assumes a constant viscosity:
+    type(state_type), intent(inout) :: state
+    type(scalar_field), intent(inout) :: s_field
+
+    type(vector_field), pointer :: positions
+    type(vector_field), pointer :: velocity
+    type(tensor_field), pointer :: viscosity
+
+    type(scalar_field) :: viscosity_component 
+    type(tensor_field) :: strain_rate_tensor
+    type(tensor_field) :: velocity_gradient_tensor
+
+    integer :: dim1, dim2, node
+    real :: val
+
+    ! Extract velocity field from state - will be used to calculate strain-
+    ! rate tensor and velocity gradient tensor:
+
+    velocity => extract_vector_field(state, "Velocity")
+    
+    ! Check velocity field is not on a discontinous mesh:
+    call check_source_mesh_derivative(velocity, "Viscous_Dissipation")
+
+    ! Extract positions field from state:
+    positions => extract_vector_field(state, "Coordinate")
+
+    ! Allocate and initialize strain rate/velocity gradient tensors:
+    call allocate(strain_rate_tensor, s_field%mesh, "Strain_Rate_VD")
+    call allocate(velocity_gradient_tensor, s_field%mesh, "Velocity_Gradient_VD")
+    call zero(strain_rate_tensor)
+    call zero(velocity_gradient_tensor)
+
+    ! Calculate strain rate tensor:
+    call strain_rate(velocity, positions, strain_rate_tensor)
+
+    ! Calculate velocity gradient tensor:
+    call grad(velocity, positions, velocity_gradient_tensor)
+
+    ! Extract viscosity from state:
+    viscosity => extract_tensor_field(state, "Viscosity")
+
+    ! Extract first component of viscosity tensor from full tensor:
+    viscosity_component = extract_scalar_field(viscosity,1,1)  
+
+    ! Calculate viscous dissipation (scalar s_field):
+    do node=1,node_count(s_field)
+       val = 0.
+       do dim2 = 1, velocity%dim
+          do dim1 = 1, velocity%dim
+             val = val + ( 2. * node_val(viscosity_component,node) * & 
+                 & node_val(strain_rate_tensor,dim1,dim2,node)      * &
+                 & node_val(velocity_gradient_tensor,dim1,dim2,node))
+          end do
+       end do
+       call set(s_field, node, val) 
+    end do
+
+    ! Deallocate:
+    call deallocate(strain_rate_tensor)
+    call deallocate(velocity_gradient_tensor)
+
+  end subroutine calculate_viscous_dissipation
+
+  subroutine calculate_adiabatic_heating_coefficient(state, s_field)
+    ! Calculates adiabatic heating coefficient, which is later multiplied
+    ! by T as an absorption term:
+    type(state_type), intent(inout) :: state
+    type(scalar_field), intent(inout) :: s_field
+
+    type(scalar_field), pointer :: temperature
+    type(vector_field), pointer :: velocity
+    type(vector_field), pointer :: gravity_direction
+
+    type(scalar_field) :: velocity_component
+
+    character(len=OPTION_PATH_LEN) eos_option_path
+
+    real :: thermal_expansion_coefficient, gravity_magnitude
+    real :: depth, dissipation_number, reference_temperature, reference_density
+    integer :: node
+
+    ! Extract temperature from state:
+    temperature => extract_scalar_field(state, "Temperature")
+
+    ! Extract velocity field from state:
+    velocity => extract_vector_field(state, "Velocity")
+
+    ! Extract velocity component in gravitational direction:
+    ! Note - this is not yet done correctly!
+    velocity_component = extract_scalar_field(velocity, 2)            
+    ewrite_minmax(velocity_component%val)
+
+    ! Get EOS coefficients:
+    eos_option_path='/material_phase::'//trim(state%name)//'/equation_of_state/fluids/linear'     
+    call get_option(trim(eos_option_path)//'/temperature_dependency/thermal_expansion_coefficient', thermal_expansion_coefficient)
+    call get_option(trim(eos_option_path)//'/temperature_dependency/reference_temperature', reference_temperature)
+    call get_option(trim(eos_option_path)//'/reference_density', reference_density)
+
+    ! Get physical parameters:
+    call get_option("/physical_parameters/gravity/magnitude", gravity_magnitude)
+    gravity_direction => extract_vector_field(state, "GravityDirection")
+
+    ! Calculate and set adiabatic heating coefficient:
+    do node = 1, node_count(s_field)
+       call set(s_field, node, reference_density*thermal_expansion_coefficient*gravity_magnitude*node_val(velocity_component,node))
+    end do
+
+  end subroutine calculate_adiabatic_heating_coefficient
+
+  subroutine calculate_adiabatic_heating_absorption(state, s_field)
+    ! Calculates adiabatic heating absorption term - i.e. the adiabatic heating
+    ! coefficient, multiplied by T:
+    type(state_type), intent(inout) :: state
+    type(scalar_field), intent(inout) :: s_field
+
+    type(scalar_field), pointer :: temperature
+    type(vector_field), pointer :: velocity
+    type(vector_field), pointer :: gravity_direction
+
+    type(scalar_field) :: velocity_component
+
+    character(len=OPTION_PATH_LEN) eos_option_path
+
+    real :: thermal_expansion_coefficient, gravity_magnitude
+    real :: depth, reference_temperature, reference_density
+    integer :: node
+
+    ! Extract temperature from state:
+    temperature => extract_scalar_field(state, "Temperature")
+
+    ! Extract velocity field from state:
+    velocity => extract_vector_field(state, "Velocity")
+
+    ! Extract velocity component in gravitational direction:
+    ! Note - this is not yet done correctly!
+    velocity_component = extract_scalar_field(velocity, 2)            
+    ewrite_minmax(velocity_component%val)
+
+    ! Get EOS coefficients:
+    eos_option_path='/material_phase::'//trim(state%name)//'/equation_of_state/fluids/linear'     
+    call get_option(trim(eos_option_path)//'/temperature_dependency/thermal_expansion_coefficient', thermal_expansion_coefficient)
+    call get_option(trim(eos_option_path)//'/temperature_dependency/reference_temperature', reference_temperature)
+    call get_option(trim(eos_option_path)//'/reference_density', reference_density)
+
+    ! Get physical parameters:
+    call get_option("/physical_parameters/gravity/magnitude", gravity_magnitude)
+    gravity_direction => extract_vector_field(state, "GravityDirection")
+
+    ! Calculate and set adiabatic heating source term:
+    do node = 1, node_count(s_field)
+       call set(s_field, node, reference_density*thermal_expansion_coefficient*gravity_magnitude*node_val(velocity_component,node)*node_val(temperature,node))
+    end do
+
+  end subroutine calculate_adiabatic_heating_absorption
 
   subroutine calculate_bulk_viscosity(states, t_field)
     type(state_type), dimension(:), intent(inout) :: states

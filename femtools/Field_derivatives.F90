@@ -38,7 +38,7 @@ module field_derivatives
     end interface u_dot_nabla
 
     interface grad
-      module procedure grad_scalar, grad_vector
+      module procedure grad_scalar, grad_vector, grad_vector_tensor
     end interface grad
 
     private
@@ -259,26 +259,24 @@ module field_derivatives
 
     end subroutine grad_vector
 
-    subroutine strain_rate(infield,positions,t_field)
-      !!< This routine computes the strain rate of an infield vector field
+    subroutine grad_vector_tensor(infield, positions, gradient_tensor)
+      !!< This routine computes the gradient of a vector field, returning a tensor.
       type(vector_field), intent(in) :: infield
       type(vector_field), intent(in) :: positions
-      type(tensor_field), intent(inout) :: t_field
-
+      type(tensor_field), intent(inout) :: gradient_tensor
       type(scalar_field), dimension(infield%dim) :: pardiff
       type(scalar_field) :: component
-
-      real, dimension(t_field%dim(1),t_field%dim(2)) :: t
       logical, dimension(infield%dim) :: derivatives
-      integer :: i, j
-      integer :: node
+      integer :: i, j, dim
 
-      do j=1,infield%dim
+      dim = infield%dim
+
+      do j=1,dim
 
         component = extract_scalar_field(infield, j)
 
-        do i=1,infield%dim
-          pardiff(i) = extract_scalar_field(t_field,i,j)
+        do i=1,dim
+          pardiff(i) = extract_scalar_field(gradient_tensor,i,j)
         end do
 
         derivatives = .true.
@@ -286,12 +284,25 @@ module field_derivatives
         call differentiate_field(component, positions, derivatives, pardiff)
 
       end do
+
+    end subroutine grad_vector_tensor
+
+    subroutine strain_rate(infield,positions,t_field)
+      !!< This routine computes the strain rate (t_field) of a vector field infield.
+      type(vector_field), intent(in) :: infield
+      type(vector_field), intent(in) :: positions
+      type(tensor_field), intent(inout) :: t_field
+
+      real, dimension(t_field%dim(1),t_field%dim(2)) :: t
+      integer :: i, j, node
+
+      ! Compute velocity gradient tensor:
+      call grad(infield,positions,t_field)
       
-      ! Computing the final strain rate tensor
-      
+      ! Compute final strain rate tensor:
       do node=1,node_count(t_field)
            t=node_val(t_field, node)
-           call set(t_field, node, (t+transpose(t))/2) 
+           call set(t_field, node, (t+transpose(t))/2.) 
       end do 
  
     end subroutine strain_rate

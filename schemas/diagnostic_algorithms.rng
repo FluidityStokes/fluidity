@@ -1697,6 +1697,42 @@ The mesh must be directly extruded.</a:documentation>
       </attribute>
     </element>
   </define>
+  <define name="viscous_dissipation_algorithm">
+    <element name="algorithm">
+      <a:documentation>algorithm for calculating the viscous dissipation.</a:documentation>
+      <attribute name="name">
+        <value>viscous_dissipation</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single </value>
+      </attribute>
+    </element>
+  </define>
+  <define name="adiabatic_heating_coefficient_algorithm">
+    <element name="algorithm">
+      <a:documentation>algorithm for calculating adiabatic_heating coefficient,
+needed when applying adiabatic heating absorption term.</a:documentation>
+      <attribute name="name">
+        <value>adiabatic_heating_coefficient</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single </value>
+      </attribute>
+    </element>
+  </define>
+  <define name="adiabatic_heating_absorption_algorithm">
+    <element name="algorithm">
+      <a:documentation>algorithm for calculating the adiabatic heating coefficient
+which is subsequently multiplied by T for output purposes.
+This is thus the full absorption term:</a:documentation>
+      <attribute name="name">
+        <value>adiabatic_heating_absorption</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single </value>
+      </attribute>
+    </element>
+  </define>
   <!-- Time averaged fields -->
   <define name="scalar_time_averaged_algorithm">
     <element name="algorithm">
@@ -1796,6 +1832,9 @@ This field needs to be interpolated between adapts.</a:documentation>
     </element>
   </define>
   <define name="scalar_diagnostic_algorithms">
+    <ref name="viscous_dissipation_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="universal_numbering_diagnostic_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
@@ -1887,6 +1926,12 @@ This field needs to be interpolated between adapts.</a:documentation>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="column_id_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="adiabatic_heating_coefficient_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="adiabatic_heating_absorption_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="scalar_python_diagnostic_algorithm"/>
