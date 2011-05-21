@@ -724,10 +724,11 @@ contains
     !locals
     integer :: stat
     type(scalar_field), pointer :: pressure_local, temperature_local, density_local, &
-                                   referencedensity_local, bulkmodulus_local, thermalexpansion_local
+                                   referencedensity_local, bulkmodulus_local, thermalexpansion_local, &
+                                   referencetemperature_local
     type(scalar_field) :: pressure_remap, density_remap, referencedensity_remap, &
                           compressibility, dpdrho, thermalexpansion_remap, &
-                          temperatureproduct
+                          temperatureproduct, referencetemperature_remap
     logical :: implicit_pressure_buoyancy, exclude_pressure_buoyancy
     
     call zero(drhodp)
@@ -753,9 +754,14 @@ contains
       call allocate(thermalexpansion_remap, drhodp%mesh, 'RemappedIsobaricThermalExpansivity')
       call remap_field(thermalexpansion_local, thermalexpansion_remap)
 
+      referencetemperature_local=>extract_scalar_field(state,'CompressibleReferenceTemperature')
+      call allocate(referencetemperature_remap, drhodp%mesh, 'RemappedCompressibleReferenceTemperature')
+      call remap_field(referencetemperature_local, referencetemperature_remap)
+
       temperature_local => extract_scalar_field(state, "Temperature")
       call allocate(temperatureproduct, drhodp%mesh, "TemperatureProduct")
       call set(temperature_local, temperatureproduct)
+      ! Multiply temperature by thermal expansion coefficient - do we need to subtract reference temperature first?
       call scale(temperatureproduct, thermalexpansion_remap)
       call scale(temperatureproduct, referencedensity_remap)
 

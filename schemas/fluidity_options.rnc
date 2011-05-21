@@ -4084,6 +4084,26 @@ scalar_field_choice =
                }
             )
          }|
+         ## This field gives the reference temperature for the
+         ## linearised_mantle compressible equation of state.
+         element scalar_field {
+            attribute rank { "0" },
+            attribute name { "CompressibleReferenceTemperature" },
+            (
+               element prescribed {
+                  pressure_mesh_choice,
+                  prescribed_scalar_field
+               }|
+               element diagnostic {
+                  scalar_python_diagnostic_algorithm,
+                  pressure_mesh_choice,
+                  diagnostic_scalar_field
+               }|
+               element aliased {
+                  generic_aliased_field
+               }
+            )
+         }|
 #
 # Insert new prescribed scalar fields here using the template:
 #        element scalar_field {
