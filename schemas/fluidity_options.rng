@@ -5848,6 +5848,26 @@ for the equation of state of all materials.</a:documentation>
         </choice>
       </element>
       <element name="scalar_field">
+        <a:documentation>Calculates the material density based on the linearised
+mantle EOS.</a:documentation>
+        <attribute name="rank">
+          <value>0</value>
+        </attribute>
+        <attribute name="name">
+          <value>LinearisedMantleEOSDensity</value>
+        </attribute>
+        <choice>
+          <element name="diagnostic">
+            <ref name="internal_algorithm"/>
+            <ref name="coordinate_mesh_choice"/>
+            <ref name="diagnostic_scalar_field"/>
+          </element>
+          <element name="aliased">
+            <ref name="generic_aliased_field"/>
+          </element>
+        </choice>
+      </element>
+      <element name="scalar_field">
         <a:documentation>Buoyancy adjustment (mixing by diffusion) coefficient</a:documentation>
         <attribute name="rank">
           <value>0</value>

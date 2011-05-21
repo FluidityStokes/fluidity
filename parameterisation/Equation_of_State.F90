@@ -731,7 +731,9 @@ contains
     logical :: implicit_pressure_buoyancy, exclude_pressure_buoyancy
     
     call zero(drhodp)
-    
+
+    ! Extract relevant parameters from state and remap to drhodp mesh so that all
+    ! parameters are on same mesh:    
     referencedensity_local=>extract_scalar_field(state, 'CompressibleReferenceDensity')
     call allocate(referencedensity_remap, drhodp%mesh, 'RemappedCompressibleReferenceDensity')
     call remap_field(referencedensity_local, referencedensity_remap)
@@ -739,6 +741,7 @@ contains
     bulkmodulus_local=>extract_scalar_field(state,'IsothermalBulkModulus')
     call allocate(compressibility, drhodp%mesh, 'RemappedIsothermalBulkModulus')
     call remap_field(bulkmodulus_local, compressibility)
+    ! Compressibility = 1. / bulkmodulus, therefore invert bulk_modulus here:
     call invert(compressibility)
       
     call set(drhodp, compressibility)

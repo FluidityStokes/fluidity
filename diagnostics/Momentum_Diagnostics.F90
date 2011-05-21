@@ -203,9 +203,12 @@ contains
 
     ! Get EOS coefficients:
     eos_option_path='/material_phase::'//trim(state%name)//'/equation_of_state/fluids/linear'     
-    call get_option(trim(eos_option_path)//'/temperature_dependency/thermal_expansion_coefficient', thermal_expansion_coefficient)
-    call get_option(trim(eos_option_path)//'/temperature_dependency/reference_temperature', reference_temperature)
-    call get_option(trim(eos_option_path)//'/reference_density', reference_density)
+!    call get_option(trim(eos_option_path)//'/temperature_dependency/thermal_expansion_coefficient', thermal_expansion_coefficient)
+    thermal_expansion_coefficient = 1.
+!    call get_option(trim(eos_option_path)//'/temperature_dependency/reference_temperature', reference_temperature)
+    reference_temperature = 0.
+!    call get_option(trim(eos_option_path)//'/reference_density', reference_density)
+    reference_density = 1.
 
     ! Get physical parameters:
     call get_option("/physical_parameters/gravity/magnitude", gravity_magnitude)
@@ -249,9 +252,12 @@ contains
 
     ! Get EOS coefficients:
     eos_option_path='/material_phase::'//trim(state%name)//'/equation_of_state/fluids/linear'     
-    call get_option(trim(eos_option_path)//'/temperature_dependency/thermal_expansion_coefficient', thermal_expansion_coefficient)
-    call get_option(trim(eos_option_path)//'/temperature_dependency/reference_temperature', reference_temperature)
-    call get_option(trim(eos_option_path)//'/reference_density', reference_density)
+!    call get_option(trim(eos_option_path)//'/temperature_dependency/thermal_expansion_coefficient', thermal_expansion_coefficient)
+    thermal_expansion_coefficient = 1.
+!    call get_option(trim(eos_option_path)//'/temperature_dependency/reference_temperature', reference_temperature)
+    reference_temperature = 0.
+!    call get_option(trim(eos_option_path)//'/reference_density', reference_density)
+    reference_density = 1.
 
     ! Get physical parameters:
     call get_option("/physical_parameters/gravity/magnitude", gravity_magnitude)

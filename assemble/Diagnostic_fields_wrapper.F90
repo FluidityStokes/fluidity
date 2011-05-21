@@ -447,6 +447,13 @@ contains
          end if
        end if
 
+       s_field => extract_scalar_field(state(i), "LinearisedMantleEOSDensity", stat)
+       if(stat == 0) then
+         if(recalculate(trim(s_field%option_path))) then
+           call compressible_eos(state(i), density=s_field)
+         end if
+       end if
+
        s_field => extract_scalar_field(state(i), "FreeSurface", stat)
        if(stat == 0) then
          if(recalculate(trim(s_field%option_path))) then
