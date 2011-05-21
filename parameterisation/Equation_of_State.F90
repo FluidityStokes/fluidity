@@ -755,8 +755,7 @@ contains
 
       temperature_local => extract_scalar_field(state, "Temperature")
       call allocate(temperatureproduct, drhodp%mesh, "TemperatureProduct")
-      call set(temperature_local, temperatureproduct)
-      ! Multiply temperature by thermal expansion coefficient - do we need to subtract reference temperature first?
+      call set(temperatureproduct, temperature_local)
       call scale(temperatureproduct, thermalexpansion_remap)
       call scale(temperatureproduct, referencedensity_remap)
 

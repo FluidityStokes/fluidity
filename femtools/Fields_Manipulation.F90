@@ -868,7 +868,7 @@ implicit none
   end subroutine real_addto_real
 
   subroutine set_scalar_field_field(out_field, in_field)
-    !!< Set in_field to out_field. This will only work if the fields have
+    !!< Set out_field to in_field. This will only work if the fields have
     !!< the same mesh.
     type(scalar_field), intent(inout) :: out_field
     type(scalar_field), intent(in) :: in_field
