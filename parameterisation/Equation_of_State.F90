@@ -724,11 +724,10 @@ contains
     !locals
     integer :: stat
     type(scalar_field), pointer :: pressure_local, temperature_local, density_local, &
-                                   referencedensity_local, bulkmodulus_local, thermalexpansion_local, &
-                                   referencetemperature_local
+                                   referencedensity_local, bulkmodulus_local, thermalexpansion_local
     type(scalar_field) :: pressure_remap, density_remap, referencedensity_remap, &
                           compressibility, dpdrho, thermalexpansion_remap, &
-                          temperatureproduct, referencetemperature_remap
+                          temperatureproduct
     logical :: implicit_pressure_buoyancy, exclude_pressure_buoyancy
     
     call zero(drhodp)
@@ -753,10 +752,6 @@ contains
       thermalexpansion_local=>extract_scalar_field(state,'IsobaricThermalExpansivity')
       call allocate(thermalexpansion_remap, drhodp%mesh, 'RemappedIsobaricThermalExpansivity')
       call remap_field(thermalexpansion_local, thermalexpansion_remap)
-
-      referencetemperature_local=>extract_scalar_field(state,'CompressibleReferenceTemperature')
-      call allocate(referencetemperature_remap, drhodp%mesh, 'RemappedCompressibleReferenceTemperature')
-      call remap_field(referencetemperature_local, referencetemperature_remap)
 
       temperature_local => extract_scalar_field(state, "Temperature")
       call allocate(temperatureproduct, drhodp%mesh, "TemperatureProduct")
@@ -833,7 +828,6 @@ contains
         end if
       end if
       call deallocate(thermalexpansion_remap)
-      call deallocate(referencetemperature_remap)
       call deallocate(temperatureproduct)
     end if
 
