@@ -833,8 +833,10 @@ contains
         end if
       end if
       call deallocate(thermalexpansion_remap)
+      call deallocate(referencetemperature_remap)
       call deallocate(temperatureproduct)
     end if
+
     call deallocate(referencedensity_remap)
     call deallocate(compressibility)
 
