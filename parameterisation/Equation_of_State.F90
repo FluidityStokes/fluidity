@@ -755,7 +755,7 @@ contains
 
       temperature_local => extract_scalar_field(state, "Temperature")
       call allocate(temperatureproduct, drhodp%mesh, "TemperatureProduct")
-      call set(temperatureproduct, temperature_local)
+      call remap_field(temperature_local, temperatureproduct)
       call scale(temperatureproduct, thermalexpansion_remap)
       call scale(temperatureproduct, referencedensity_remap)
 

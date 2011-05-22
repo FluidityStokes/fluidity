@@ -22,11 +22,6 @@ from fluidity_tools import stat_parser as stat
 rms_vel= stat("stokes-1e4-p2p1-TALA.stat")["Fluid"]["Velocity%magnitude"]["l2norm"][-1]
 </variable>
 
-<variable name="adiabatic_source" language="python">
-from fluidity_tools import stat_parser as stat
-adiabatic_source= stat("stokes-1e4-p2p1-TALA.stat")["Fluid"]["Adiabatic_Source"]["integral"][-1]
-</variable>
-
 <variable name="viscous_dissipation" language="python">
 from fluidity_tools import stat_parser as stat
 viscous_dissipation= stat("stokes-1e4-p2p1-TALA.stat")["Fluid"]["TemperatureSource"]["integral"][-1]
@@ -44,11 +39,7 @@ assert(abs(nu_top-4.40) &lt; 0.4)
 assert(abs(rms_vel-40.0) &lt; 1.0)
 </test>
 
-<test name="Adiabatic_Source Validity: 0.75 .lt. Adiabatic_Source .lt. 0.95" language="python">
-assert(abs(adiabatic_source-0.8) &lt; 0.1)
-</test>
-
-<test name="Viscous_Dissipation Validity: 0.75 .lt. Adiabatic_Source .lt. 0.95" language="python">
+<test name="Viscous_Dissipation Validity: 0.75 .lt. viscous_dissipation .lt. 0.95" language="python">
 assert(abs(viscous_dissipation-0.8) &lt; 0.1)
 </test>
 
