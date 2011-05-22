@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE testproblem SYSTEM "regressiontest.dtd">
+<testproblem>
+  <name>p2p1-Stokes-square-convection-1e4-ALA-explicit</name>
+  <owner userid="rhodrid"/>
+
+  <tags>flml</tags>
+
+  <problem_definition length="special" nprocs="1">
+    <command_line>fluidity -v2 -l Stokes-square-convection-1e4-ALA-explicit-p2p1.flml</command_line>
+  </problem_definition>
+
+<variables>  
+
+<variable name="nu_top" language="python">
+from fluidity_tools import stat_parser as stat
+nu_top = abs(stat("stokes-1e4-p2p1-ALA.stat")["Fluid"]["Temperature"]["surface_integral%TopH"][-1])
+</variable>
+
+<variable name="rms_vel" language="python">
+from fluidity_tools import stat_parser as stat
+rms_vel= stat("stokes-1e4-p2p1-ALA.stat")["Fluid"]["Velocity%magnitude"]["l2norm"][-1]
+</variable>
+
+<variable name="viscous_dissipation" language="python">
+from fluidity_tools import stat_parser as stat
+viscous_dissipation= stat("stokes-1e4-p2p1-ALA.stat")["Fluid"]["TemperatureSource"]["integral"][-1]
+</variable>
+
+</variables>
+
+<pass_tests>
+
+<test name="Surface Nusselt Number Validity: 4.00 .lt. Nu .lt. 4.80" language="python">
+assert(abs(nu_top-4.40) &lt; 0.4)
+</test>
+
+<test name="RMS Velocity Validity: 39.0 .lt. V_RMS .lt. 41.0" language="python">
+assert(abs(rms_vel-40.0) &lt; 1.0)
+</test>
+
+<test name="Viscous_Dissipation Validity: 0.75 .lt. viscous_dissipation .lt. 0.95" language="python">
+assert(abs(viscous_dissipation-0.8) &lt; 0.1)
+</test>
+
+</pass_tests>                                                                                                                                                                                                
+
+<warn_tests>
+</warn_tests>
+
+</testproblem>
+
+
+
+
+

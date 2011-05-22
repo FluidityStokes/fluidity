@@ -695,8 +695,7 @@ contains
 
       call transform_to_physical(coordinate, ele, detwei=detwei)
 
-      ele_mat = ele_mat + &
-                shape_shape_vector(ele_shape(pressure, ele), ele_shape(velocity, ele), &
+      ele_mat = shape_shape_vector(ele_shape(pressure, ele), ele_shape(velocity, ele), &
                                    detwei*ele_val_at_quad(drhodp, ele)*gravity_magnitude, &
                                    ele_val_at_quad(gravity, ele))
 
@@ -705,6 +704,8 @@ contains
       end do
 
     end do element_loop
+
+    call deallocate(drhodp)
     
   end subroutine include_implicit_pressure_buoyancy
   
