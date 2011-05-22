@@ -1,5 +1,5 @@
 FLFLAGS = -v2 -l
-FLMLMODEL = stokes-1e4-p2p1-1e4-TALA
+FLMLMODEL = stokes-1e4-p2p1-TALA
 FLUIDITY = dfluidity
 MESH = square-structured-linear
 MODEL = Stokes-square-convection-1e4-TALA-p2p1
