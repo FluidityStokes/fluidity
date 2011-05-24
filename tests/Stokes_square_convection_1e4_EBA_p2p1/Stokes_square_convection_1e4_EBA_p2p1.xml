@@ -27,9 +27,9 @@ from fluidity_tools import stat_parser as stat
 rms_vel= stat("stokes-1e4-p2p1-EBA.stat")["Fluid"]["Velocity%magnitude"]["l2norm"][-1]
 </variable>
 
-<variable name="adiabatic_source" language="python">
+<variable name="adiabatic_absorption" language="python">
 from fluidity_tools import stat_parser as stat
-adiabatic_source= stat("stokes-1e4-p2p1-EBA.stat")["Fluid"]["Adiabatic_Source"]["integral"][-1]
+adiabatic_absorption= stat("stokes-1e4-p2p1-EBA.stat")["Fluid"]["Adiabatic_Absorption"]["integral"][-1]
 </variable>
 
 <variable name="viscous_dissipation" language="python">
@@ -41,20 +41,20 @@ viscous_dissipation= stat("stokes-1e4-p2p1-EBA.stat")["Fluid"]["TemperatureSourc
 
 <pass_tests>
 
-<test name="Surface Nusselt Number Validity: 3.85 .lt. Nu .lt. 4.15" language="python">
-assert(abs(nu_top-4.00) &lt; 0.15)
+<test name="Surface Nusselt Number Validity: 4.00 .lt. Nu .lt. 4.30" language="python">
+assert(abs(nu_top-4.15) &lt; 0.15)
 </test>
 
-<test name="RMS Velocity Validity: 38.0 .lt. V_RMS .lt. 41.0" language="python">
-assert(abs(rms_vel-39.5) &lt; 1.5)
+<test name="RMS Velocity Validity: 37.5 .lt. V_RMS .lt. 39.5" language="python">
+assert(abs(rms_vel-38.25) &lt; 1.0)
 </test>
 
-<test name="Adiabatic_Source Validity: 0.7 .lt. Adiabatic_Source .lt. 0.9" language="python">
-assert(abs(adiabatic_source-0.8) &lt; 0.1)
+<test name="Adiabatic_Absorption Validity: 0.75 .lt. Adiabatic_Absorption .lt. 0.85" language="python">
+assert(abs(adiabatic_absorption-0.8) &lt; 0.05)
 </test>
 
-<test name="Viscous_Dissipation Validity: 0.7 .lt. Adiabatic_Source .lt. 0.9" language="python">
-assert(abs(viscous_dissipation-0.8) &lt; 0.1)
+<test name="Viscous_Dissipation Validity: 0.75 .lt. Viscous_Dissipation .lt. 0.85" language="python">
+assert(abs(viscous_dissipation-0.8) &lt; 0.05)
 </test>
 
 <test name="Divergence small .lt. 1.0E-3" language="python">

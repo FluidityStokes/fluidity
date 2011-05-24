@@ -52,9 +52,9 @@ module momentum_diagnostics
   public :: calculate_strain_rate, calculate_bulk_viscosity, calculate_buoyancy, calculate_coriolis, &
             calculate_tensor_second_invariant, calculate_imposed_material_velocity_source, &
             calculate_imposed_material_velocity_absorption, &
-            calculate_scalar_potential, calculate_projection_scalar_potential, &
-            calculate_vector_potential, calculate_geostrophic_velocity, &
-            calculate_hessian, calculate_viscous_dissipation, calculate_adiabatic_heating_coefficient, &
+            calculate_scalar_potential,calculate_projection_scalar_potential, &
+            calculate_vector_potential,calculate_geostrophic_velocity, &
+            calculate_hessian,calculate_viscous_dissipation,calculate_adiabatic_heating_coefficient, &
             calculate_adiabatic_heating_absorption
            
   
@@ -174,7 +174,7 @@ contains
 
   subroutine calculate_adiabatic_heating_coefficient(state, s_field)
     ! Calculates adiabatic heating coefficient, which is later multiplied
-    ! by T as an absorption term:
+    ! by Temperature to form an absorption term :
     type(state_type), intent(inout) :: state
     type(scalar_field), intent(inout) :: s_field
 
@@ -186,8 +186,7 @@ contains
 
     character(len=OPTION_PATH_LEN) eos_option_path
 
-    real :: thermal_expansion_coefficient, gravity_magnitude
-    real :: depth, dissipation_number, reference_temperature, reference_density
+    real :: thermal_expansion_coefficient, gravity_magnitude, reference_density
     integer :: node
 
     ! Extract temperature from state:
@@ -196,25 +195,23 @@ contains
     ! Extract velocity field from state:
     velocity => extract_vector_field(state, "Velocity")
 
+    ! Get physical parameters:
+    call get_option("/physical_parameters/gravity/magnitude", gravity_magnitude)
+    gravity_direction => extract_vector_field(state, "GravityDirection")
+
     ! Extract velocity component in gravitational direction:
-    ! Note - this is not yet done correctly!
-    velocity_component = extract_scalar_field(velocity, 2)            
-    ewrite_minmax(velocity_component%val)
+    ! Note - this is not yet done correctly - it assumes 2D and that gravity always acts in dim 2!
+    velocity_component = extract_scalar_field(velocity, 2)
 
     ! Get EOS coefficients:
     eos_option_path='/material_phase::'//trim(state%name)//'/equation_of_state/fluids/linear'     
 !    call get_option(trim(eos_option_path)//'/temperature_dependency/thermal_expansion_coefficient', thermal_expansion_coefficient)
     thermal_expansion_coefficient = 1.
-!    call get_option(trim(eos_option_path)//'/temperature_dependency/reference_temperature', reference_temperature)
-    reference_temperature = 0.
 !    call get_option(trim(eos_option_path)//'/reference_density', reference_density)
     reference_density = 1.
 
-    ! Get physical parameters:
-    call get_option("/physical_parameters/gravity/magnitude", gravity_magnitude)
-    gravity_direction => extract_vector_field(state, "GravityDirection")
-
     ! Calculate and set adiabatic heating coefficient:
+    assert(velocity_component%mesh==s_field%mesh)
     do node = 1, node_count(s_field)
        call set(s_field, node, reference_density*thermal_expansion_coefficient*gravity_magnitude*node_val(velocity_component,node))
     end do
@@ -228,44 +225,17 @@ contains
     type(scalar_field), intent(inout) :: s_field
 
     type(scalar_field), pointer :: temperature
-    type(vector_field), pointer :: velocity
-    type(vector_field), pointer :: gravity_direction
-
-    type(scalar_field) :: velocity_component
-
-    character(len=OPTION_PATH_LEN) eos_option_path
-
-    real :: thermal_expansion_coefficient, gravity_magnitude
-    real :: depth, reference_temperature, reference_density
     integer :: node
+
+    call calculate_adiabatic_heating_coefficient(state,s_field)
 
     ! Extract temperature from state:
     temperature => extract_scalar_field(state, "Temperature")
 
-    ! Extract velocity field from state:
-    velocity => extract_vector_field(state, "Velocity")
-
-    ! Extract velocity component in gravitational direction:
-    ! Note - this is not yet done correctly!
-    velocity_component = extract_scalar_field(velocity, 2)            
-    ewrite_minmax(velocity_component%val)
-
-    ! Get EOS coefficients:
-    eos_option_path='/material_phase::'//trim(state%name)//'/equation_of_state/fluids/linear'     
-!    call get_option(trim(eos_option_path)//'/temperature_dependency/thermal_expansion_coefficient', thermal_expansion_coefficient)
-    thermal_expansion_coefficient = 1.
-!    call get_option(trim(eos_option_path)//'/temperature_dependency/reference_temperature', reference_temperature)
-    reference_temperature = 0.
-!    call get_option(trim(eos_option_path)//'/reference_density', reference_density)
-    reference_density = 1.
-
-    ! Get physical parameters:
-    call get_option("/physical_parameters/gravity/magnitude", gravity_magnitude)
-    gravity_direction => extract_vector_field(state, "GravityDirection")
-
-    ! Calculate and set adiabatic heating source term:
+    ! Multiply adiabatic coefficient by Temperature to attain full absorption term:
     do node = 1, node_count(s_field)
-       call set(s_field, node, reference_density*thermal_expansion_coefficient*gravity_magnitude*node_val(velocity_component,node)*node_val(temperature,node))
+       assert(s_field%mesh==temperature%mesh)
+       call set(s_field, node, node_val(s_field,node)*node_val(temperature,node))
     end do
 
   end subroutine calculate_adiabatic_heating_absorption

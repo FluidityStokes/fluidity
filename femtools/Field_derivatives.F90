@@ -294,7 +294,7 @@ module field_derivatives
       type(tensor_field), intent(inout) :: t_field
 
       real, dimension(t_field%dim(1),t_field%dim(2)) :: t
-      integer :: i, j, node
+      integer :: node
 
       ! Compute velocity gradient tensor:
       call grad(infield,positions,t_field)

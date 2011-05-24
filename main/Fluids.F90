@@ -392,6 +392,7 @@ contains
 
     call calculate_diagnostic_variables(State)
     call calculate_diagnostic_variables_new(state)
+
     ! This is mostly to ensure that the photosynthetic radiation
     ! has a non-zero value before the first adapt.
     if (have_option("/ocean_biology")) then

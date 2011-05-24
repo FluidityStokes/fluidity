@@ -1870,11 +1870,14 @@
                   FLExit("You must have a temperature field to have a temperature dependent viscosity.")
                end if
 
-               ewrite(-1,*) "Warning - any viscosity values set under tensor_field::Viscosity will be"
-               ewrite(-1,*) "overwritten by a calculated temperature dependent viscosity. Nonetheless,"
-               ewrite(-1,*) "to ensure that the viscosity tensor is simulated in the correct form, please"
-               ewrite(-1,*) "select a form under tensor_field::Viscosity. Note that only partial stress and"
-               ewrite(-1,*) "stress form are valid for a spatially varying viscosity field."
+               if(have_option("/material_phase["//int2str(i)//"]/vector_field::Velocity/prognostic&
+                  &/tensor_field::Viscosity/")) then
+
+                  ewrite(-1,*) "Error: you have selected temperature dependent viscosity, therefore no viscosity should be specified under:"
+                  ewrite(-1,*) "Velocity/prognostic/tensor_field::Viscosity/ --- this option must be removed"
+                  FLExit("Attempting to set viscosity on more than one occasion!!")
+
+               end if
 
                if(have_option("/material_phase["//int2str(i)//&
                   "]/vector_field::Velocity/prognostic&
@@ -1886,7 +1889,7 @@
                   &/diagonal")) then
 
                   ewrite(-1,*) "A spatially varying viscosity (for example a viscosity that depends"
-                  ewrite(-1,*) "upon a spatiall varying temperature field) is only valid with stress"
+                  ewrite(-1,*) "upon a spatially varying temperature field) is only valid with stress"
                   ewrite(-1,*) "or partial stress form viscosity"
                   FLExit("For a spatially varying viscosity field, use stress or partial stress form viscosity")
                end if

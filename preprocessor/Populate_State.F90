@@ -4137,12 +4137,13 @@ if (.not.have_option("/material_phase[0]/vector_field::Velocity/prognostic/vecto
     ! Check options for Stokes flow simulations.
 
     integer :: i
-    character(len=OPTION_PATH_LEN) :: velocity_path, pressure_path
+    character(len=OPTION_PATH_LEN) :: velocity_path, pressure_path, compressible_path
     character(len=FIELD_NAME_LEN) :: schur_preconditioner      
-    logical :: exclude_mass, exclude_advection
+    logical :: exclude_mass, exclude_advection, implicit_pressure_buoyancy, exclude_pressure_buoyancy
     real :: theta
 
     velocity_path="/material_phase[0]/vector_field::Velocity/prognostic"
+
     if (have_option(trim(velocity_path))) then
 
        ! Check that mass and advective terms are excluded:
@@ -4174,45 +4175,69 @@ if (.not.have_option("/material_phase[0]/vector_field::Velocity/prognostic/vecto
           FLExit("For Stokes problems, theta (under velocity) must = 1")
        end if
 
-       ! Check pressure_mass_matrix preconditioner is compatible with viscosity tensor:
-        if(have_option("/material_phase["//int2str(i)//&
-             "]/vector_field::Velocity/prognostic&
-             &/tensor_field::Viscosity/prescribed/value&
-             &/anisotropic_symmetric").or.&
-           have_option("/material_phase["//int2str(i)//&
-             "]/vector_field::Velocity/prognostic&
-             &/tensor_field::Viscosity/prescribed/value&
-             &/anisotropic_asymmetric")) then
+    end if
 
+    pressure_path="/material_phase[0]/scalar_field::Pressure/prognostic"
+
+    if (have_option(trim(pressure_path))) then
+
+       ! Check pressure_mass_matrix preconditioner is compatible with viscosity tensor:
+       if(have_option("/material_phase["//int2str(i)//&
+            "]/vector_field::Velocity/prognostic&
+            &/tensor_field::Viscosity/prescribed/value&
+            &/anisotropic_symmetric").or.&
+            have_option("/material_phase["//int2str(i)//&
+            "]/vector_field::Velocity/prognostic&
+            &/tensor_field::Viscosity/prescribed/value&
+            &/anisotropic_asymmetric")) then
+          
           if(have_option("/material_phase["//int2str(i)//&
                "]/scalar_field::Pressure/prognostic&
                &/scheme/use_projection_method")) then
-
+             
              if(have_option("/material_phase["//int2str(i)//&
                   "]/scalar_field::Pressure/prognostic&
                   &/scheme/use_projection_method&
                   &/full_schur_complement")) then
-
+                
                 call get_option("/material_phase["//int2str(i)//&
                      &"]/scalar_field::Pressure/prognostic/scheme/use_projection_method&
                      &/full_schur_complement/preconditioner_matrix[0]/name", schur_preconditioner)
-
+                
                 select case(schur_preconditioner)
                 case("ScaledPressureMassMatrix")
                    ewrite(-1,*) "WARNING - At present, the viscosity scaling for the pressure mass matrix is"
                    ewrite(-1,*) "taken from the 1st component of the viscosity tensor. Such a scaling"
                    ewrite(-1,*) "is only valid when all components of each viscosity tensor are constant."
                 end select
-
+                
              end if
-
+             
           end if
-
+          
        end if
 
     end if
 
-    pressure_path="/material_phase[0]/scalar_field::Pressure/prognostic"
+    compressible_path = "/material_phase[0]/equation_of_state/compressible"
+
+    if (have_option(trim(compressible_path))) then
+
+       implicit_pressure_buoyancy=have_option(trim(pressure_path)//&
+            "/spatial_discretisation/compressible/implicit_pressure_buoyancy")
+
+       exclude_pressure_buoyancy=have_option(trim(compressible_path)//&
+            "/linearised_mantle/exclude_pressure_buoyancy")
+
+       ewrite(2,*) 'TEST',implicit_pressure_buoyancy,exclude_pressure_buoyancy
+
+       if(implicit_pressure_buoyancy .AND. exclude_pressure_buoyancy) then
+          ewrite(-1,*) "For Compressible Stokes problems, if you exclude the pressure effect on buoyancy, you cannot"
+          ewrite(-1,*) "include it in the pressure projection (implicit pressure buoyancy), as it does not exist."
+          FLExit("Cannot exclude pressure buoyancy and subsequently include it in the pressure projection!")
+       end if
+
+    end if
 
   end subroutine check_stokes_options
 
@@ -4268,7 +4293,6 @@ if (.not.have_option("/material_phase[0]/vector_field::Velocity/prognostic/vecto
           FLExit("For foam problems you need to use a compressible eos.")
        end if
     end if
-
 
     velocity_path="/material_phase[0]/vector_field::Velocity/prognostic"
     if (have_option(trim(velocity_path))) then
