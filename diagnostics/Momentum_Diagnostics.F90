@@ -117,7 +117,9 @@ contains
     type(vector_field), pointer :: velocity
     type(tensor_field), pointer :: viscosity
 
-    type(scalar_field) :: viscosity_component 
+    type(scalar_field) :: velocity_divergence
+    type(scalar_field) :: viscosity_component
+    type(tensor_field) :: viscosity_remap
     type(tensor_field) :: strain_rate_tensor
     type(tensor_field) :: velocity_gradient_tensor
 
@@ -147,28 +149,44 @@ contains
     ! Calculate velocity gradient tensor:
     call grad(velocity, positions, velocity_gradient_tensor)
 
-    ! Extract viscosity from state:
+    ! Extract viscosity from state and remap to s_field mesh:
     viscosity => extract_tensor_field(state, "Viscosity")
+    call allocate(viscosity_remap, s_field%mesh, 'RemappedViscosity')
+    call remap_field(viscosity,viscosity_remap)
+
+    viscosity_component = extract_scalar_field(viscosity_remap,1,1)  
+
+    ! Calculate velocity divergence for correct definition of stress:
+    call allocate(velocity_divergence, s_field%mesh, 'Velocity_divergence')
+    call div(velocity, positions, velocity_divergence)
+    ewrite_minmax(velocity_divergence)
 
     ! Extract first component of viscosity tensor from full tensor:
-    viscosity_component = extract_scalar_field(viscosity,1,1)  
-
     ! Calculate viscous dissipation (scalar s_field):
+    assert(node_count(s_field) == node_count(viscosity_component))
+    assert(node_count(s_field) == node_count(velocity_divergence))
     do node=1,node_count(s_field)
        val = 0.
-       do dim2 = 1, velocity%dim
-          do dim1 = 1, velocity%dim
-             val = val + ( 2. * node_val(viscosity_component,node) * & 
-                 & node_val(strain_rate_tensor,dim1,dim2,node)      * &
-                 & node_val(velocity_gradient_tensor,dim1,dim2,node))
+       do dim1 = 1, velocity%dim
+          do dim2 = 1, velocity%dim
+             if (dim1 == dim2) then
+                val = val + 2. * node_val(viscosity_component,node)      * & 
+                     & ( node_val(strain_rate_tensor,dim1,dim2,node)     - &
+                     & 1./3. * node_val(velocity_divergence,node) )**2
+             else
+                val = val + 2. * node_val(viscosity_component,node)      * & 
+                     & node_val(strain_rate_tensor,dim1,dim2,node)**2   
+             end if
           end do
        end do
-       call set(s_field, node, val) 
+       call set(s_field, node, val)
     end do
 
     ! Deallocate:
     call deallocate(strain_rate_tensor)
     call deallocate(velocity_gradient_tensor)
+    call deallocate(viscosity_remap)
+    call deallocate(velocity_divergence)
 
   end subroutine calculate_viscous_dissipation
 
@@ -183,10 +201,7 @@ contains
     type(vector_field), pointer :: gravity_direction
 
     type(scalar_field) :: velocity_component
-
-    character(len=OPTION_PATH_LEN) eos_option_path
-
-    real :: thermal_expansion_coefficient, gravity_magnitude, reference_density
+    real :: gravity_magnitude
     integer :: node
 
     ! Extract temperature from state:
@@ -203,17 +218,10 @@ contains
     ! Note - this is not yet done correctly - it assumes 2D and that gravity always acts in dim 2!
     velocity_component = extract_scalar_field(velocity, 2)
 
-    ! Get EOS coefficients:
-    eos_option_path='/material_phase::'//trim(state%name)//'/equation_of_state/fluids/linear'     
-!    call get_option(trim(eos_option_path)//'/temperature_dependency/thermal_expansion_coefficient', thermal_expansion_coefficient)
-    thermal_expansion_coefficient = 1.
-!    call get_option(trim(eos_option_path)//'/reference_density', reference_density)
-    reference_density = 1.
-
     ! Calculate and set adiabatic heating coefficient:
     assert(velocity_component%mesh==s_field%mesh)
     do node = 1, node_count(s_field)
-       call set(s_field, node, reference_density*thermal_expansion_coefficient*gravity_magnitude*node_val(velocity_component,node))
+       call set(s_field, node, gravity_magnitude*node_val(velocity_component,node))
     end do
 
   end subroutine calculate_adiabatic_heating_coefficient

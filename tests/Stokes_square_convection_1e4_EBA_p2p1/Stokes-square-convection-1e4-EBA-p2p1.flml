@@ -341,7 +341,7 @@
             </mass_terms>
           </continuous_galerkin>
           <conservative_advection>
-            <real_value rank="0">1.0</real_value>
+            <real_value rank="0">0.0</real_value>
           </conservative_advection>
         </spatial_discretisation>
         <temporal_discretisation>
@@ -415,7 +415,7 @@
         </tensor_field>
         <scalar_field name="Source" rank="0">
           <diagnostic>
-            <mesh name="P1DG"/>
+            <mesh name="CoordinateMesh"/>
             <algorithm name="viscous_dissipation" material_phase_support="single "/>
             <output/>
             <stat/>
