@@ -1,8 +1,8 @@
 <?xml version='1.0' encoding='utf-8'?>
 <fluidity_options>
   <simulation_name>
-    <string_value lines="1">stokes-1e4-p2p1-EBA</string_value>
-    <comment>This case compares to case 1(a) in the benchmark paper of Blankenbach et al. 1989.</comment>
+    <string_value lines="1">stokes-1e4-p2p1-EBA-Di-1.0</string_value>
+    <comment>This case compares to an extended Bousinessq case at Di = 1.0, Ra=1e4, from King et. al. GJI 2009. </comment>
   </simulation_name>
   <problem_type>
     <string_value lines="1">stokes</string_value>
