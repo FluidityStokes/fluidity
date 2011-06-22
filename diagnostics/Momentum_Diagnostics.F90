@@ -262,7 +262,6 @@ contains
 
     type(scalar_field), pointer :: temperature
     type(scalar_field) :: temperature_remap
-    integer :: node
 
     ewrite(1,*) 'In calculate_adiabatic_heating_absorption'
 
@@ -274,9 +273,7 @@ contains
     call remap_field(temperature, temperature_remap)
 
     ! Multiply adiabatic coefficient by Temperature to attain full absorption term:
-    do node = 1, node_count(s_field)
-       call set(s_field, node, node_val(s_field,node)*node_val(temperature_remap,node))
-    end do
+    call scale(s_field, temperature_remap)
 
     call deallocate(temperature_remap)
 
