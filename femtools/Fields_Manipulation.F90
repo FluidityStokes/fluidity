@@ -2839,7 +2839,7 @@ implicit none
        if (a%mesh==b%mesh) then
           tmp_b=b
        else
-          call allocate(tmp_b, b%dim, a%mesh, name='cross_product_vector_tmp_b')
+          call allocate(tmp_b, b%dim, a%mesh, name='inner_product_vector_tmp_b')
           call remap_field(b, tmp_b)
        end if
        
@@ -2858,6 +2858,10 @@ implicit none
           ! someone could implement in_field type python
           FLAbort("Illegal in_field field type in inner_product()")
        end select
+
+       if( .not. b%mesh==tmp_b%mesh) then
+         call deallocate(tmp_b)
+       end if
        
     case (FIELD_TYPE_CONSTANT)
       

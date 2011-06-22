@@ -1708,6 +1708,21 @@ The mesh must be directly extruded.</a:documentation>
       </attribute>
     </element>
   </define>
+  <define name="viscous_dissipation_plus_surface_adiabat_algorithm">
+    <element name="algorithm">
+      <a:documentation>algorithm for calculating the viscous dissipation with a surface adiabat term.</a:documentation>
+      <attribute name="name">
+        <value>viscous_dissipation_plus_surface_adiabat</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single </value>
+      </attribute>
+      <element name="surface_temperature">
+        <a:documentation>The surface temperature for the adiabat term</a:documentation>
+        <ref name="real"/>
+      </element>
+    </element>
+  </define>
   <define name="adiabatic_heating_coefficient_algorithm">
     <element name="algorithm">
       <a:documentation>algorithm for calculating adiabatic_heating coefficient,
@@ -1832,6 +1847,9 @@ This field needs to be interpolated between adapts.</a:documentation>
     </element>
   </define>
   <define name="scalar_diagnostic_algorithms">
+    <ref name="viscous_dissipation_plus_surface_adiabat_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="viscous_dissipation_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">

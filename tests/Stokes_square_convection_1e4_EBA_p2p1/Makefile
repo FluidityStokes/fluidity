@@ -1,7 +1,7 @@
 FLFLAGS = -v2 -l
 FLMLMODEL = stokes-1e4-p2p1-EBA
-FLUIDITY = dfluidity
-MESH = Square
+FLUIDITY = fluidity
+MESH = square-structured-linear
 MODEL = Stokes-square-convection-1e4-p2p1
 
 default: input

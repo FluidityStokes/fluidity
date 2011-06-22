@@ -299,6 +299,7 @@ elements when buoyancy is a discontinuous field.</a:documentation>
               <ref name="scalar_python_diagnostic_algorithm"/>
               <ref name="internal_algorithm"/>
               <ref name="viscous_dissipation_algorithm"/>
+              <ref name="viscous_dissipation_plus_surface_adiabat_algorithm"/>
             </choice>
             <ref name="diagnostic_scalar_field_no_adapt"/>
           </element>

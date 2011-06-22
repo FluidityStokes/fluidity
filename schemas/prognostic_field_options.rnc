@@ -231,7 +231,8 @@ prognostic_scalar_field =
                (
                   scalar_python_diagnostic_algorithm |
                   internal_algorithm |
-		  viscous_dissipation_algorithm
+                  viscous_dissipation_algorithm |
+                  viscous_dissipation_plus_surface_adiabat_algorithm
                ),
                diagnostic_scalar_field_no_adapt
             } 

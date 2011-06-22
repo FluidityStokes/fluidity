@@ -55,7 +55,7 @@ module momentum_diagnostics
             calculate_scalar_potential,calculate_projection_scalar_potential, &
             calculate_vector_potential,calculate_geostrophic_velocity, &
             calculate_hessian,calculate_viscous_dissipation,calculate_adiabatic_heating_coefficient, &
-            calculate_adiabatic_heating_absorption
+            calculate_adiabatic_heating_absorption,calculate_viscous_dissipation_plus_surface_adiabat
            
   
 contains
@@ -107,6 +107,41 @@ contains
 
   end subroutine calculate_tensor_second_invariant
 
+  subroutine calculate_viscous_dissipation_plus_surface_adiabat(state, s_field)
+    ! A routine to calculate the viscous dissipation plus the surface adiabatic term. 
+    ! Currently assumes a constant viscosity:
+    type(state_type), intent(inout) :: state
+    type(scalar_field), intent(inout) :: s_field
+
+    type(vector_field), pointer :: gravity_direction, velocity
+    type(scalar_field) :: surface_adiabat
+
+    real :: gravity_magnitude, T0
+    
+    ewrite(1,*) 'In calculate_viscous_dissipation_plus_surface_adiabat'
+
+    ! this must be done first since it sets the field
+    call calculate_viscous_dissipation(state, s_field)
+
+    call get_option(trim(complete_field_path(trim(s_field%option_path))) // &
+                    "/algorithm[0]/surface_temperature", T0)
+
+    ! Extract velocity field from state - will be used to calculate strain-
+    ! rate tensor and velocity gradient tensor:
+    call get_option("/physical_parameters/gravity/magnitude", gravity_magnitude)
+    gravity_direction => extract_vector_field(state, "GravityDirection")
+    velocity => extract_vector_field(state, "Velocity")
+
+    call allocate(surface_adiabat, s_field%mesh, "SurfaceAdiabat")
+    call inner_product(surface_adiabat, velocity, gravity_direction)
+    call scale(surface_adiabat, T0*gravity_magnitude)
+
+    call addto(s_field, surface_adiabat)
+
+    call deallocate(surface_adiabat)
+
+  end subroutine calculate_viscous_dissipation_plus_surface_adiabat
+
   subroutine calculate_viscous_dissipation(state, s_field)
     ! A routine to calculate the viscous dissipation. Currently
     ! assumes a constant viscosity:
@@ -118,19 +153,17 @@ contains
     type(tensor_field), pointer :: viscosity
 
     type(scalar_field) :: velocity_divergence
-    type(scalar_field) :: viscosity_component
-    type(tensor_field) :: viscosity_remap
+    type(scalar_field) :: viscosity_component, viscosity_component_remap
     type(tensor_field) :: strain_rate_tensor
-    type(tensor_field) :: velocity_gradient_tensor
 
     integer :: dim1, dim2, node
     real :: val
 
+    ewrite(1,*) 'In calculate_viscous_dissipation'
+
     ! Extract velocity field from state - will be used to calculate strain-
     ! rate tensor and velocity gradient tensor:
-
     velocity => extract_vector_field(state, "Velocity")
-    
     ! Check velocity field is not on a discontinous mesh:
     call check_source_mesh_derivative(velocity, "Viscous_Dissipation")
 
@@ -139,44 +172,37 @@ contains
 
     ! Allocate and initialize strain rate/velocity gradient tensors:
     call allocate(strain_rate_tensor, s_field%mesh, "Strain_Rate_VD")
-    call allocate(velocity_gradient_tensor, s_field%mesh, "Velocity_Gradient_VD")
     call zero(strain_rate_tensor)
-    call zero(velocity_gradient_tensor)
 
     ! Calculate strain rate tensor:
     call strain_rate(velocity, positions, strain_rate_tensor)
-
-    ! Calculate velocity gradient tensor:
-    call grad(velocity, positions, velocity_gradient_tensor)
-
-    ! Extract viscosity from state and remap to s_field mesh:
-    viscosity => extract_tensor_field(state, "Viscosity")
-    call allocate(viscosity_remap, s_field%mesh, 'RemappedViscosity')
-    call remap_field(viscosity,viscosity_remap)
-
-    viscosity_component = extract_scalar_field(viscosity_remap,1,1)  
 
     ! Calculate velocity divergence for correct definition of stress:
     call allocate(velocity_divergence, s_field%mesh, 'Velocity_divergence')
     call div(velocity, positions, velocity_divergence)
     ewrite_minmax(velocity_divergence)
 
+    ! Extract viscosity from state and remap to s_field mesh:
+    viscosity => extract_tensor_field(state, "Viscosity")
     ! Extract first component of viscosity tensor from full tensor:
+    ! ***Should give a warning that this is what you're doing!!!***
+    viscosity_component = extract_scalar_field(viscosity,1,1)  
+    call allocate(viscosity_component_remap, s_field%mesh, "RemappedViscosityComponent")
+    call remap_field(viscosity_component, viscosity_component_remap)
+
     ! Calculate viscous dissipation (scalar s_field):
-    assert(node_count(s_field) == node_count(viscosity_component))
-    assert(node_count(s_field) == node_count(velocity_divergence))
     do node=1,node_count(s_field)
        val = 0.
        do dim1 = 1, velocity%dim
           do dim2 = 1, velocity%dim
-             if (dim1 == dim2) then
-                val = val + 2. * node_val(viscosity_component,node)      * & 
-                     & ( node_val(strain_rate_tensor,dim1,dim2,node)     - &
-                     & 1./3. * node_val(velocity_divergence,node) )**2
-             else
-                val = val + 2. * node_val(viscosity_component,node)      * & 
-                     & node_val(strain_rate_tensor,dim1,dim2,node)**2   
-             end if
+            if(dim1==dim2) then
+              val = val + 2.*node_val(viscosity_component_remap, node)     * & 
+                   & (node_val(strain_rate_tensor,dim1,dim2,node)          - &
+                   & 1./3. * node_val(velocity_divergence, node))**2
+            else
+              val = val + 2.*node_val(viscosity_component_remap, node)     * & 
+                   & node_val(strain_rate_tensor,dim1,dim2,node)**2   
+            end if
           end do
        end do
        call set(s_field, node, val)
@@ -184,8 +210,7 @@ contains
 
     ! Deallocate:
     call deallocate(strain_rate_tensor)
-    call deallocate(velocity_gradient_tensor)
-    call deallocate(viscosity_remap)
+    call deallocate(viscosity_component_remap)
     call deallocate(velocity_divergence)
 
   end subroutine calculate_viscous_dissipation
@@ -204,6 +229,8 @@ contains
     real :: gravity_magnitude
     integer :: node
 
+    ewrite(1,*) 'In calculate_adiabatic_heating_coefficient'
+
     ! Extract temperature from state:
     temperature => extract_scalar_field(state, "Temperature")
 
@@ -215,14 +242,15 @@ contains
     gravity_direction => extract_vector_field(state, "GravityDirection")
 
     ! Extract velocity component in gravitational direction:
-    ! Note - this is not yet done correctly - it assumes 2D and that gravity always acts in dim 2!
-    velocity_component = extract_scalar_field(velocity, 2)
+    call allocate(velocity_component, s_field%mesh, "VerticalVelocityComponent")
+    call inner_product(velocity_component, velocity, gravity_direction)
 
     ! Calculate and set adiabatic heating coefficient:
-    assert(velocity_component%mesh==s_field%mesh)
     do node = 1, node_count(s_field)
-       call set(s_field, node, gravity_magnitude*node_val(velocity_component,node))
+       call set(s_field, node, -gravity_magnitude*node_val(velocity_component,node))
     end do
+
+    call deallocate(velocity_component)
 
   end subroutine calculate_adiabatic_heating_coefficient
 
@@ -233,18 +261,24 @@ contains
     type(scalar_field), intent(inout) :: s_field
 
     type(scalar_field), pointer :: temperature
+    type(scalar_field) :: temperature_remap
     integer :: node
+
+    ewrite(1,*) 'In calculate_adiabatic_heating_absorption'
 
     call calculate_adiabatic_heating_coefficient(state,s_field)
 
     ! Extract temperature from state:
     temperature => extract_scalar_field(state, "Temperature")
+    call allocate(temperature_remap, s_field%mesh, "TemperatureRemap")
+    call remap_field(temperature, temperature_remap)
 
     ! Multiply adiabatic coefficient by Temperature to attain full absorption term:
     do node = 1, node_count(s_field)
-       assert(s_field%mesh==temperature%mesh)
-       call set(s_field, node, node_val(s_field,node)*node_val(temperature,node))
+       call set(s_field, node, node_val(s_field,node)*node_val(temperature_remap,node))
     end do
+
+    call deallocate(temperature_remap)
 
   end subroutine calculate_adiabatic_heating_absorption
 

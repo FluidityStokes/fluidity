@@ -12,19 +12,24 @@
 
 <variables>  
 
+<variable name="T_int" language="python">
+from fluidity_tools import stat_parser as stat
+T_int = stat("stokes-1e4-p2p1-EBA.stat")["Fluid"]["Temperature"]["integral"][-1]
+</variable>
+
 <variable name="nu_top" language="python">
 from fluidity_tools import stat_parser as stat
 nu_top = abs(stat("stokes-1e4-p2p1-EBA.stat")["Fluid"]["Temperature"]["surface_integral%TopH"][-1])
 </variable>
 
-<variable name="max_div" language="python">
-from fluidity_tools import stat_parser as stat
-max_div = max(max(abs(stat("stokes-1e4-p2p1-EBA.stat")["Fluid"]["FiniteElementDivergence"]["max"])), max(abs(stat("stokes-1e4-p2p1-EBA.stat")["Fluid"]["FiniteElementDivergence"]["min"])))
-</variable>
-
 <variable name="rms_vel" language="python">
 from fluidity_tools import stat_parser as stat
 rms_vel= stat("stokes-1e4-p2p1-EBA.stat")["Fluid"]["Velocity%magnitude"]["l2norm"][-1]
+</variable>
+
+<variable name="max_div" language="python">
+from fluidity_tools import stat_parser as stat
+max_div = max(max(abs(stat("stokes-1e4-p2p1-EBA.stat")["Fluid"]["FiniteElementDivergence"]["max"])), max(abs(stat("stokes-1e4-p2p1-EBA.stat")["Fluid"]["FiniteElementDivergence"]["min"])))
 </variable>
 
 <variable name="adiabatic_absorption" language="python">
