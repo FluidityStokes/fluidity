@@ -1,30 +1,30 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE testproblem SYSTEM "regressiontest.dtd">
 <testproblem>
-  <name>p2p1-Stokes-square-convection-1e4-TALA</name>
+  <name>Stokes-square-convection-1e4-TALA-p2p1</name>
   <owner userid="rhodrid"/>
 
   <tags>flml</tags>
 
   <problem_definition length="special" nprocs="1">
-    <command_line>fluidity -v2 -l Stokes-square-convection-1e4-TALA-p2p1.flml</command_line>
+    <command_line>fluidity -v2 -l Stokes-square-convection-1e4-TALA-Di-0.25-p2p1.flml</command_line>
   </problem_definition>
 
 <variables>  
 
 <variable name="nu_top" language="python">
 from fluidity_tools import stat_parser as stat
-nu_top = abs(stat("stokes-1e4-p2p1-TALA.stat")["Fluid"]["Temperature"]["surface_integral%TopH"][-1])
+nu_top = abs(stat("stokes-1e4-p2p1-TALA-Di-0.25.stat")["Fluid"]["Temperature"]["surface_integral%TopH"][-1])
 </variable>
 
 <variable name="rms_vel" language="python">
 from fluidity_tools import stat_parser as stat
-rms_vel= stat("stokes-1e4-p2p1-TALA.stat")["Fluid"]["Velocity%magnitude"]["l2norm"][-1]
+rms_vel= stat("stokes-1e4-p2p1-TALA-Di-0.25.stat")["Fluid"]["Velocity%magnitude"]["l2norm"][-1]
 </variable>
 
 <variable name="viscous_dissipation" language="python">
 from fluidity_tools import stat_parser as stat
-viscous_dissipation= stat("stokes-1e4-p2p1-TALA.stat")["Fluid"]["TemperatureSource"]["integral"][-1]
+viscous_dissipation= stat("stokes-1e4-p2p1-TALA-Di-0.25.stat")["Fluid"]["TemperatureSource"]["integral"][-1]
 </variable>
 
 </variables>
