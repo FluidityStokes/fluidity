@@ -120,14 +120,14 @@ contains
     
     ewrite(1,*) 'In calculate_viscous_dissipation_plus_surface_adiabat'
 
-    ! this must be done first since it sets the field
+    ! this must be done first since it sets the scalar field:
     call calculate_viscous_dissipation(state, s_field)
 
+    ! Get surface temperature from options:
     call get_option(trim(complete_field_path(trim(s_field%option_path))) // &
                     "/algorithm[0]/surface_temperature", T0)
 
-    ! Extract velocity field from state - will be used to calculate strain-
-    ! rate tensor and velocity gradient tensor:
+    ! Extract velocity field from state and determine component in gravitational direction:
     call get_option("/physical_parameters/gravity/magnitude", gravity_magnitude)
     gravity_direction => extract_vector_field(state, "GravityDirection")
     velocity => extract_vector_field(state, "Velocity")
@@ -162,7 +162,7 @@ contains
     ewrite(1,*) 'In calculate_viscous_dissipation'
 
     ! Extract velocity field from state - will be used to calculate strain-
-    ! rate tensor and velocity gradient tensor:
+    ! rate tensor:
     velocity => extract_vector_field(state, "Velocity")
     ! Check velocity field is not on a discontinous mesh:
     call check_source_mesh_derivative(velocity, "Viscous_Dissipation")
@@ -170,7 +170,7 @@ contains
     ! Extract positions field from state:
     positions => extract_vector_field(state, "Coordinate")
 
-    ! Allocate and initialize strain rate/velocity gradient tensors:
+    ! Allocate and initialize strain rate tensor:
     call allocate(strain_rate_tensor, s_field%mesh, "Strain_Rate_VD")
     call zero(strain_rate_tensor)
 
@@ -185,7 +185,9 @@ contains
     ! Extract viscosity from state and remap to s_field mesh:
     viscosity => extract_tensor_field(state, "Viscosity")
     ! Extract first component of viscosity tensor from full tensor:
-    ! ***Should give a warning that this is what you're doing!!!***
+    ewrite(-1,*) "WARNING - At present, the viscosity scaling for the viscous dissipation is"
+    ewrite(-1,*) "taken from the 1st component of the viscosity tensor. Such a scaling is "
+    ewrite(-1,*) "only valid when all components of each viscosity tensor are constant."    
     viscosity_component = extract_scalar_field(viscosity,1,1)  
     call allocate(viscosity_component_remap, s_field%mesh, "RemappedViscosityComponent")
     call remap_field(viscosity_component, viscosity_component_remap)
@@ -196,6 +198,7 @@ contains
        do dim1 = 1, velocity%dim
           do dim2 = 1, velocity%dim
             if(dim1==dim2) then
+              ! Add divergence of velocity term to diagonal only: 
               val = val + 2.*node_val(viscosity_component_remap, node)     * & 
                    & (node_val(strain_rate_tensor,dim1,dim2,node)          - &
                    & 1./3. * node_val(velocity_divergence, node))**2
@@ -241,7 +244,7 @@ contains
     call get_option("/physical_parameters/gravity/magnitude", gravity_magnitude)
     gravity_direction => extract_vector_field(state, "GravityDirection")
 
-    ! Extract velocity component in gravitational direction:
+    ! Determine velocity component in gravitational direction:
     call allocate(velocity_component, s_field%mesh, "VerticalVelocityComponent")
     call inner_product(velocity_component, velocity, gravity_direction)
 
