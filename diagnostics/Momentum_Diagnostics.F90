@@ -114,27 +114,65 @@ contains
     type(scalar_field), intent(inout) :: s_field
 
     type(vector_field), pointer :: gravity_direction, velocity
-    type(scalar_field) :: surface_adiabat
+    type(scalar_field), pointer :: thermal_expansion_local
+    type(scalar_field) :: surface_adiabat, thermal_expansion_remap
 
-    real :: gravity_magnitude, T0
+    real :: gravity_magnitude, gamma, T0
+    integer :: node
+
+    character(len=OPTION_PATH_LEN) eos_option_path
+    logical :: have_linear_eos, have_linearised_mantle_compressible_eos
     
     ewrite(1,*) 'In calculate_viscous_dissipation_plus_surface_adiabat'
 
     ! this must be done first since it sets the scalar field:
     call calculate_viscous_dissipation(state, s_field)
 
-    ! Get surface temperature from options:
-    call get_option(trim(complete_field_path(trim(s_field%option_path))) // &
-                    "/algorithm[0]/surface_temperature", T0)
-
     ! Extract velocity field from state and determine component in gravitational direction:
     call get_option("/physical_parameters/gravity/magnitude", gravity_magnitude)
     gravity_direction => extract_vector_field(state, "GravityDirection")
     velocity => extract_vector_field(state, "Velocity")
 
+    ! Extract other relevant thermodynamic parameters:
+    eos_option_path='/material_phase::'//trim(state%name)//'/equation_of_state'
+
+    ! Determine which EOS is relevant:
+    have_linear_eos = (have_option(trim(eos_option_path)//'/fluids/linear'))
+    have_linearised_mantle_compressible_eos = (have_option(trim(eos_option_path)//'/compressible/linearised_mantle'))
+
+    ! Extract relevant parameters from options/state:
+    if(have_linear_eos) then
+       eos_option_path=trim(eos_option_path)//'/fluids/linear'
+       ! Get value for thermal expansion coefficient (constant)
+       if (have_option(trim(eos_option_path)//'/temperature_dependency')) then
+          call get_option(trim(eos_option_path)//'/temperature_dependency/thermal_expansion_coefficient', gamma)
+       end if
+    else if(have_linearised_mantle_compressible_eos) then
+       eos_option_path=trim(eos_option_path)//'/compressible/linearised_mantle'
+       ! Get spatially varying thermal expansion field and remap to s_field%mesh if required:
+       thermal_expansion_local=>extract_scalar_field(state,'IsobaricThermalExpansivity')
+       call allocate(thermal_expansion_remap, s_field%mesh, 'RemappedIsobaricThermalExpansivity')
+       call remap_field(thermal_expansion_local, thermal_expansion_remap)
+    else
+       FLExit("Selected EOS not yet configured for viscous dissipation plus surface adiabat algorithm")
+    end if
+
+    ! Get surface temperature from options:
+    call get_option(trim(complete_field_path(trim(s_field%option_path))) // &
+                    "/algorithm[0]/surface_temperature", T0)
+
     call allocate(surface_adiabat, s_field%mesh, "SurfaceAdiabat")
     call inner_product(surface_adiabat, velocity, gravity_direction)
-    call scale(surface_adiabat, T0*gravity_magnitude)
+
+    if(have_linear_eos) then
+       call scale(surface_adiabat, T0*gravity_magnitude*gamma)
+    else if(have_linearised_mantle_compressible_eos) then
+       do node = 1, node_count(s_field)
+          call set(surface_adiabat, node, node_val(surface_adiabat,node)*T0*gravity_magnitude &
+               * node_val(thermal_expansion_remap,node))
+       end do
+       call deallocate(thermal_expansion_remap)
+    end if
 
     call addto(s_field, surface_adiabat)
 
@@ -185,9 +223,8 @@ contains
     ! Extract viscosity from state and remap to s_field mesh:
     viscosity => extract_tensor_field(state, "Viscosity")
     ! Extract first component of viscosity tensor from full tensor:
-    ewrite(-1,*) "WARNING - At present, the viscosity scaling for the viscous dissipation is"
-    ewrite(-1,*) "taken from the 1st component of the viscosity tensor. Such a scaling is "
-    ewrite(-1,*) "only valid when all components of each viscosity tensor are constant."    
+    !*** This is not ideal - only valid for constant viscosity tensors
+    !*** though they can still vary spatially and temporally.
     viscosity_component = extract_scalar_field(viscosity,1,1)  
     call allocate(viscosity_component_remap, s_field%mesh, "RemappedViscosityComponent")
     call remap_field(viscosity_component, viscosity_component_remap)
@@ -224,13 +261,16 @@ contains
     type(state_type), intent(inout) :: state
     type(scalar_field), intent(inout) :: s_field
 
-    type(scalar_field), pointer :: temperature
+    type(scalar_field), pointer :: temperature, thermal_expansion_local
     type(vector_field), pointer :: velocity
     type(vector_field), pointer :: gravity_direction
 
-    type(scalar_field) :: velocity_component
-    real :: gravity_magnitude
+    type(scalar_field) :: velocity_component, thermal_expansion_remap
+    real :: gravity_magnitude, gamma
     integer :: node
+
+    character(len=OPTION_PATH_LEN) eos_option_path
+    logical :: have_linear_eos, have_linearised_mantle_compressible_eos
 
     ewrite(1,*) 'In calculate_adiabatic_heating_coefficient'
 
@@ -240,18 +280,46 @@ contains
     ! Extract velocity field from state:
     velocity => extract_vector_field(state, "Velocity")
 
-    ! Get physical parameters:
+    ! Get physical parameters and determine velocity component in gravitational direction:
     call get_option("/physical_parameters/gravity/magnitude", gravity_magnitude)
     gravity_direction => extract_vector_field(state, "GravityDirection")
 
-    ! Determine velocity component in gravitational direction:
     call allocate(velocity_component, s_field%mesh, "VerticalVelocityComponent")
     call inner_product(velocity_component, velocity, gravity_direction)
 
+    ! Determine which EOS is relevant:
+    eos_option_path='/material_phase::'//trim(state%name)//'/equation_of_state'
+    have_linear_eos = (have_option(trim(eos_option_path)//'/fluids/linear'))
+    have_linearised_mantle_compressible_eos = (have_option(trim(eos_option_path)//'/compressible/linearised_mantle'))
+
+    if(have_linear_eos) then
+       eos_option_path=trim(eos_option_path)//'/fluids/linear'
+       ! Get value for thermal expansion coefficient (constant)
+       if (have_option(trim(eos_option_path)//'/temperature_dependency')) then
+          call get_option(trim(eos_option_path)//'/temperature_dependency/thermal_expansion_coefficient', gamma)
+       end if
+    elseif(have_linearised_mantle_compressible_eos) then
+       eos_option_path=trim(eos_option_path)//'/compressible/linearised_mantle'
+       ! Get spatially varying thermal expansion field and remap to s_field%mesh if required:
+       thermal_expansion_local=>extract_scalar_field(state,'IsobaricThermalExpansivity')
+       call allocate(thermal_expansion_remap, s_field%mesh, 'RemappedIsobaricThermalExpansivity')
+       call remap_field(thermal_expansion_local, thermal_expansion_remap)
+    else
+       FLExit("Selected EOS not yet configured for adiabatic heating algorithm")
+    end if
+
     ! Calculate and set adiabatic heating coefficient:
-    do node = 1, node_count(s_field)
-       call set(s_field, node, -gravity_magnitude*node_val(velocity_component,node))
-    end do
+    if(have_linear_eos) then
+       do node = 1, node_count(s_field)
+          call set(s_field, node, -gamma*gravity_magnitude*node_val(velocity_component,node))
+       end do
+    else if(have_linearised_mantle_compressible_eos) then
+       do node = 1, node_count(s_field)
+          call set(s_field, node, -node_val(thermal_expansion_remap,node)*gravity_magnitude &
+                  * node_val(velocity_component,node))
+       end do
+       call deallocate(thermal_expansion_remap)
+    end if
 
     call deallocate(velocity_component)
 
