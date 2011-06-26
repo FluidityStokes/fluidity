@@ -118,7 +118,6 @@ contains
     type(scalar_field) :: surface_adiabat, thermal_expansion_remap
 
     real :: gravity_magnitude, gamma, T0
-    integer :: node
 
     character(len=OPTION_PATH_LEN) eos_option_path
     logical :: have_linear_eos, have_linearised_mantle_compressible_eos
@@ -142,13 +141,9 @@ contains
 
     ! Extract relevant parameters from options/state:
     if(have_linear_eos) then
-       eos_option_path=trim(eos_option_path)//'/fluids/linear'
        ! Get value for thermal expansion coefficient (constant)
-       if (have_option(trim(eos_option_path)//'/temperature_dependency')) then
-          call get_option(trim(eos_option_path)//'/temperature_dependency/thermal_expansion_coefficient', gamma)
-       end if
+       call get_option(trim(eos_option_path)//'/fluids/linear/temperature_dependency/thermal_expansion_coefficient', gamma)
     else if(have_linearised_mantle_compressible_eos) then
-       eos_option_path=trim(eos_option_path)//'/compressible/linearised_mantle'
        ! Get spatially varying thermal expansion field and remap to s_field%mesh if required:
        thermal_expansion_local=>extract_scalar_field(state,'IsobaricThermalExpansivity')
        call allocate(thermal_expansion_remap, s_field%mesh, 'RemappedIsobaricThermalExpansivity')
@@ -167,10 +162,8 @@ contains
     if(have_linear_eos) then
        call scale(surface_adiabat, T0*gravity_magnitude*gamma)
     else if(have_linearised_mantle_compressible_eos) then
-       do node = 1, node_count(s_field)
-          call set(surface_adiabat, node, node_val(surface_adiabat,node)*T0*gravity_magnitude &
-               * node_val(thermal_expansion_remap,node))
-       end do
+       call scale(surface_adiabat, T0*gravity_magnitude)
+       call scale(surface_adiabat, thermal_expansion_remap)
        call deallocate(thermal_expansion_remap)
     end if
 
@@ -293,13 +286,9 @@ contains
     have_linearised_mantle_compressible_eos = (have_option(trim(eos_option_path)//'/compressible/linearised_mantle'))
 
     if(have_linear_eos) then
-       eos_option_path=trim(eos_option_path)//'/fluids/linear'
        ! Get value for thermal expansion coefficient (constant)
-       if (have_option(trim(eos_option_path)//'/temperature_dependency')) then
-          call get_option(trim(eos_option_path)//'/temperature_dependency/thermal_expansion_coefficient', gamma)
-       end if
+       call get_option(trim(eos_option_path)//'/fluids/linear/temperature_dependency/thermal_expansion_coefficient', gamma)
     elseif(have_linearised_mantle_compressible_eos) then
-       eos_option_path=trim(eos_option_path)//'/compressible/linearised_mantle'
        ! Get spatially varying thermal expansion field and remap to s_field%mesh if required:
        thermal_expansion_local=>extract_scalar_field(state,'IsobaricThermalExpansivity')
        call allocate(thermal_expansion_remap, s_field%mesh, 'RemappedIsobaricThermalExpansivity')
