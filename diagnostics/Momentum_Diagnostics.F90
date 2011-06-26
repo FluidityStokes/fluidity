@@ -114,10 +114,10 @@ contains
     type(scalar_field), intent(inout) :: s_field
 
     type(vector_field), pointer :: gravity_direction, velocity
-    type(scalar_field), pointer :: thermal_expansion_local
-    type(scalar_field) :: surface_adiabat, thermal_expansion_remap
+    type(scalar_field), pointer :: thermal_expansion_local, reference_density_local
+    type(scalar_field) :: surface_adiabat, thermal_expansion_remap, reference_density_remap
 
-    real :: gravity_magnitude, gamma, T0
+    real :: gravity_magnitude, gamma, T0, rho0
 
     character(len=OPTION_PATH_LEN) eos_option_path
     logical :: have_linear_eos, have_linearised_mantle_compressible_eos
@@ -143,11 +143,17 @@ contains
     if(have_linear_eos) then
        ! Get value for thermal expansion coefficient (constant)
        call get_option(trim(eos_option_path)//'/fluids/linear/temperature_dependency/thermal_expansion_coefficient', gamma)
+       ! Get value for reference density (constant)
+       call get_option(trim(eos_option_path)//'/fluids/linear/reference_density', rho0)
     else if(have_linearised_mantle_compressible_eos) then
        ! Get spatially varying thermal expansion field and remap to s_field%mesh if required:
        thermal_expansion_local=>extract_scalar_field(state,'IsobaricThermalExpansivity')
        call allocate(thermal_expansion_remap, s_field%mesh, 'RemappedIsobaricThermalExpansivity')
        call remap_field(thermal_expansion_local, thermal_expansion_remap)
+       ! Get spatially varying thermal expansion field and remap to s_field%mesh if required:
+       reference_density_local=>extract_scalar_field(state,'CompressibleReferenceDensity')
+       call allocate(reference_density_remap, s_field%mesh, 'RemappedCompressibleReferenceDensity')
+       call remap_field(reference_density_local, reference_density_remap)
     else
        FLExit("Selected EOS not yet configured for viscous dissipation plus surface adiabat algorithm")
     end if
@@ -160,11 +166,13 @@ contains
     call inner_product(surface_adiabat, velocity, gravity_direction)
 
     if(have_linear_eos) then
-       call scale(surface_adiabat, T0*gravity_magnitude*gamma)
+       call scale(surface_adiabat, T0*gravity_magnitude*gamma*rho0)
     else if(have_linearised_mantle_compressible_eos) then
        call scale(surface_adiabat, T0*gravity_magnitude)
        call scale(surface_adiabat, thermal_expansion_remap)
+       call scale(surface_adiabat, reference_density_remap)
        call deallocate(thermal_expansion_remap)
+       call deallocate(reference_density_remap)
     end if
 
     call addto(s_field, surface_adiabat)
@@ -254,12 +262,12 @@ contains
     type(state_type), intent(inout) :: state
     type(scalar_field), intent(inout) :: s_field
 
-    type(scalar_field), pointer :: temperature, thermal_expansion_local
+    type(scalar_field), pointer :: temperature, thermal_expansion_local, reference_density_local
     type(vector_field), pointer :: velocity
     type(vector_field), pointer :: gravity_direction
 
-    type(scalar_field) :: velocity_component, thermal_expansion_remap
-    real :: gravity_magnitude, gamma
+    type(scalar_field) :: velocity_component, thermal_expansion_remap, reference_density_remap
+    real :: gravity_magnitude, gamma, rho0
     integer :: node
 
     character(len=OPTION_PATH_LEN) eos_option_path
@@ -288,11 +296,17 @@ contains
     if(have_linear_eos) then
        ! Get value for thermal expansion coefficient (constant)
        call get_option(trim(eos_option_path)//'/fluids/linear/temperature_dependency/thermal_expansion_coefficient', gamma)
+       ! Get value for reference density (constant)
+       call get_option(trim(eos_option_path)//'/fluids/linear/reference_density', rho0)
     elseif(have_linearised_mantle_compressible_eos) then
        ! Get spatially varying thermal expansion field and remap to s_field%mesh if required:
        thermal_expansion_local=>extract_scalar_field(state,'IsobaricThermalExpansivity')
        call allocate(thermal_expansion_remap, s_field%mesh, 'RemappedIsobaricThermalExpansivity')
        call remap_field(thermal_expansion_local, thermal_expansion_remap)
+       ! Get spatially varying compressible reference density and remap to s_field%mesh if required:
+       reference_density_local=>extract_scalar_field(state,'CompressibleReferenceDensity')
+       call allocate(reference_density_remap, s_field%mesh, 'RemappedCompressibleReferenceDensity')
+       call remap_field(reference_density_local, reference_density_remap)
     else
        FLExit("Selected EOS not yet configured for adiabatic heating algorithm")
     end if
@@ -300,14 +314,15 @@ contains
     ! Calculate and set adiabatic heating coefficient:
     if(have_linear_eos) then
        do node = 1, node_count(s_field)
-          call set(s_field, node, -gamma*gravity_magnitude*node_val(velocity_component,node))
+          call set(s_field, node, -gamma*rho0*gravity_magnitude*node_val(velocity_component,node))
        end do
     else if(have_linearised_mantle_compressible_eos) then
        do node = 1, node_count(s_field)
-          call set(s_field, node, -node_val(thermal_expansion_remap,node)*gravity_magnitude &
-                  * node_val(velocity_component,node))
+          call set(s_field, node, -node_val(thermal_expansion_remap,node) * node_val(reference_density_remap, node) &
+                  * gravity_magnitude * node_val(velocity_component,node))
        end do
        call deallocate(thermal_expansion_remap)
+       call deallocate(reference_density_remap)
     end if
 
     call deallocate(velocity_component)

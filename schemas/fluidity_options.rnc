@@ -4565,7 +4565,7 @@ scalar_field_choice =
                }
             )
          }|
-         ## Calculates the material density based on the compressible
+         ## Calculates the density based on the compressible
          ## EOS selected.
          element scalar_field {
             attribute rank { "0" },
