@@ -1986,6 +1986,18 @@ scalar_equation_choice =
             attribute name { "InternalEnergy" },
             equation_coefficients
          }|
+         ## Select the equation used to solve for this field.
+         ## Anelastic Energy equation for use with compressible mantle simulations.
+         ##
+         ## ONLY WORKS FOR CONTINUOUS GALERKIN DISCRETISATIONS
+         ##
+         ## It depends on the prescribed/diagnostic fields:
+         ##  - CompressibleReferenceDensity
+         ##  - CompressibleReferenceTemperature
+         ##  - IsobaricSpecificHeatCapacity
+         element equation {
+            attribute name { "MantleAnelasticEnergy" }
+         }|
          ## Option to solve for electrical potential from
          ## electrokinetic, electrochemical or electrothermal sources 
          element equation { 

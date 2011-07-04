@@ -5221,6 +5221,30 @@ prognostic (compressible) density.</a:documentation>
         </choice>
       </element>
       <element name="scalar_field">
+        <a:documentation>This field gives the reference Temperature for the 
+MantleAnelasticEnergy equation.</a:documentation>
+        <attribute name="rank">
+          <value>0</value>
+        </attribute>
+        <attribute name="name">
+          <value>CompressibleReferenceTemperature</value>
+        </attribute>
+        <choice>
+          <element name="prescribed">
+            <ref name="pressure_mesh_choice"/>
+            <ref name="prescribed_scalar_field"/>
+          </element>
+          <element name="diagnostic">
+            <ref name="scalar_python_diagnostic_algorithm"/>
+            <ref name="pressure_mesh_choice"/>
+            <ref name="diagnostic_scalar_field"/>
+          </element>
+          <element name="aliased">
+            <ref name="generic_aliased_field"/>
+          </element>
+        </choice>
+      </element>
+      <element name="scalar_field">
         <a:documentation>This field gives the isothermal bulk modulus (note this
 is the inverse of the isothermal compressibility) for the 
 linearised_mantle compressible equation of state.</a:documentation>
@@ -5253,6 +5277,30 @@ linearised_mantle compressible equation of state.</a:documentation>
         </attribute>
         <attribute name="name">
           <value>IsobaricThermalExpansivity</value>
+        </attribute>
+        <choice>
+          <element name="prescribed">
+            <ref name="pressure_mesh_choice"/>
+            <ref name="prescribed_scalar_field"/>
+          </element>
+          <element name="diagnostic">
+            <ref name="scalar_python_diagnostic_algorithm"/>
+            <ref name="pressure_mesh_choice"/>
+            <ref name="diagnostic_scalar_field"/>
+          </element>
+          <element name="aliased">
+            <ref name="generic_aliased_field"/>
+          </element>
+        </choice>
+      </element>
+      <element name="scalar_field">
+        <a:documentation>This field gives the isobaric specific heat capacity for the 
+MantleAnelasticEnergy equation.</a:documentation>
+        <attribute name="rank">
+          <value>0</value>
+        </attribute>
+        <attribute name="name">
+          <value>IsobaricSpecificHeatCapacity</value>
         </attribute>
         <choice>
           <element name="prescribed">

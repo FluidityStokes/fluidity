@@ -2451,6 +2451,20 @@ Uses a nonconservative time discretisation.</a:documentation>
         <ref name="equation_coefficients"/>
       </element>
       <element name="equation">
+        <a:documentation>Select the equation used to solve for this field.
+Anelastic Energy equation for use with compressible mantle simulations.
+
+ONLY WORKS FOR CONTINUOUS GALERKIN DISCRETISATIONS
+
+It depends on the prescribed/diagnostic fields:
+ - CompressibleReferenceDensity
+ - CompressibleReferenceTemperature
+ - IsobaricSpecificHeatCapacity</a:documentation>
+        <attribute name="name">
+          <value>MantleAnelasticEnergy</value>
+        </attribute>
+      </element>
+      <element name="equation">
         <a:documentation>Option to solve for electrical potential from
 electrokinetic, electrochemical or electrothermal sources </a:documentation>
         <attribute name="name">

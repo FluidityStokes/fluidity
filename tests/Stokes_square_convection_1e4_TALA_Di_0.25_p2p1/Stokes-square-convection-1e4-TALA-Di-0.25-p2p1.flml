@@ -32,9 +32,25 @@
         </stat>
       </from_mesh>
     </mesh>
+    <mesh name="P2DGMesh">
+      <from_mesh>
+        <mesh name="CoordinateMesh"/>
+        <mesh_shape>
+          <polynomial_degree>
+            <integer_value rank="0">2</integer_value>
+          </polynomial_degree>
+        </mesh_shape>
+        <mesh_continuity>
+          <string_value>discontinuous</string_value>
+        </mesh_continuity>
+        <stat>
+          <exclude_from_stat/>
+        </stat>
+      </from_mesh>
+    </mesh>
     <quadrature>
       <degree>
-        <integer_value rank="0">5</integer_value>
+        <integer_value rank="0">8</integer_value>
       </degree>
     </quadrature>
   </geometry>
@@ -185,7 +201,7 @@
     </scalar_field>
     <scalar_field name="Density" rank="0">
       <prognostic>
-        <mesh name="CoordinateMesh"/>
+        <mesh name="VelocityMesh"/>
         <spatial_discretisation>
           <continuous_galerkin>
             <stabilisation>
@@ -349,8 +365,8 @@
     </vector_field>
     <scalar_field name="Temperature" rank="0">
       <prognostic>
-        <mesh name="CoordinateMesh"/>
-        <equation name="AdvectionDiffusion"/>
+        <mesh name="VelocityMesh"/>
+        <equation name="MantleAnelasticEnergy"/>
         <spatial_discretisation>
           <continuous_galerkin>
             <stabilisation>
@@ -386,7 +402,7 @@
         </solver>
         <initial_condition name="WholeMesh">
           <python>
-            <string_value type="python" lines="20">def val(X,t):
+            <string_value lines="20" type="python">def val(X,t):
   T = 1 - X[0]
   return T</string_value>
           </python>
@@ -435,7 +451,7 @@
         </tensor_field>
         <scalar_field name="Source" rank="0">
           <diagnostic>
-            <mesh name="CoordinateMesh"/>
+            <mesh name="P2DGMesh"/>
             <algorithm name="viscous_dissipation" material_phase_support="single "/>
             <output/>
             <stat/>
@@ -446,7 +462,7 @@
         </scalar_field>
         <scalar_field name="Absorption" rank="0">
           <diagnostic>
-            <mesh name="CoordinateMesh"/>
+            <mesh name="VelocityMesh"/>
             <algorithm name="adiabatic_heating_coefficient" material_phase_support="single "/>
             <output/>
             <stat/>
@@ -492,7 +508,7 @@
     </scalar_field>
     <scalar_field name="CompressibleReferenceDensity" rank="0">
       <prescribed>
-        <mesh name="CoordinateMesh"/>
+        <mesh name="VelocityMesh"/>
         <value name="WholeMesh">
           <python>
             <string_value lines="20" type="python">def val(X,t):
@@ -548,7 +564,7 @@
     <scalar_field name="CompressibleEOSDensity" rank="0">
       <diagnostic>
         <algorithm name="Internal" material_phase_support="multiple"/>
-        <mesh name="CoordinateMesh"/>
+        <mesh name="VelocityMesh"/>
         <output/>
         <stat/>
         <convergence>
@@ -561,6 +577,36 @@
           <include_in_steady_state/>
         </steady_state>
       </diagnostic>
+    </scalar_field>
+    <scalar_field name="CompressibleReferenceTemperature" rank="0">
+      <prescribed>
+        <mesh name="VelocityMesh"/>
+        <value name="WholeMesh">
+          <constant>
+            <real_value rank="0">1.0</real_value>
+          </constant>
+        </value>
+        <output/>
+        <stat/>
+        <detectors>
+          <exclude_from_detectors/>
+        </detectors>
+      </prescribed>
+    </scalar_field>
+    <scalar_field name="IsobaricSpecificHeatCapacity" rank="0">
+      <prescribed>
+        <mesh name="CoordinateMesh"/>
+        <value name="WholeMesh">
+          <constant>
+            <real_value rank="0">1.0</real_value>
+          </constant>
+        </value>
+        <output/>
+        <stat/>
+        <detectors>
+          <exclude_from_detectors/>
+        </detectors>
+      </prescribed>
     </scalar_field>
   </material_phase>
 </fluidity_options>

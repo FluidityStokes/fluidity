@@ -217,7 +217,7 @@ contains
     type(scalar_field), intent(in), optional :: extra_discretised_source
 
     character(len = FIELD_NAME_LEN) :: lvelocity_name
-    integer :: i, j, stat
+    integer :: i, stat
     integer, dimension(:), allocatable :: t_bc_types
     type(scalar_field) :: t_bc, t_bc_2
     type(scalar_field), pointer :: absorption, sinking_velocity, source
@@ -227,6 +227,7 @@ contains
     type(vector_field), pointer :: positions, old_positions, new_positions
     type(scalar_field), target :: dummydensity
     type(scalar_field), pointer :: density, olddensity
+    type(scalar_field), pointer :: heatcap, reftemp
     character(len = FIELD_NAME_LEN) :: density_name
     type(scalar_field), pointer :: pressure
         
@@ -423,6 +424,8 @@ contains
       olddensity => dummydensity
       density_theta = 1.0
       pressure => dummydensity
+      heatcap=>dummydensity
+      reftemp=>dummydensity
     case(FIELD_EQUATION_INTERNALENERGY)
       ewrite(2,*) "Solving internal energy equation"
       if(move_mesh) then
@@ -441,6 +444,22 @@ contains
                       
       pressure=>extract_scalar_field(state, "Pressure")
       ewrite_minmax(pressure)
+      heatcap=>dummydensity
+      reftemp=>dummydensity
+    case(FIELD_EQUATION_MANTLEANELASTICENERGY)
+      ewrite(2,*) "Solving mantle anelastic energy equation"
+      if(move_mesh) then
+        FLExit("Haven't implemented a moving mesh anelastic energy equation yet.")
+      end if
+      density=>extract_scalar_field(state, "CompressibleReferenceDensity")
+      ewrite_minmax(density)
+      heatcap=>extract_scalar_field(state, "IsobaricSpecificHeatCapacity")
+      ewrite_minmax(heatcap)
+      reftemp=>extract_scalar_field(state, "CompressibleReferenceTemperature")
+      ewrite_minmax(reftemp)
+      
+      olddensity=>dummydensity
+      pressure=>dummydensity
     case default
       FLExit("Unknown field equation type for cg advection diffusion.")
     end select
@@ -455,11 +474,12 @@ contains
                                         positions, old_positions, new_positions, &
                                         velocity, grid_velocity, &
                                         source, absorption, diffusivity, &
-                                        density, olddensity, pressure)
+                                        density, olddensity, pressure, &
+                                        heatcap, reftemp)
     end do
 
     ! as part of assembly include the already discretised optional source
-    ! needed before applying direchlet boundary conditions
+    ! needed before applying dirichlet boundary conditions
     call addto_rhs_extra_discretised_source(rhs, extra_discretised_source = extra_discretised_source)
 
     ! Step 4: Boundary conditions
@@ -488,7 +508,7 @@ contains
         call assemble_advection_diffusion_face_cg(i, t_bc_types(i), t, t_bc, t_bc_2, &
                                                   matrix, rhs, &
                                                   positions, velocity, grid_velocity, &
-                                                  density, olddensity)
+                                                  density, olddensity, heatcap)
       end do
     
       call deallocate(t_bc)
@@ -554,7 +574,8 @@ contains
                                       positions, old_positions, new_positions, &
                                       velocity, grid_velocity, &
                                       source, absorption, diffusivity, &
-                                      density, olddensity, pressure)
+                                      density, olddensity, pressure, &
+                                      heatcap, reftemp)
     integer, intent(in) :: ele
     type(scalar_field), intent(in) :: t
     type(csr_matrix), intent(inout) :: matrix
@@ -569,11 +590,14 @@ contains
     type(scalar_field), intent(in) :: density
     type(scalar_field), intent(in) :: olddensity
     type(scalar_field), intent(in) :: pressure
+    type(scalar_field), intent(in) :: heatcap
+    type(scalar_field), intent(in) :: reftemp
     
     integer, dimension(:), pointer :: element_nodes
     real, dimension(ele_ngi(t, ele)) :: detwei, detwei_old, detwei_new
     real, dimension(ele_loc(t, ele), ele_ngi(t, ele), mesh_dim(t)) :: dt_t
     real, dimension(ele_loc(density, ele), ele_ngi(density, ele), mesh_dim(density)) :: drho_t
+    real, dimension(ele_loc(heatcap, ele), ele_ngi(heatcap, ele), mesh_dim(heatcap)) :: dcp_t
     real, dimension(ele_loc(velocity, ele), ele_ngi(velocity, ele), mesh_dim(t)) :: du_t 
     real, dimension(ele_loc(positions, ele), ele_ngi(velocity, ele), mesh_dim(t)) :: dug_t 
     real, dimension(mesh_dim(t), mesh_dim(t), ele_ngi(t, ele)) :: j_mat 
@@ -636,12 +660,21 @@ contains
       call transform_to_physical(new_positions, ele, detwei=detwei_new)
     end if
     
-    if(have_advection.and.(equation_type==FIELD_EQUATION_INTERNALENERGY)) then
+    if(have_advection.and.((equation_type==FIELD_EQUATION_INTERNALENERGY).or.(equation_type==FIELD_EQUATION_MANTLEANELASTICENERGY))) then
       if(ele_shape(density, ele)==t_shape) then
         drho_t = dt_t
       else
         call transform_to_physical(positions, ele, &
           & ele_shape(density, ele), dshape = drho_t)
+      end if
+    end if
+    
+    if(have_advection.and.(equation_type==FIELD_EQUATION_MANTLEANELASTICENERGY)) then
+      if(ele_shape(heatcap, ele)==t_shape) then
+        dcp_t = dt_t
+      else
+        call transform_to_physical(positions, ele, &
+          & ele_shape(heatcap, ele), dshape = dcp_t)
       end if
     end if
     
@@ -667,13 +700,13 @@ contains
     ! Step 3: Assemble contributions
     
     ! Mass
-    if(have_mass) call add_mass_element_cg(ele, test_function, t, density, olddensity, detwei, detwei_old, detwei_new, matrix_addto, rhs_addto)
+    if(have_mass) call add_mass_element_cg(ele, test_function, t, density, olddensity, heatcap, detwei, detwei_old, detwei_new, matrix_addto, rhs_addto)
     
     ! Advection
     if(have_advection) call add_advection_element_cg(ele, test_function, t, &
                                         velocity, grid_velocity, diffusivity, &
-                                        density, olddensity, &
-                                        dt_t, du_t, dug_t, drho_t, detwei, j_mat, matrix_addto, rhs_addto)
+                                        density, olddensity, heatcap, &
+                                        dt_t, du_t, dug_t, drho_t, dcp_t, detwei, j_mat, matrix_addto, rhs_addto)
         
     ! Absorption
     if(have_absorption) call add_absorption_element_cg(ele, test_function, t, absorption, detwei, matrix_addto, rhs_addto)
@@ -688,6 +721,11 @@ contains
     if(equation_type==FIELD_EQUATION_INTERNALENERGY) call add_pressurediv_element_cg(ele, test_function, t, &
                                                                                   velocity, pressure, &
                                                                                   du_t, detwei, rhs_addto)
+
+    ! Reference Temperature
+    if((equation_type==FIELD_EQUATION_MANTLEANELASTICENERGY).and.have_diffusivity) then
+       call add_reference_temperature_diffusivity_element_cg(ele, reftemp, t, positions, diffusivity, dt_t, detwei, rhs_addto)
+    end if
     
     ! Step 4: Insertion
             
@@ -699,11 +737,11 @@ contains
       
   end subroutine assemble_advection_diffusion_element_cg
   
-  subroutine add_mass_element_cg(ele, test_function, t, density, olddensity, detwei, detwei_old, detwei_new, matrix_addto, rhs_addto)
+  subroutine add_mass_element_cg(ele, test_function, t, density, olddensity, heatcap, detwei, detwei_old, detwei_new, matrix_addto, rhs_addto)
     integer, intent(in) :: ele
     type(element_type), intent(in) :: test_function
     type(scalar_field), intent(in) :: t
-    type(scalar_field), intent(in) :: density, olddensity
+    type(scalar_field), intent(in) :: density, olddensity, heatcap
     real, dimension(ele_ngi(t, ele)), intent(in) :: detwei, detwei_old, detwei_new
     real, dimension(ele_loc(t, ele), ele_loc(t, ele)), intent(inout) :: matrix_addto
     real, dimension(ele_loc(t, ele)), intent(inout) :: rhs_addto
@@ -712,6 +750,7 @@ contains
     real, dimension(ele_loc(t, ele), ele_loc(t, ele)) :: mass_matrix
     
     real, dimension(ele_ngi(density,ele)) :: density_at_quad
+    real, dimension(ele_ngi(heatcap,ele)) :: heatcap_at_quad
     
     assert(have_mass)
     
@@ -726,6 +765,16 @@ contains
         mass_matrix = shape_shape(test_function, ele_shape(t, ele), detwei_new*density_at_quad)
       else
         mass_matrix = shape_shape(test_function, ele_shape(t, ele), detwei*density_at_quad)
+      end if
+    case(FIELD_EQUATION_MANTLEANELASTICENERGY)
+      density_at_quad = ele_val_at_quad(density, ele)
+      heatcap_at_quad = ele_val_at_quad(heatcap, ele)
+
+      if(move_mesh) then
+        ! needs to be evaluated at t+dt
+        mass_matrix = shape_shape(test_function, ele_shape(t, ele), detwei_new*density_at_quad)
+      else
+        mass_matrix = shape_shape(test_function, ele_shape(t, ele), detwei*density_at_quad*heatcap_at_quad)
       end if
     case default
     
@@ -769,19 +818,20 @@ contains
   
   subroutine add_advection_element_cg(ele, test_function, t, &
                                 velocity, grid_velocity, diffusivity, &
-                                density, olddensity, &
-                                dt_t, du_t, dug_t, drho_t, detwei, j_mat, matrix_addto, rhs_addto)
+                                density, olddensity, heatcap, &
+                                dt_t, du_t, dug_t, drho_t, dcp_t, detwei, j_mat, matrix_addto, rhs_addto)
     integer, intent(in) :: ele
     type(element_type), intent(in) :: test_function
     type(scalar_field), intent(in) :: t
     type(vector_field), intent(in) :: velocity
     type(vector_field), pointer :: grid_velocity
     type(tensor_field), intent(in) :: diffusivity
-    type(scalar_field), intent(in) :: density, olddensity
+    type(scalar_field), intent(in) :: density, olddensity, heatcap
     real, dimension(ele_loc(t, ele), ele_ngi(t, ele), mesh_dim(t)), intent(in) :: dt_t
     real, dimension(ele_loc(velocity, ele), ele_ngi(velocity, ele), mesh_dim(t)) :: du_t
     real, dimension(:, :, :) :: dug_t
     real, dimension(ele_loc(density, ele), ele_ngi(density, ele), mesh_dim(density)), intent(in) :: drho_t
+    real, dimension(ele_loc(heatcap, ele), ele_ngi(heatcap, ele), mesh_dim(heatcap)), intent(in) :: dcp_t
     real, dimension(ele_ngi(t, ele)), intent(in) :: detwei
     real, dimension(mesh_dim(t), mesh_dim(t), ele_ngi(t, ele)), intent(in) :: j_mat 
     real, dimension(ele_loc(t, ele), ele_loc(t, ele)), intent(inout) :: matrix_addto
@@ -792,9 +842,11 @@ contains
     real, dimension(ele_ngi(velocity, ele)) :: velocity_div_at_quad
     type(element_type), pointer :: t_shape
     
-    real, dimension(ele_ngi(density, ele)) :: density_at_quad
+    real, dimension(ele_ngi(density, ele)) :: density_at_quad, heatcap_at_quad
     real, dimension(velocity%dim, ele_ngi(density, ele)) :: densitygrad_at_quad
+    real, dimension(velocity%dim, ele_ngi(heatcap, ele)) :: heatcapgrad_at_quad
     real, dimension(ele_ngi(density, ele)) :: udotgradrho_at_quad
+    real, dimension(ele_ngi(heatcap, ele)) :: udotgradcp_at_quad
     
     assert(have_advection)
     
@@ -811,9 +863,22 @@ contains
       
       density_at_quad = density_theta*ele_val_at_quad(density, ele)&
                        +(1.-density_theta)*ele_val_at_quad(olddensity, ele)
-      densitygrad_at_quad = density_theta*ele_grad_at_quad(density, ele, drho_t) &
+      if((integrate_advection_by_parts.and.(abs(1.0 - beta) > epsilon(0.0))).or.&
+         ((.not.integrate_advection_by_parts).and.(abs(beta) > epsilon(0.0)))) then
+        densitygrad_at_quad = density_theta*ele_grad_at_quad(density, ele, drho_t) &
                            +(1.-density_theta)*ele_grad_at_quad(olddensity, ele, drho_t)
-      udotgradrho_at_quad = sum(densitygrad_at_quad*velocity_at_quad, 1)
+        udotgradrho_at_quad = sum(densitygrad_at_quad*velocity_at_quad, 1)
+      end if
+    case(FIELD_EQUATION_MANTLEANELASTICENERGY)
+      density_at_quad = ele_val_at_quad(density, ele)
+      heatcap_at_quad = ele_val_at_quad(heatcap, ele)
+      if((integrate_advection_by_parts.and.(abs(1.0 - beta) > epsilon(0.0))).or.&
+         ((.not.integrate_advection_by_parts).and.(abs(beta) > epsilon(0.0)))) then
+        densitygrad_at_quad = ele_grad_at_quad(density, ele, drho_t)
+        heatcapgrad_at_quad = ele_grad_at_quad(heatcap, ele, dcp_t)
+        udotgradrho_at_quad = sum(densitygrad_at_quad*velocity_at_quad, 1)
+        udotgradcp_at_quad = sum(heatcapgrad_at_quad*velocity_at_quad, 1)
+      end if
     end select
                 
     if(integrate_advection_by_parts) then
@@ -829,6 +894,15 @@ contains
           advection_mat = advection_mat &
                     - (1.0-beta) * shape_shape(test_function, t_shape, (velocity_div_at_quad*density_at_quad &
                                                                       +udotgradrho_at_quad)* detwei)
+        end if
+      case(FIELD_EQUATION_MANTLEANELASTICENERGY)
+        advection_mat = -dshape_dot_vector_shape(dt_t, velocity_at_quad, t_shape, detwei*density_at_quad*heatcap_at_quad)
+        if(abs(1.0 - beta) > epsilon(0.0)) then
+          velocity_div_at_quad = ele_div_at_quad(velocity, ele, du_t)
+          advection_mat = advection_mat &
+                    - (1.0-beta) * shape_shape(test_function, t_shape, (velocity_div_at_quad*density_at_quad*heatcap_at_quad &
+                                                                      +udotgradrho_at_quad*heatcap_at_quad &
+                                                                      +udotgradcp_at_quad*density_at_quad)* detwei)
         end if
       case default
         advection_mat = -dshape_dot_vector_shape(dt_t, velocity_at_quad, t_shape, detwei)
@@ -851,6 +925,15 @@ contains
           advection_mat = advection_mat &
                     + beta*shape_shape(test_function, t_shape, (velocity_div_at_quad*density_at_quad &
                                                                 +udotgradrho_at_quad)*detwei)
+        end if
+      case(FIELD_EQUATION_MANTLEANELASTICENERGY)
+        advection_mat = shape_vector_dot_dshape(test_function, velocity_at_quad, dt_t, detwei*density_at_quad*heatcap_at_quad)
+        if(abs(beta) > epsilon(0.0)) then
+          velocity_div_at_quad = ele_div_at_quad(velocity, ele, du_t)
+          advection_mat = advection_mat &
+                    + beta*shape_shape(test_function, t_shape, (velocity_div_at_quad*density_at_quad*heatcap_at_quad &
+                                                                +udotgradrho_at_quad*heatcap_at_quad &
+                                                                +udotgradcp_at_quad*density_at_quad)*detwei)
         end if
       case default
         advection_mat = shape_vector_dot_dshape(test_function, velocity_at_quad, dt_t, detwei)
@@ -952,6 +1035,47 @@ contains
     
   end subroutine add_diffusivity_element_cg
   
+  subroutine add_reference_temperature_diffusivity_element_cg(ele, reftemp, t, positions, diffusivity, dt_t, detwei, rhs_addto)
+    integer, intent(in) :: ele
+    type(scalar_field), intent(in) :: reftemp
+    type(scalar_field), intent(in) :: t
+    type(vector_field), intent(in) :: positions
+    type(tensor_field), intent(in) :: diffusivity
+    real, dimension(ele_loc(t, ele), ele_ngi(t, ele), mesh_dim(t)) :: dt_t
+    real, dimension(ele_ngi(t, ele)), intent(in) :: detwei
+    real, dimension(ele_loc(t, ele)), intent(inout) :: rhs_addto
+    
+    integer :: gi
+    real, dimension(ele_loc(reftemp, ele), ele_ngi(reftemp, ele), mesh_dim(reftemp)) :: dtbar_t
+    real, dimension(mesh_dim(reftemp), ele_ngi(reftemp, ele)) :: reftempgrad_at_quad
+    real, dimension(mesh_dim(reftemp), ele_ngi(reftemp, ele)) :: diffbygradtbar_at_quad
+    real, dimension(diffusivity%dim(1), diffusivity%dim(2), ele_ngi(diffusivity, ele)) :: diffusivity_gi
+    
+    assert(have_diffusivity)
+    assert(equation_type==FIELD_EQUATION_MANTLEANELASTICENERGY)
+    
+    if(ele_shape(reftemp, ele)==ele_shape(t, ele)) then
+      dtbar_t = dt_t
+    else
+      call transform_to_physical(positions, ele, &
+        & ele_shape(reftemp, ele), dshape = dtbar_t)
+    end if
+    
+    diffusivity_gi = ele_val_at_quad(diffusivity, ele)
+
+    reftempgrad_at_quad = ele_grad_at_quad(reftemp, ele, dtbar_t)
+    if(isotropic_diffusivity) then
+      assert(size(diffusivity_gi, 1) > 0)
+      rhs_addto = rhs_addto - dshape_dot_vector_rhs(dt_t, reftempgrad_at_quad, detwei * diffusivity_gi(1, 1, :))
+    else
+      do gi = 1, ele_ngi(reftemp, ele)
+        diffbygradtbar_at_quad(:, gi) = matmul(diffusivity_gi(:,:,gi), reftempgrad_at_quad(:,gi))
+      end do
+      rhs_addto = rhs_addto - dshape_dot_vector_rhs(dt_t, diffbygradtbar_at_quad, detwei)
+    end if
+    
+  end subroutine add_reference_temperature_diffusivity_element_cg
+  
   subroutine add_pressurediv_element_cg(ele, test_function, t, velocity, pressure, du_t, detwei, rhs_addto)
   
     integer, intent(in) :: ele
@@ -971,7 +1095,7 @@ contains
     
   end subroutine add_pressurediv_element_cg
   
-  subroutine assemble_advection_diffusion_face_cg(face, bc_type, t, t_bc, t_bc_2, matrix, rhs, positions, velocity, grid_velocity, density, olddensity)
+  subroutine assemble_advection_diffusion_face_cg(face, bc_type, t, t_bc, t_bc_2, matrix, rhs, positions, velocity, grid_velocity, density, olddensity, heatcap)
     integer, intent(in) :: face
     integer, intent(in) :: bc_type
     type(scalar_field), intent(in) :: t
@@ -984,6 +1108,7 @@ contains
     type(vector_field), pointer :: grid_velocity
     type(scalar_field), intent(in) :: density
     type(scalar_field), intent(in) :: olddensity
+    type(scalar_field), intent(in) :: heatcap
     
     integer, dimension(face_loc(t, face)) :: face_nodes
     real, dimension(face_ngi(t, face)) :: detwei
@@ -1017,7 +1142,7 @@ contains
     
     ! Advection
     if(have_advection .and. integrate_advection_by_parts) &
-      call add_advection_face_cg(face, bc_type, t, t_bc, velocity, grid_velocity, density, olddensity, detwei, normal, matrix_addto, rhs_addto)
+      call add_advection_face_cg(face, bc_type, t, t_bc, velocity, grid_velocity, density, olddensity, heatcap, detwei, normal, matrix_addto, rhs_addto)
     
     ! Diffusivity
     if(have_diffusivity) call add_diffusivity_face_cg(face, bc_type, t, t_bc, t_bc_2, detwei, matrix_addto, rhs_addto)
@@ -1030,7 +1155,7 @@ contains
     
   end subroutine assemble_advection_diffusion_face_cg
   
-  subroutine add_advection_face_cg(face, bc_type, t, t_bc, velocity, grid_velocity, density, olddensity, detwei, normal, matrix_addto, rhs_addto)
+  subroutine add_advection_face_cg(face, bc_type, t, t_bc, velocity, grid_velocity, density, olddensity, heatcap, detwei, normal, matrix_addto, rhs_addto)
     integer, intent(in) :: face
     integer, intent(in) :: bc_type
     type(scalar_field), intent(in) :: t
@@ -1039,6 +1164,7 @@ contains
     type(vector_field), pointer :: grid_velocity
     type(scalar_field), intent(in) :: density
     type(scalar_field), intent(in) :: olddensity
+    type(scalar_field), intent(in) :: heatcap
     real, dimension(face_ngi(t, face)), intent(in) :: detwei
     real, dimension(mesh_dim(t), face_ngi(t, face)), intent(in) :: normal
     real, dimension(face_loc(t, face), face_loc(t, face)), intent(inout) :: matrix_addto
@@ -1049,6 +1175,7 @@ contains
     type(element_type), pointer :: t_shape
     
     real, dimension(face_ngi(density, face)) :: density_at_quad
+    real, dimension(face_ngi(heatcap, face)) :: heatcap_at_quad
     
     assert(have_advection)
     assert(integrate_advection_by_parts)
@@ -1065,6 +1192,11 @@ contains
                        +(1.0-density_theta)*face_val_at_quad(olddensity, face)
 
       advection_mat = shape_shape(t_shape, t_shape, detwei * sum(velocity_at_quad * normal, 1) * density_at_quad)
+    case(FIELD_EQUATION_MANTLEANELASTICENERGY)
+      density_at_quad = face_val_at_quad(density, face)
+      heatcap_at_quad = face_val_at_quad(heatcap, face)
+
+      advection_mat = shape_shape(t_shape, t_shape, detwei * sum(velocity_at_quad * normal, 1) * density_at_quad * heatcap_at_quad)
     case default
       
       advection_mat = shape_shape(t_shape, t_shape, detwei * sum(velocity_at_quad * normal, 1))
