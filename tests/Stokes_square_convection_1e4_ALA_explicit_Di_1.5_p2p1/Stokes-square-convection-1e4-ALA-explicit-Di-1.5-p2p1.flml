@@ -1,8 +1,8 @@
 <?xml version='1.0' encoding='utf-8'?>
 <fluidity_options>
   <simulation_name>
-    <string_value lines="1">stokes-1e4-p2p1-ALA-explicit-Di-0.25</string_value>
-    <comment>This tests compressible stokes. It is a ALA case at a dissipation number of 0.25 and a Rayleigh number of 1e4. Values are compared to the benchmark solutions of King et al. 2009.</comment>
+    <string_value lines="1">stokes-1e4-p2p1-ALA-explicit-Di-1.5</string_value>
+    <comment>This tests compressible stokes. It is a ALA case at a dissipation number of 1.5 and a Rayleigh number of 1e4. Values are compared to the benchmark solutions of King et al. 2009.</comment>
   </simulation_name>
   <problem_type>
     <string_value lines="1">stokes</string_value>
@@ -110,7 +110,7 @@
   <physical_parameters>
     <gravity>
       <magnitude>
-        <real_value rank="0">0.25</real_value>
+        <real_value rank="0">1.5</real_value>
         <comment>Equivalent to Dissipation Number. Note that to achieve the desired Rayleigh number, other terms (e.g. viscosity, diffusivity) need to be scaled accordingly.</comment>
       </magnitude>
       <vector_field name="GravityDirection" rank="1">
@@ -345,7 +345,7 @@
             <value name="WholeMesh">
               <anisotropic_symmetric>
                 <constant>
-                  <real_value symmetric="true" dim2="dim" shape="2 2" dim1="dim" rank="2">2.5e-5 2.5e-5 2.5e-5 2.5e-5</real_value>
+                  <real_value symmetric="true" dim2="dim" shape="2 2" dim1="dim" rank="2">1.5e-4 1.5e-4 1.5e-4 1.5e-4</real_value>
                 </constant>
               </anisotropic_symmetric>
             </value>
@@ -414,7 +414,7 @@
         <initial_condition name="WholeMesh">
           <python>
             <string_value lines="20" type="python">def val(X,t):
-  T = (1 - X[0])*0.9742
+  T = (1 - X[0])*0.6832
   return T</string_value>
           </python>
         </initial_condition>
@@ -424,7 +424,7 @@
           </surface_ids>
           <type name="dirichlet">
             <constant>
-              <real_value rank="0">0.9742</real_value>
+              <real_value rank="0">0.6832</real_value>
             </constant>
           </type>
         </boundary_conditions>
@@ -528,7 +528,7 @@
   
   rho_zero = 1.0
   gamma = 1.0
-  Di = 0.25
+  Di = 1.5
   depth = 1.0 - X[1]
   exp_val = (depth*Di)/gamma
   rho_ref = rho_zero * math.exp(exp_val)
@@ -600,7 +600,7 @@
   
   T_Surf = 273.
   Delta_T = 3000.
-  Di = 0.25
+  Di = 1.5
   depth = 1.0 - X[1]
   exp_val = (depth*Di)
   # Note - to ensure full T field lies between 0 and 1, we subtract (T_Surf/Delta_T) here:

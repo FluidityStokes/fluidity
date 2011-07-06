@@ -2,7 +2,7 @@
 <fluidity_options>
   <simulation_name>
     <string_value lines="1">stokes-1e4-p2p1-TALA-Di-0.25</string_value>
-    <comment>This tests compressible stokes. It is a TALA case at a dissipation number of 1.5 and a Rayleigh number of 1e4. Values are compared to the benchmark solutions of King et al. 2009.</comment>
+    <comment>This tests compressible stokes. It is a TALA case at a dissipation number of 0.25 and a Rayleigh number of 1e4. Values are compared to the benchmark solutions of King et al. 2009.</comment>
   </simulation_name>
   <problem_type>
     <string_value lines="1">stokes</string_value>
