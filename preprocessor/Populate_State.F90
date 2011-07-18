@@ -4233,8 +4233,6 @@ if (.not.have_option("/material_phase[0]/vector_field::Velocity/prognostic/vecto
        exclude_pressure_buoyancy=have_option(trim(compressible_path)//&
             "/linearised_mantle/exclude_pressure_buoyancy")
 
-       ewrite(2,*) 'TEST',implicit_pressure_buoyancy,exclude_pressure_buoyancy
-
        if(implicit_pressure_buoyancy .AND. exclude_pressure_buoyancy) then
           ewrite(-1,*) "For Compressible Stokes problems, if you exclude the pressure effect on buoyancy, you cannot"
           ewrite(-1,*) "include it in the pressure projection (implicit pressure buoyancy), as it does not exist."
