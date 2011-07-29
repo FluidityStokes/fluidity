@@ -130,7 +130,7 @@ contains
     ! Extract velocity field from state and determine component in gravitational direction:
     call get_option("/physical_parameters/gravity/magnitude", gravity_magnitude)
     gravity_direction => extract_vector_field(state, "GravityDirection")
-    velocity => extract_vector_field(state, "Velocity")
+    velocity => extract_vector_field(state, "NonlinearVelocity")
 
     ! Extract other relevant thermodynamic parameters:
     eos_option_path='/material_phase::'//trim(state%name)//'/equation_of_state'
@@ -202,7 +202,7 @@ contains
 
     ! Extract velocity field from state - will be used to calculate strain-
     ! rate tensor:
-    velocity => extract_vector_field(state, "Velocity")
+    velocity => extract_vector_field(state, "NonlinearVelocity")
     ! Check velocity field is not on a discontinous mesh:
     call check_source_mesh_derivative(velocity, "Viscous_Dissipation")
 
@@ -279,7 +279,7 @@ contains
     temperature => extract_scalar_field(state, "Temperature")
 
     ! Extract velocity field from state:
-    velocity => extract_vector_field(state, "Velocity")
+    velocity => extract_vector_field(state, "NonlinearVelocity")
 
     ! Get physical parameters and determine velocity component in gravitational direction:
     call get_option("/physical_parameters/gravity/magnitude", gravity_magnitude)
