@@ -1197,7 +1197,9 @@
       rhs_addto = 0.0
       ! we always want things added to the diagonal blocks
       ! but we must check if we have_coriolis to add things to the others
-      if(have_coriolis.or.(have_viscosity.and.(stress_form.or.partial_stress_form))) then
+      if(have_coriolis.or.&
+         ((have_viscosity.or.have_les.or.have_temperature_dependent_viscosity).and.&
+          (stress_form.or.partial_stress_form))) then
         block_mask = .true.
       else
         block_mask = .false.
@@ -1321,14 +1323,15 @@
       end if
 
       ! Viscous terms
-      if(have_viscosity .or. have_les) then
+      if(have_viscosity .or. have_les .or. have_temperature_dependent_viscosity) then
         call add_viscosity_element_cg(state, ele, test_function, u, oldu_val, nu, x, viscosity, grad_u, &
            mnu, tnu, leonard, alpha, &
            du_t, detwei, big_m_tensor_addto, rhs_addto, temperature, nvfrac)
       end if
       
       ! Get only the viscous terms
-      if(low_re_p_correction_fix .and. assemble_inverse_masslump .and. (have_viscosity .or. have_les) .and. timestep/=1) then
+      if(low_re_p_correction_fix .and. assemble_inverse_masslump .and. &
+         (have_viscosity .or. have_les) .and. timestep/=1) then
         call get_viscous_terms_element_cg(ele, u, nu, x, viscosity, &
          du_t, detwei, visc_masslump)
       end if
@@ -1964,9 +1967,10 @@
       ! Non-linear PhaseVolumeFraction
       type(scalar_field), intent(in) :: nvfrac
 
-      integer                                                                        :: dim, dimj, gi, iloc
+      integer                                                                        :: dim, dimi, dimj, gi, iloc
       real, dimension(u%dim, ele_loc(u, ele))                                        :: nu_ele
       real, dimension(u%dim, u%dim, ele_ngi(u, ele))                                 :: viscosity_gi
+      real, dimension(ele_ngi(u, ele))                                               :: tdv_gi
       real, dimension(u%dim, u%dim, ele_loc(u, ele), ele_loc(u, ele))                :: viscosity_mat
       real, dimension(x%dim, x%dim, ele_ngi(u, ele))                                 :: les_tensor_gi
       real, dimension(ele_ngi(u, ele))                                               :: les_coef_gi, wale_coef_gi
@@ -1978,7 +1982,7 @@
       real, dimension(u%dim, ele_loc(u, ele)), intent(inout)                         :: rhs_addto
 
 
-      if (have_viscosity .AND. .not.(have_temperature_dependent_viscosity)) then
+      if (have_viscosity) then
          viscosity_gi = ele_val_at_quad(viscosity, ele)
       else
          ! if we don't have viscosity but maybe LES
@@ -1987,15 +1991,10 @@
 
       ! Account for temperature dependence, if requested:
       if(have_temperature_dependent_viscosity) then
-         viscosity_gi = 0.0
-         if(stress_form.or.partial_stress_form) then
-            do dim=1, u%dim
-               do dimj = 1, u%dim
-                  viscosity_gi(dim,dimj,:) = reference_viscosity * &
-                   exp(-activation_energy*(ele_val_at_quad(temperature,ele)))
-               end do
-            end do
-         end if
+        tdv_gi = reference_viscosity*exp(-activation_energy*(ele_val_at_quad(temperature,ele)))
+        forall(dimi=1:u%dim, dimj=1:u%dim)
+          viscosity_gi(dimi,dimj,:) = viscosity_gi(dimi,dimj,:) + tdv_gi
+        end forall
       end if
 
       ! add in LES viscosity
