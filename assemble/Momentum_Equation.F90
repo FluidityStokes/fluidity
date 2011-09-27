@@ -739,12 +739,9 @@
                        if(cv_pressure) then
                          call assemble_compressible_projection_cv(state, schur_auxiliary_matrix, dt, theta_pg, &
                                                                   theta_divergence, assemble_schur_auxiliary_matrix)
-                       else if(cg_pressure) then
+                       else
                          call assemble_compressible_projection_cg(state, schur_auxiliary_matrix, dt, theta_pg, &
                                                                   theta_divergence, assemble_schur_auxiliary_matrix)
-                       else
-                         ! developer error... out of sync options input and code
-                         FLAbort("Unknown pressure discretisation for compressible projection.")
                        end if
                      end if
                   end if
@@ -1785,10 +1782,10 @@
 
             if(have_option("/material_phase["//int2str(i)//&
                                  "]/scalar_field::Pressure/prognostic&
-                                 /spatial_discretisation/discontinuous_galerkin") &
+                                 &/spatial_discretisation/discontinuous_galerkin") &
               .and. .not. have_option("/material_phase["//int2str(i)//&
                                  "]/vector_field::Velocity/prognostic&
-                                 /spatial_discretisation/continuous_galerkin")) then
+                                 &/spatial_discretisation/continuous_galerkin")) then
               FLExit("With discontinuous galerkin Pressure you need a continuous Velocity")
             end if
  

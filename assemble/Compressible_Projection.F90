@@ -715,9 +715,15 @@ contains
 
     integer :: iphase
     character(len=OPTION_PATH_LEN) :: pressure_option_path, density_option_path
+    logical :: compressible_eos
 
     do iphase = 0, option_count("/material_phase")-1
+      compressible_eos = have_option("/material_phase["//int2str(iphase)//"]/equation_of_state/compressible")
       pressure_option_path = "/material_phase["//int2str(iphase)//"]/scalar_field::Pressure"
+      if(compressible_eos.and. &
+         have_option(trim(pressure_option_path)//"/prognostic/spatial_discretisation/discontinuous_galerkin")) then
+        FLExit("With a prognostic DG pressure you cannot use a compressible eos.")
+      end if
       if(have_option(trim(pressure_option_path)//"/prognostic/spatial_discretisation/compressible/implicit_pressure_buoyancy")) then
         if(have_option(trim(pressure_option_path)//"/prognostic/spatial_discretisation/control_volumes")) then
           FLExit("Compressible option implicit_pressure_buoyancy does not work with control volume Pressure discretisations.")
