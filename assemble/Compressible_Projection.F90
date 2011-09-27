@@ -45,8 +45,10 @@ module compressible_projection
   character(len=255), private :: message
 
   private
-  public :: assemble_compressible_projection_cv, assemble_compressible_projection_cg, &
-            update_compressible_density, include_implicit_pressure_buoyancy, compressible_projection_check_options
+
+  public :: assemble_compressible_projection_cv, assemble_compressible_projection_cg, update_compressible_density
+  public :: include_implicit_pressure_buoyancy
+  public :: compressible_projection_check_options
 
   ! Stabilisation schemes
   integer, parameter :: STABILISATION_NONE = 0, &
@@ -714,14 +716,14 @@ contains
     integer :: iphase
     character(len=OPTION_PATH_LEN) :: pressure_option_path, density_option_path
 
-    do iphase = 1, option_count("/material_phase")
-      pressure_option_path = "/material_phase["//int2str(iphase-1)//"]/scalar_field::Pressure"
+    do iphase = 0, option_count("/material_phase")-1
+      pressure_option_path = "/material_phase["//int2str(iphase)//"]/scalar_field::Pressure"
       if(have_option(trim(pressure_option_path)//"/prognostic/spatial_discretisation/compressible/implicit_pressure_buoyancy")) then
         if(have_option(trim(pressure_option_path)//"/prognostic/spatial_discretisation/control_volumes")) then
           FLExit("Compressible option implicit_pressure_buoyancy does not work with control volume Pressure discretisations.")
         end if
       end if
-      density_option_path = "/material_phase["//int2str(iphase-1)//"]/scalar_field::Density"
+      density_option_path = "/material_phase["//int2str(iphase)//"]/scalar_field::Density"
       if(have_option(trim(density_option_path)//"/prognostic/spatial_discretisation/use_reference_density")) then
         if(.not.have_option(trim(density_option_path)// &
             "/prognostic/spatial_discretisation/continuous_galerkin/mass_terms/exclude_mass_terms").and. &

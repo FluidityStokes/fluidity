@@ -96,8 +96,8 @@
       logical :: full_schur
       ! Are we lumping mass or assuming consistent mass?
       logical, dimension(:), allocatable :: lump_mass
-      ! Pressure gradient matrix using cv or cg?
-      logical :: cv_pressure, cg_pressure
+      ! are we using a cv pressure 
+      logical :: cv_pressure 
 
       ! Do we need to reassemble the C^T or CMC matrices?
       logical :: reassemble_all_ct_m, reassemble_all_cmc_m
@@ -253,7 +253,9 @@
          ! An array of submaterials of the current phase in state(istate).
          type(state_type), dimension(:), pointer :: submaterials
          ! The index of the current phase (i.e. state(istate)) in the submaterials array
-         integer :: submaterials_istate 
+         integer :: submaterials_istate
+         ! Do we have fluid-particle drag between phases?
+         logical :: have_fp_drag
 
          ewrite(1,*) 'Entering solve_momentum'
 
@@ -273,6 +275,8 @@
          else
             multiphase = .false.
          end if
+         ! Do we have fluid-particle drag (for multi-phase simulations)?
+         have_fp_drag = option_count("/material_phase/multiphase_properties/particle_diameter") > 0
 
          ! Get the pressure p^{n}, and get the assembly options for the divergence and CMC matrices
          ! find the first non-aliased pressure
@@ -545,14 +549,14 @@
                      big_m(istate), mom_rhs(istate), state(istate), &
                      inverse_masslump=inverse_masslump(istate), &
                      inverse_mass=inverse_mass(istate), &
-                     cg_pressure=cg_pressure, &
+                     include_pressure_bcs=.not. cv_pressure, &
                      subcycle_m=subcycle_m(istate))
                else
                   call construct_momentum_dg(u, p, density, x, &
                      big_m(istate), mom_rhs(istate), state(istate), &
                      inverse_masslump=inverse_masslump(istate), &
                      inverse_mass=inverse_mass(istate), &
-                     cg_pressure=cg_pressure)
+                     include_pressure_bcs=.not. cv_pressure)
                end if
                if(has_scalar_field(state(istate), gp_name)) then
                   call subtract_geostrophic_pressure_gradient(mom_rhs(istate), state(istate))
@@ -562,9 +566,18 @@
                      big_m(istate), mom_rhs(istate), ct_m(istate)%ptr, &
                      ct_rhs(istate), mass(istate), inverse_masslump(istate), visc_inverse_masslump(istate), &
                      state(istate), &
-                     assemble_ct_matrix=reassemble_ct_m, &
-                     cg_pressure=cg_pressure)
+                     assemble_ct_matrix_here=reassemble_ct_m .and. .not. cv_pressure, &
+                     include_pressure_and_continuity_bcs=.not. cv_pressure)
             end if
+            
+            ! Add in multiphase interactions (e.g. fluid-particle drag) if necessary
+            ! Note: this is done outside of construct_momentum_cg/dg to keep things
+            ! neater in Momentum_CG/DG.F90, since we would need to pass around multiple phases 
+            ! and their fields otherwise.
+            if(multiphase .and. have_fp_drag) then
+               call add_fluid_particle_drag(state, istate, u, x, big_m(istate), mom_rhs(istate))
+            end if
+            
             call profiler_toc(u, "assembly")
 
             if(has_scalar_field(state(istate), hp_name)) then
@@ -609,9 +622,9 @@
             !! Assemble divergence matrix C^T
             ! At the moment cg does its own ct assembly. We might change this in
             ! the future.
-            if(cg_pressure.and.dg(istate)) then
+            if(dg(istate) .and. .not. cv_pressure) then
                call assemble_divergence_matrix_cg(ct_m(istate)%ptr, state(istate), ct_rhs=ct_rhs(istate), &
-               test_mesh=p%mesh, field=u, get_ct=reassemble_ct_m)
+                 test_mesh=p%mesh, field=u, get_ct=reassemble_ct_m)
             end if
 
             if(compressible_eos) then
@@ -655,11 +668,8 @@
                   call allocate(ctp_m(istate)%ptr, ct_m(istate)%ptr%sparsity, (/1, u%dim/), name="CTP_m")
                   if(cv_pressure) then
                      call assemble_compressible_divergence_matrix_cv(ctp_m(istate)%ptr, state, ct_rhs(istate))
-                  else if(cg_pressure) then
-                     call assemble_compressible_divergence_matrix_cg(ctp_m(istate)%ptr, state, ct_rhs(istate))
                   else
-                     ! Developer error... out of sync options input and code
-                     FLAbort("Unknown pressure discretisation for compressible projection.")
+                     call assemble_compressible_divergence_matrix_cg(ctp_m(istate)%ptr, state, ct_rhs(istate))
                   end if
                   if (have_rotated_bcs(u)) then
                      if (dg(istate)) then
@@ -821,8 +831,8 @@
 
 
          ! Do we have a prognostic pressure field we can actually solve for?
-         call profiler_tic(p, "assembly")
          if(prognostic_p .and. .not.reduced_model) then
+            call profiler_tic(p, "assembly")
 
             u => extract_vector_field(state(prognostic_p_istate), "Velocity", stat)
             x => extract_vector_field(state(prognostic_p_istate), "Coordinate")
@@ -854,8 +864,8 @@
             call allocate(projec_rhs, p%mesh, "ProjectionRHS")
             call zero(projec_rhs)
 
+            call profiler_toc(p, "assembly")
          end if ! end of prognostic pressure
-         call profiler_toc(p, "assembly")
 
 
          if (.not.reduced_model) then
@@ -929,8 +939,8 @@
 
 
             !! Solve for delta_p -- the pressure correction term
-            call profiler_tic(p, "assembly")
             if(prognostic_p) then
+               call profiler_tic(p, "assembly")
 
                ! Get the intermediate velocity u^{*} and the coordinate vector field
                u=>extract_vector_field(state(prognostic_p_istate), "Velocity", stat)
@@ -946,9 +956,8 @@
                                     schur_auxiliary_matrix, stiff_nodes_list)
 
                call deallocate(projec_rhs)
-
+               call profiler_toc(p, "assembly")
             end if
-            call profiler_toc(p, "assembly")
 
 
             !! Correct and update velocity fields to u^{n+1} using pressure correction term delta_p
@@ -1181,8 +1190,7 @@
             &/stress_terms/partial_stress_form")
 
          have_les = have_option(trim(u%option_path)//"/prognostic/spatial_discretisation/&
-            &/continuous_galerkin/les_model").or.(have_option(trim(u%option_path)//&
-            &"/prognostic/spatial_discretisation/discontinuous_galerkin/les_model"))
+            &/continuous_galerkin/les_model")
 
          have_coriolis = have_option("/physical_parameters/coriolis")
 
@@ -1245,11 +1253,8 @@
                      &/low_re_p_correction_fix")
 
          ! Are we getting the pressure gradient matrix using control volumes?
-         cv_pressure = (have_option(trim(p%option_path)//&
-                           "/prognostic/spatial_discretisation/control_volumes"))
-         ! or using cg (we do this in every case of not having a control volume
-         ! option so that prescribed pressures will work as well)
-         cg_pressure = (.not.cv_pressure)
+         cv_pressure = have_option(trim(p%option_path)//&
+                           "/prognostic/spatial_discretisation/control_volumes")
 
       end subroutine get_pressure_options
 
@@ -1539,12 +1544,9 @@
             if(cv_pressure) then
                call assemble_compressible_projection_cv(state, cmc_m, dt, &
                                                       theta_pg, theta_divergence, reassemble_cmc_m, rhs=compress_projec_rhs)
-            else if(cg_pressure) then
+            else 
                call assemble_compressible_projection_cg(state, cmc_m, dt, &
                                                       theta_pg, theta_divergence, reassemble_cmc_m, rhs=compress_projec_rhs)
-            else
-               ! Developer error... out of sync options input and code
-               FLAbort("Unknown pressure discretisation for compressible projection.")
             end if
 
             ewrite_minmax(compress_projec_rhs)
@@ -1781,6 +1783,15 @@
                FLExit("Can't set a pressure reference node and remove the null space.")
             end if
 
+            if(have_option("/material_phase["//int2str(i)//&
+                                 "]/scalar_field::Pressure/prognostic&
+                                 /spatial_discretisation/discontinuous_galerkin") &
+              .and. .not. have_option("/material_phase["//int2str(i)//&
+                                 "]/vector_field::Velocity/prognostic&
+                                 /spatial_discretisation/continuous_galerkin")) then
+              FLExit("With discontinuous galerkin Pressure you need a continuous Velocity")
+            end if
+ 
             if(have_option("/material_phase["//int2str(i)//&
                         "]/vector_field::Velocity/prognostic/reference_node")) then
                if((.not.(have_option("/material_phase["//int2str(i)//&

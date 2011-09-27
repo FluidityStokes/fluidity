@@ -230,7 +230,9 @@ contains
     type(scalar_field), pointer :: heatcap, reftemp
     character(len = FIELD_NAME_LEN) :: density_name
     type(scalar_field), pointer :: pressure
-        
+      
+    type(element_type) :: supg_element
+  
     ewrite(1, *) "In assemble_advection_diffusion_cg"
     
     assert(mesh_dim(rhs) == mesh_dim(t))
@@ -404,6 +406,9 @@ contains
       stabilisation_scheme = STABILISATION_SUPG
       call get_upwind_options(trim(t%option_path) // "/prognostic/spatial_discretisation/continuous_galerkin/stabilisation/streamline_upwind_petrov_galerkin", &
           & nu_bar_scheme, nu_bar_scale)
+      ! Note this is not mixed mesh safe (but then nothing really is)
+      ! You actually need 1 supg_element per thread.
+      supg_element=make_supg_element(ele_shape(t,1)) 
       if(move_mesh) then
         FLExit("Haven't thought about how mesh movement works with stabilisation yet.")
       end if
@@ -474,8 +479,8 @@ contains
                                         positions, old_positions, new_positions, &
                                         velocity, grid_velocity, &
                                         source, absorption, diffusivity, &
-                                        density, olddensity, pressure, &
-                                        heatcap, reftemp)
+                                        density, olddensity, pressure,&
+                                        heatcap, reftemp, supg_element)
     end do
 
     ! as part of assembly include the already discretised optional source
@@ -524,7 +529,9 @@ contains
     
     call deallocate(velocity)
     call deallocate(dummydensity)
-    
+    if (stabilisation_scheme == STABILISATION_SUPG) &
+         call deallocate(supg_element)
+
     ewrite(1, *) "Exiting assemble_advection_diffusion_cg"
     
   end subroutine assemble_advection_diffusion_cg
@@ -575,7 +582,7 @@ contains
                                       velocity, grid_velocity, &
                                       source, absorption, diffusivity, &
                                       density, olddensity, pressure, &
-                                      heatcap, reftemp)
+                                      heatcap, reftemp, supg_shape)
     integer, intent(in) :: ele
     type(scalar_field), intent(in) :: t
     type(csr_matrix), intent(inout) :: matrix
@@ -592,7 +599,8 @@ contains
     type(scalar_field), intent(in) :: pressure
     type(scalar_field), intent(in) :: heatcap
     type(scalar_field), intent(in) :: reftemp
-    
+    type(element_type), intent(inout) :: supg_shape
+
     integer, dimension(:), pointer :: element_nodes
     real, dimension(ele_ngi(t, ele)) :: detwei, detwei_old, detwei_new
     real, dimension(ele_loc(t, ele), ele_ngi(t, ele), mesh_dim(t)) :: dt_t
@@ -683,15 +691,16 @@ contains
     select case(stabilisation_scheme)
       case(STABILISATION_SUPG)
         if(have_diffusivity) then
-          test_function = make_supg_shape(t_shape, dt_t, ele_val_at_quad(velocity, ele), j_mat, diff_q = ele_val_at_quad(diffusivity, ele), &
+          call supg_test_function(supg_shape, t_shape, dt_t, ele_val_at_quad(velocity, ele), j_mat, diff_q = ele_val_at_quad(diffusivity, ele), &
             & nu_bar_scheme = nu_bar_scheme, nu_bar_scale = nu_bar_scale)
+          test_function = supg_shape
         else
-          test_function = make_supg_shape(t_shape, dt_t, ele_val_at_quad(velocity, ele), j_mat, &
+          call supg_test_function(supg_shape, t_shape, dt_t, ele_val_at_quad(velocity, ele), j_mat, &
             & nu_bar_scheme = nu_bar_scheme, nu_bar_scale = nu_bar_scale)
         end if
+        test_function = supg_shape
       case default
         test_function = t_shape
-        call incref(test_function)
     end select
     ! Important note: with SUPG the test function derivatives have not been
     ! modified - i.e. dt_t is currently used everywhere. This is fine for P1,
@@ -733,8 +742,6 @@ contains
     call addto(matrix, element_nodes, element_nodes, matrix_addto)
     call addto(rhs, element_nodes, rhs_addto)
 
-    call deallocate(test_function)
-      
   end subroutine assemble_advection_diffusion_element_cg
   
   subroutine add_mass_element_cg(ele, test_function, t, density, olddensity, heatcap, detwei, detwei_old, detwei_new, matrix_addto, rhs_addto)
