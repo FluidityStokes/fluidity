@@ -214,7 +214,6 @@ prognostic_scalar_field =
                 mesh_choice?,
                 prescribed_tensor_field_no_adapt
             }|
-            ## For electrical modelling only - holds electrical conductivity
             element diagnostic {
                mesh_choice?,
                (
@@ -234,7 +233,6 @@ prognostic_scalar_field =
                mesh_choice?,
                prescribed_scalar_field_no_adapt
             }|
-            ## This only works for traffic modelling
             element diagnostic {
                 mesh_choice?,
                (
@@ -369,7 +367,7 @@ prognostic_velocity_field =
                      ## of full stress form when divergent elements can
                      ## be cancelled out.
                      ##
-                     ## Only diaonal components of viscosity
+                     ## Only diagonal components of viscosity
                      ## (i.e. either isotropic or
                      ## diagonal) are physical for isotropic materials.
                      ##
