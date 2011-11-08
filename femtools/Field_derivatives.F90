@@ -259,24 +259,26 @@ module field_derivatives
 
     end subroutine grad_vector
 
-    subroutine grad_vector_tensor(infield, positions, gradient_tensor)
-      !!< This routine computes the gradient of a vector field, returning a tensor.
+    subroutine grad_vector_tensor(infield,positions,t_field)
+      !!< This routine computes the full (tensor) grad of an infield vector field
       type(vector_field), intent(in) :: infield
       type(vector_field), intent(in) :: positions
-      type(tensor_field), intent(inout) :: gradient_tensor
+      type(tensor_field), intent(inout) :: t_field
+
       type(scalar_field), dimension(infield%dim) :: pardiff
       type(scalar_field) :: component
+
+      real, dimension(t_field%dim(1),t_field%dim(2)) :: t
       logical, dimension(infield%dim) :: derivatives
-      integer :: i, j, dim
+      integer :: i, j
+      integer :: node
 
-      dim = infield%dim
-
-      do j=1,dim
+      do j=1,infield%dim
 
         component = extract_scalar_field(infield, j)
 
-        do i=1,dim
-          pardiff(i) = extract_scalar_field(gradient_tensor,i,j)
+        do i=1,infield%dim
+          pardiff(i) = extract_scalar_field(t_field,i,j)
         end do
 
         derivatives = .true.
