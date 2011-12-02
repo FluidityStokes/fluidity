@@ -340,6 +340,11 @@ contains
         call compressible_eos_linearised_mantle(state, drhodp_local, &
             density=density, pressure=pressure, buoyancy_density=buoyancy_density)
 
+      elseif(have_option(trim(eos_path)//'/compressible/mantle_lookup')) then
+
+        call compressible_eos_mantle_lookup(state, drhodp_local, &
+            density=density, pressure=pressure, buoyancy_density=buoyancy_density)
+
       end if
       
     else
@@ -834,6 +839,44 @@ contains
     call deallocate(compressibility)
 
   end subroutine compressible_eos_linearised_mantle
+
+  subroutine compressible_eos_mantle_lookup(state, drhodp, &
+    density, pressure, buoyancy_density)
+    ! Mantle equation of state, generated via a lookup table:
+    type(state_type), intent(in) :: state
+    type(scalar_field), intent(inout) :: drhodp
+    type(scalar_field), intent(inout), optional :: density, pressure, buoyancy_density
+    
+    !locals
+    integer :: stat
+    type(scalar_field), pointer :: fulldensity_local, referencedensity_local
+    type(scalar_field) :: fulldensity_remap, referencedensity_remap
+      
+    ewrite(2,*) "Rhodri - inside mantle lookup EOS"
+    ! For this EOS, drhodp is always returned as zero:
+    call zero(drhodp)
+
+    ! Pressure is also returned as zero:
+    if(present(pressure)) then
+       call zero(pressure)
+    end if
+
+    if(present(density).or.present(buoyancy_density)) then
+       fulldensity_local=>extract_scalar_field(state, 'FullLookupDensity')
+       ewrite_minmax(fulldensity_local)
+       if(present(density)) then
+          call remap_field(fulldensity_local, density)
+       end if
+       if(present(buoyancy_density)) then
+          call remap_field(fulldensity_local, buoyancy_density)
+          ! Extract Reference density from state and remap:
+          referencedensity_local=>extract_scalar_field(state, 'CompressibleReferenceDensity')
+          ewrite_minmax(referencedensity_local)
+          call addto(buoyancy_density,referencedensity_local,-1.0)
+       end if
+    end if
+
+  end subroutine compressible_eos_mantle_lookup
 
   subroutine compressible_material_eos(state,materialdensity,&
                                     materialpressure,materialdrhodp)

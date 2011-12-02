@@ -801,6 +801,10 @@ contains
              ewrite(2,*) 'out of solid_data_update'
           end if
 
+          call calculate_diagnostic_variables(State, exclude_nonrecalculated=.true.)
+          call calculate_diagnostic_variables_new(state, exclude_nonrecalculated = .true.)
+
+!          call vtk_write_state('TEST', state = State )
        end do nonlinear_iteration_loop
 
        ! Reset the number of nonlinear iterations in case it was overwritten by nonlinear_iterations_adapt

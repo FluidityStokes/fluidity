@@ -89,9 +89,16 @@
     <finish_time>
       <real_value rank="0">100000.0</real_value>
     </finish_time>
+    <nonlinear_iterations>
+      <integer_value rank="0">5</integer_value>
+      <tolerance>
+        <real_value rank="0">1.0e-2</real_value>
+        <infinity_norm/>
+      </tolerance>
+    </nonlinear_iterations>
     <adaptive_timestep>
       <requested_cfl>
-        <real_value rank="0">5.0</real_value>
+        <real_value rank="0">2.5</real_value>
       </requested_cfl>
       <courant_number name="CFLNumber">
         <mesh name="VelocityMesh"/>

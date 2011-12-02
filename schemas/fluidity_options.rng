@@ -799,6 +799,10 @@ this is truncated (TALA).</a:documentation>
                         </element>
                       </optional>
                     </element>
+                    <element name="mantle_lookup">
+                      <a:documentation>Mantle lookup EOS</a:documentation>
+                      <empty/>
+                    </element>
                   </choice>
                 </element>
               </choice>
@@ -4873,6 +4877,33 @@ prognostic (compressible) density.</a:documentation>
         </attribute>
         <attribute name="name">
           <value>CompressibleReferenceDensity</value>
+        </attribute>
+        <choice>
+          <element name="prescribed">
+            <ref name="pressure_mesh_choice"/>
+            <ref name="prescribed_scalar_field"/>
+          </element>
+          <element name="diagnostic">
+            <ref name="scalar_python_diagnostic_algorithm"/>
+            <ref name="pressure_mesh_choice"/>
+            <ref name="diagnostic_scalar_field"/>
+          </element>
+          <element name="aliased">
+            <ref name="generic_aliased_field"/>
+          </element>
+        </choice>
+      </element>
+      <element name="scalar_field">
+        <a:documentation>This field gives the full density for the
+compressible mantle_lookup equation of state.
+It is used in the momentum equation to calculate
+the purtubation density (full density - compressible
+reference density).</a:documentation>
+        <attribute name="rank">
+          <value>0</value>
+        </attribute>
+        <attribute name="name">
+          <value>FullLookupDensity</value>
         </attribute>
         <choice>
           <element name="prescribed">

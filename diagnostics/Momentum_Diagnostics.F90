@@ -56,8 +56,7 @@ module momentum_diagnostics
             calculate_geostrophic_velocity, &
             calculate_viscous_dissipation,calculate_adiabatic_heating_coefficient, &
             calculate_adiabatic_heating_absorption,calculate_viscous_dissipation_plus_surface_adiabat
-           
-  
+             
 contains
 
   subroutine calculate_strain_rate(state, t_field)
@@ -104,6 +103,7 @@ contains
 
     character(len=OPTION_PATH_LEN) eos_option_path
     logical :: have_linear_eos, have_linearised_mantle_compressible_eos
+    logical :: have_mantle_lookup_eos
     
     ewrite(1,*) 'In calculate_viscous_dissipation_plus_surface_adiabat'
 
@@ -121,6 +121,7 @@ contains
     ! Determine which EOS is relevant:
     have_linear_eos = (have_option(trim(eos_option_path)//'/fluids/linear'))
     have_linearised_mantle_compressible_eos = (have_option(trim(eos_option_path)//'/compressible/linearised_mantle'))
+    have_mantle_lookup_eos = (have_option(trim(eos_option_path)//'/compressible/mantle_lookup'))
 
     ! Extract relevant parameters from options/state:
     if(have_linear_eos) then
@@ -128,7 +129,7 @@ contains
        call get_option(trim(eos_option_path)//'/fluids/linear/temperature_dependency/thermal_expansion_coefficient', gamma)
        ! Get value for reference density (constant)
        call get_option(trim(eos_option_path)//'/fluids/linear/reference_density', rho0)
-    else if(have_linearised_mantle_compressible_eos) then
+    else if(have_linearised_mantle_compressible_eos .OR. have_mantle_lookup_eos) then
        ! Get spatially varying thermal expansion field and remap to s_field%mesh if required:
        thermal_expansion_local=>extract_scalar_field(state,'IsobaricThermalExpansivity')
        call allocate(thermal_expansion_remap, s_field%mesh, 'RemappedIsobaricThermalExpansivity')
@@ -150,7 +151,7 @@ contains
 
     if(have_linear_eos) then
        call scale(surface_adiabat, T0*gravity_magnitude*gamma*rho0)
-    else if(have_linearised_mantle_compressible_eos) then
+    else if(have_linearised_mantle_compressible_eos .OR. have_mantle_lookup_eos) then
        call scale(surface_adiabat, T0*gravity_magnitude)
        call scale(surface_adiabat, thermal_expansion_remap)
        call scale(surface_adiabat, reference_density_remap)
@@ -255,6 +256,7 @@ contains
 
     character(len=OPTION_PATH_LEN) eos_option_path
     logical :: have_linear_eos, have_linearised_mantle_compressible_eos
+    logical :: have_mantle_lookup_eos
 
     ewrite(1,*) 'In calculate_adiabatic_heating_coefficient'
 
@@ -275,13 +277,15 @@ contains
     eos_option_path='/material_phase::'//trim(state%name)//'/equation_of_state'
     have_linear_eos = (have_option(trim(eos_option_path)//'/fluids/linear'))
     have_linearised_mantle_compressible_eos = (have_option(trim(eos_option_path)//'/compressible/linearised_mantle'))
+    have_mantle_lookup_eos = (have_option(trim(eos_option_path)//'/compressible/mantle_lookup'))
+    ewrite(2,*) 'TEST LOOKUP', have_mantle_lookup_eos
 
     if(have_linear_eos) then
        ! Get value for thermal expansion coefficient (constant)
        call get_option(trim(eos_option_path)//'/fluids/linear/temperature_dependency/thermal_expansion_coefficient', gamma)
        ! Get value for reference density (constant)
        call get_option(trim(eos_option_path)//'/fluids/linear/reference_density', rho0)
-    elseif(have_linearised_mantle_compressible_eos) then
+    elseif(have_linearised_mantle_compressible_eos .OR. have_mantle_lookup_eos) then
        ! Get spatially varying thermal expansion field and remap to s_field%mesh if required:
        thermal_expansion_local=>extract_scalar_field(state,'IsobaricThermalExpansivity')
        call allocate(thermal_expansion_remap, s_field%mesh, 'RemappedIsobaricThermalExpansivity')
@@ -299,7 +303,7 @@ contains
        do node = 1, node_count(s_field)
           call set(s_field, node, -gamma*rho0*gravity_magnitude*node_val(velocity_component,node))
        end do
-    else if(have_linearised_mantle_compressible_eos) then
+    else if(have_linearised_mantle_compressible_eos .OR. have_mantle_lookup_eos) then
        do node = 1, node_count(s_field)
           call set(s_field, node, -node_val(thermal_expansion_remap,node) * node_val(reference_density_remap, node) &
                   * gravity_magnitude * node_val(velocity_component,node))

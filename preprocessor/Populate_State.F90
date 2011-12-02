@@ -3851,6 +3851,12 @@ if (.not.have_option("/material_phase[0]/vector_field::Velocity/prognostic/vecto
 
     end if
 
+    ! Add warnings/errors relating to diagnostic fields/algorithms:
+
+    ewrite(-1,*) "WARNING - At present, the viscosity scaling for the viscous dissipation is"
+    ewrite(-1,*) "taken from the 1st component of the viscosity tensor. Such a scaling is "
+    ewrite(-1,*) "only valid when all components of each viscosity tensor are constant."    
+
   end subroutine check_stokes_options
 
   subroutine check_implicit_solids_options
