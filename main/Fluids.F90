@@ -176,6 +176,10 @@ contains
 
     INTEGER :: adapt_count
 
+    !     Relating to cap and overwrite values
+    real :: upper_cap, lower_cap
+    logical :: cap_and_overwrite_values
+
     ! Absolute first thing: check that the options, if present, are valid.
     call check_options
     ewrite(1,*) "Options sanity check successful"
@@ -656,64 +660,82 @@ contains
             end if
 
 
-             call get_option(trim(field_optionpath_list(it))//&
-                  '/prognostic/equation[0]/name', &
-                  option_buffer, default="UnknownEquationType")
-             select case(trim(option_buffer))
-             case ( "AdvectionDiffusion", "ConservationOfMass", "ReducedConservationOfMass", "InternalEnergy", "HeatTransfer" )
-                use_advdif=.true.
-             case default
-                use_advdif=.false.
-             end select
+            call get_option(trim(field_optionpath_list(it))//&
+                 '/prognostic/equation[0]/name', &
+                 option_buffer, default="UnknownEquationType")
+            select case(trim(option_buffer))
+            case ( "AdvectionDiffusion", "ConservationOfMass", "ReducedConservationOfMass", "InternalEnergy", "HeatTransfer" )
+               use_advdif=.true.
+            case default
+               use_advdif=.false.
+            end select
 
-             IF(use_advdif)THEN
+            IF(use_advdif)THEN
 
-                sfield => extract_scalar_field(state(field_state_list(it)), field_name_list(it))
-                call calculate_diagnostic_children(state, field_state_list(it), sfield)
+               sfield => extract_scalar_field(state(field_state_list(it)), field_name_list(it))
+               call calculate_diagnostic_children(state, field_state_list(it), sfield)
 
+               !--------------------------------------------------
+               !This addition creates a field that is a copy of
+               !another to be used, i.e.: for diffusing.
+               call get_copied_field(field_name_list(it), state(field_state_list(it)))
+               !--------------------------------------------------
+               
+               IF(have_option(trim(field_optionpath_list(it))//&
+                    & "/prognostic/spatial_discretisation/discontinuous_galerkin")) then
 
-                !--------------------------------------------------
-                !This addition creates a field that is a copy of
-                !another to be used, i.e.: for diffusing.
-                call get_copied_field(field_name_list(it), state(field_state_list(it)))
-                !--------------------------------------------------
+                  ! Solve the DG form of the equations.
+                  call solve_advection_diffusion_dg(field_name=field_name_list(it), &
+                       & state=state(field_state_list(it)))
+                  
+               ELSEIF(have_option(trim(field_optionpath_list(it))//&
+                    & "/prognostic/spatial_discretisation/finite_volume")) then
 
-                IF(have_option(trim(field_optionpath_list(it))//&
-                     & "/prognostic/spatial_discretisation/discontinuous_galerkin")) then
+                  ! Solve the FV form of the equations.
+                  call solve_advection_diffusion_fv(field_name=field_name_list(it), &
+                       & state=state(field_state_list(it)))
 
-                   ! Solve the DG form of the equations.
-                   call solve_advection_diffusion_dg(field_name=field_name_list(it), &
-                        & state=state(field_state_list(it)))
+               ELSEIF(have_option(trim(field_optionpath_list(it))//&
+                    & "/prognostic/spatial_discretisation/control_volumes")) then
+                  
+                  ! Solve the pure control volume form of the equations
+                  call solve_field_eqn_cv(field_name=trim(field_name_list(it)), &
+                       state=state(field_state_list(it):field_state_list(it)), &
+                       global_it=its)
+                  
+               else if(have_option(trim(field_optionpath_list(it)) // &
+                    & "/prognostic/spatial_discretisation/continuous_galerkin")) then
+                  
+                  call solve_field_equation_cg(field_name_list(it), state(field_state_list(it)), dt)
+               else
 
-                ELSEIF(have_option(trim(field_optionpath_list(it))//&
-                     & "/prognostic/spatial_discretisation/finite_volume")) then
+                  ewrite(2, *) "Not solving scalar field " // trim(field_name_list(it)) // " in state " // trim(state(field_state_list(it))%name) //" in an advdif-like subroutine."
 
-                   ! Solve the FV form of the equations.
-                   call solve_advection_diffusion_fv(field_name=field_name_list(it), &
-                        & state=state(field_state_list(it)))
+               end if ! End of dg/cv/cg choice.
 
-                ELSEIF(have_option(trim(field_optionpath_list(it))//&
-                     & "/prognostic/spatial_discretisation/control_volumes")) then
+               ! Cap and overwrite values if appropriate:
+               cap_and_overwrite_values=have_option(trim(field_optionpath_list(it))//&
+                    '/prognostic/equation::AdvectionDiffusion/cap_and_overwrite_values')
 
-                   ! Solve the pure control volume form of the equations
-                   call solve_field_eqn_cv(field_name=trim(field_name_list(it)), &
-                        state=state(field_state_list(it):field_state_list(it)), &
-                        global_it=its)
+               if(cap_and_overwrite_values) then
+                  ewrite(2,*) "Capping values of field " // trim(field_name_list(it))
 
-                else if(have_option(trim(field_optionpath_list(it)) // &
-                     & "/prognostic/spatial_discretisation/continuous_galerkin")) then
+                  call get_option(trim(field_optionpath_list(it))//&
+                       '/prognostic/equation::AdvectionDiffusion/cap_and_overwrite_values/lower_cap',lower_cap)
+                  
+                  call get_option(trim(field_optionpath_list(it))//&
+                       '/prognostic/equation::AdvectionDiffusion/cap_and_overwrite_values/upper_cap',upper_cap)
+                  
+                  ewrite(2,*) "Upper_cap = ", upper_cap
+                  ewrite(2,*) "Lower_cap = ", lower_cap
 
-                   call solve_field_equation_cg(field_name_list(it), state(field_state_list(it)), dt)
-                else
+                  call bound(sfield, lower_cap, upper_cap)
+               end if
+                  
+            ENDIF
 
-                   ewrite(2, *) "Not solving scalar field " // trim(field_name_list(it)) // " in state " // trim(state(field_state_list(it))%name) //" in an advdif-like subroutine."
+            ewrite(1, *) "Finished field " // trim(field_name_list(it)) // " in state " // trim(state(field_state_list(it))%name)
 
-                end if ! End of dg/cv/cg choice.
-
-                ! ENDOF IF((TELEDI(IT).EQ.1).AND.D3) THEN ELSE...
-             ENDIF
-
-             ewrite(1, *) "Finished field " // trim(field_name_list(it)) // " in state " // trim(state(field_state_list(it))%name)
           end do field_loop
 
           ! Sort out the dregs of GLS after the solve on Psi (GenericSecondQuantity) has finished
