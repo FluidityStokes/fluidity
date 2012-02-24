@@ -36,7 +36,7 @@ module compressible_projection
   use field_options
   use equation_of_state, only: compressible_eos, compressible_material_eos
   use global_parameters, only: OPTION_PATH_LEN
-  use fefields, only: compute_lumped_mass
+  use fefields, only: compute_cv_mass
   use state_fields_module
   use upwind_stabilisation
   implicit none 
@@ -108,7 +108,7 @@ contains
     type(scalar_field) :: eospressure, drhodp
     type(scalar_field), pointer :: density, olddensity
     type(scalar_field), pointer :: pressure
-    type(scalar_field), pointer :: p_lumpedmass
+    type(scalar_field), pointer :: p_cvmass
     type(scalar_field) :: lhsfield, absrhs
     
     type(scalar_field), pointer :: source, absorption
@@ -127,15 +127,10 @@ contains
     call get_option(trim(pressure%option_path)//'/prognostic/atmospheric_pressure', &
                     atmospheric_pressure, default=0.0)
     
-    if(pressure%mesh%shape%degree>1) then
-      ! try lumping on the submesh
-      p_lumpedmass => get_lumped_mass_on_submesh(state, pressure%mesh)
-    else
-      ! find the lumped mass
-      p_lumpedmass => get_lumped_mass(state, pressure%mesh)
-    end if
-    ewrite_minmax(p_lumpedmass)
-          
+    ! find the cv mass
+    p_cvmass => get_cv_mass(state, pressure%mesh)    
+    ewrite_minmax(p_cvmass)
+
     if(cmcget) call allocate(lhsfield, pressure%mesh, "LHSField")
 
     call allocate(eospressure, pressure%mesh, 'EOSPressure')
@@ -157,7 +152,7 @@ contains
     call get_option(trim(density%option_path)//"/prognostic/temporal_discretisation/theta", theta)
 
     if(cmcget) then
-      call set(lhsfield, p_lumpedmass)
+      call set(lhsfield, p_cvmass)
       call scale(lhsfield, drhodp)
       if(.not.exclude_mass) then
         call addto_diag(cmc, lhsfield, scale=1./(dt*dt*theta_divergence*theta_pg))
@@ -166,7 +161,7 @@ contains
     
     if(assemble_rhs) then
     
-      !     rhs = p_lumpedmass* &
+      !     rhs = p_cvmass* &
       !      ( (1./dt)*(olddensity - density + drhodp*(eospressure - (pressure + atmospheric_pressure)))
       !       +(absorption)*(drhodp*theta_pg*(eospressure - (pressure + atmospheric_pressure)) - theta_pg*density - (1-theta_pg)*olddensity)
       !       +source)
@@ -216,7 +211,7 @@ contains
       end if
     end if
     
-    if(assemble_rhs) call scale(rhs, p_lumpedmass)
+    if(assemble_rhs) call scale(rhs, p_cvmass)
     
     call deallocate(eospressure)
     call deallocate(drhodp)
@@ -249,7 +244,7 @@ contains
 
     type(scalar_field), pointer :: pressure
     type(vector_field), pointer :: positions
-    type(scalar_field) :: lumped_mass, tempfield
+    type(scalar_field) :: cv_mass, tempfield
     
     logical :: compressible_eos, assemble_rhs
 
@@ -278,9 +273,9 @@ contains
     if (compressible_eos) then
     
       positions=>extract_vector_field(state(1), "Coordinate")
-      call allocate(lumped_mass, pressure%mesh, "LumpedMassField")
+      call allocate(cv_mass, pressure%mesh, "CVMassField")
       if(cmcget) call allocate(tempfield, pressure%mesh, "TemporaryAssemblyField")
-      call compute_lumped_mass(positions, lumped_mass)
+      call compute_cv_mass(positions, cv_mass)
 
       allocate(dummy_ones)
       call allocate(dummy_ones, pressure%mesh, "DummyOnesField")
@@ -329,17 +324,17 @@ contains
 
       if(cmcget) then
         call zero(tempfield)
-        tempfield%val = (1./(dt*dt))*lumped_mass%val*drhodp%val
+        tempfield%val = (1./(dt*dt))*cv_mass%val*drhodp%val
         call addto_diag(cmc, tempfield)
       end if
 
       if(assemble_rhs) then
-        rhs%val = (1./dt)*lumped_mass%val* &
+        rhs%val = (1./dt)*cv_mass%val* &
                           ( &
                             olddensity%val &
                           - density%val &
                           ) &
-              +(1./dt)*lumped_mass%val* &
+              +(1./dt)*cv_mass%val* &
                           ( &
                             matdrhodpp%val &
                           - drhodp%val*(pressure%val+atmospheric_pressure) &
@@ -354,7 +349,7 @@ contains
       call deallocate(materialpressure)
       call deallocate(materialdrhodp)
 
-      call deallocate(lumped_mass)
+      call deallocate(cv_mass)
       if(cmcget) call deallocate(tempfield)
       call deallocate(dummy_ones)
       deallocate(dummy_ones)
