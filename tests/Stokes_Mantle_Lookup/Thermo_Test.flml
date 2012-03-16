@@ -237,7 +237,7 @@
         </temporal_discretisation>
         <initial_condition name="WholeMesh">
           <python>
-            <string_value lines="20" type="python">def val(X,t):
+            <string_value lines="20" type="code" language="python">def val(X,t):
 
   import math
   
@@ -415,7 +415,7 @@
         </solver>
         <initial_condition name="WholeMesh">
           <python>
-            <string_value lines="20" type="python">def val(X,t):
+            <string_value lines="20" type="code" language="python">def val(X,t):
   depth = 2000e3 - X[1]
   T = ((depth/2000e3)*2000. + 300.) + X[0]*0.0002
   if (T &gt; 2300.):
@@ -525,7 +525,7 @@
     <scalar_field name="CompressibleReferenceDensity" rank="0">
       <diagnostic>
         <algorithm name="scalar_python_diagnostic" material_phase_support="single">
-          <string_value lines="20" type="python">import numpy
+          <string_value lines="20" type="code" language="python">import numpy
 
 # Column of attribute required from lookup table:
 att_column = 3
@@ -578,7 +578,7 @@ for node in range(field.node_count):
     <scalar_field name="IsobaricThermalExpansivity" rank="0">
       <diagnostic>
         <algorithm name="scalar_python_diagnostic" material_phase_support="single">
-          <string_value lines="20" type="python">import numpy
+          <string_value lines="20" type="code" language="python">import numpy
 import math
 
 # Load Lookup Table. The first time this routine is called, the lookup table is loaded into persistent. On subsequent calls, the data is simply retrieved from persistent. This prevent excessive use of I/O:
@@ -669,7 +669,7 @@ for node in range(field.node_count):
     <scalar_field name="CompressibleReferenceTemperature" rank="0">
       <diagnostic>
         <algorithm name="scalar_python_diagnostic" material_phase_support="single">
-          <string_value lines="20" type="python">import numpy
+          <string_value lines="20" type="code" language="python">import numpy
 
 # Column of attribute required from lookup table:
 att_column = 2
@@ -722,7 +722,7 @@ for node in range(field.node_count):
     <scalar_field name="IsobaricSpecificHeatCapacity" rank="0">
       <diagnostic>
         <algorithm name="scalar_python_diagnostic" material_phase_support="single">
-          <string_value lines="20" type="python">import numpy
+          <string_value lines="20" type="code" language="python">import numpy
 import math
 
 # Load Lookup Table. The first time this routine is called, the lookup table is loaded into persistent. On subsequent calls, the data is simply retrieved from persistent. This prevent excessive use of I/O:
@@ -791,7 +791,7 @@ for node in range(field.node_count):
     <scalar_field name="Reference_Pressure" rank="0">
       <diagnostic>
         <algorithm name="scalar_python_diagnostic" material_phase_support="single">
-          <string_value lines="20" type="python">import numpy
+          <string_value lines="20" type="code" language="python">import numpy
 
 # Column of attribute required from lookup table:
 att_column = 1
@@ -844,7 +844,7 @@ for node in range(field.node_count):
     <scalar_field name="FullLookupDensity" rank="0">
       <diagnostic>
         <algorithm name="scalar_python_diagnostic" material_phase_support="single">
-          <string_value lines="20" type="python">import numpy
+          <string_value lines="20" type="code" language="python">import numpy
 import math
 
 # Load Lookup Table. The first time this routine is called, the lookup table is loaded into persistent. On subsequent calls, the data is simply retrieved from persistent. This prevent excessive use of I/O:
