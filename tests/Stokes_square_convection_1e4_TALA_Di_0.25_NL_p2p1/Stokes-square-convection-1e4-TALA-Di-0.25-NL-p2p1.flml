@@ -243,7 +243,7 @@
         </temporal_discretisation>
         <initial_condition name="WholeMesh">
           <python>
-            <string_value lines="20" type="python">def val(X,t):
+            <string_value lines="20" type="code" language="python">def val(X,t):
 
   import math
   
@@ -421,7 +421,7 @@
         </solver>
         <initial_condition name="WholeMesh">
           <python>
-            <string_value lines="20" type="python">def val(X,t):
+            <string_value lines="20" type="code" language="python">def val(X,t):
   T = (1 - X[0])*0.9742
   return T</string_value>
           </python>
@@ -530,7 +530,7 @@
         <mesh name="VelocityMesh"/>
         <value name="WholeMesh">
           <python>
-            <string_value lines="20" type="python">def val(X,t):
+            <string_value lines="20" type="code" language="python">def val(X,t):
 
   import math
   
@@ -602,7 +602,7 @@
         <mesh name="VelocityMesh"/>
         <value name="WholeMesh">
           <python>
-            <string_value lines="20" type="python">def val(X,t):
+            <string_value lines="20" type="code" language="python">def val(X,t):
 
   import math
   

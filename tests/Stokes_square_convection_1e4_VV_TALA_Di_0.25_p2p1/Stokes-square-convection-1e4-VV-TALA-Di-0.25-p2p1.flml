@@ -237,7 +237,7 @@
         </temporal_discretisation>
         <initial_condition name="WholeMesh">
           <python>
-            <string_value lines="20" type="python">def val(X,t):
+            <string_value lines="20" type="code" language="python">def val(X,t):
 
   import math
   
@@ -346,7 +346,7 @@
           <diagnostic>
             <mesh name="CoordinateMesh"/>
             <algorithm name="tensor_python_diagnostic" material_phase_support="single">
-              <string_value lines="20" type="python">import numpy
+              <string_value lines="20" type="code" language="python">import numpy
 import math
 
 T=state.scalar_fields["GalerkinProjection"]
@@ -431,7 +431,7 @@ for n in range(field.node_count):
         </solver>
         <initial_condition name="WholeMesh">
           <python>
-            <string_value lines="20" type="python">def val(X,t):
+            <string_value lines="20" type="code" language="python">def val(X,t):
   T = (1 - X[0])*0.9742
   return T</string_value>
           </python>
@@ -540,7 +540,7 @@ for n in range(field.node_count):
         <mesh name="VelocityMesh"/>
         <value name="WholeMesh">
           <python>
-            <string_value lines="20" type="python">def val(X,t):
+            <string_value lines="20" type="code" language="python">def val(X,t):
 
   import math
   
@@ -612,7 +612,7 @@ for n in range(field.node_count):
         <mesh name="VelocityMesh"/>
         <value name="WholeMesh">
           <python>
-            <string_value lines="20" type="python">def val(X,t):
+            <string_value lines="20" type="code" language="python">def val(X,t):
 
   import math
   
