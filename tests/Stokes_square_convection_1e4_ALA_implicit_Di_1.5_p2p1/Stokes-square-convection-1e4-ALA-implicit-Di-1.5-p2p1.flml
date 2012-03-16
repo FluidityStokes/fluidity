@@ -427,6 +427,7 @@
           <type name="dirichlet">
             <constant>
               <real_value rank="0">0.6832</real_value>
+              <comment>1.0 - Tsurf*exp(Di) + Tsurf</comment>
             </constant>
           </type>
         </boundary_conditions>
