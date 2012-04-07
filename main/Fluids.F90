@@ -787,6 +787,7 @@ contains
              ewrite(2,*) 'out of solid_data_update'
           end if
 
+          ! Note these have been moved here temporarily:
           call calculate_diagnostic_variables(State, exclude_nonrecalculated=.true.)
           call calculate_diagnostic_variables_new(state, exclude_nonrecalculated = .true.)
 
