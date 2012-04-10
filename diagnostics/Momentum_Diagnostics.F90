@@ -278,7 +278,6 @@ contains
     have_linear_eos = (have_option(trim(eos_option_path)//'/fluids/linear'))
     have_linearised_mantle_compressible_eos = (have_option(trim(eos_option_path)//'/compressible/linearised_mantle'))
     have_mantle_lookup_eos = (have_option(trim(eos_option_path)//'/compressible/mantle_lookup'))
-    ewrite(2,*) 'TEST LOOKUP', have_mantle_lookup_eos
 
     if(have_linear_eos) then
        ! Get value for thermal expansion coefficient (constant)
