@@ -852,7 +852,6 @@ contains
     type(scalar_field), pointer :: fulldensity_local, referencedensity_local
     type(scalar_field) :: fulldensity_remap, referencedensity_remap
       
-    ewrite(2,*) "Rhodri - inside mantle lookup EOS"
     ! For this EOS, drhodp is always returned as zero:
     call zero(drhodp)
 
