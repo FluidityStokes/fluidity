@@ -1,8 +1,8 @@
 <?xml version='1.0' encoding='utf-8'?>
 <fluidity_options>
   <simulation_name>
-    <string_value lines="1">stokes-1e4-VV-p2p1-TALA-Di-0.25</string_value>
-    <comment>This tests compressible stokes. It is a TALA case at a dissipation number of 0.25 and a Rayleigh number of 1e4, with a temperature dependent viscosity. Values are compared to the benchmark solutions of King et al. 2009.</comment>
+    <string_value lines="1">stokes-1e4-VV-p2p1-ALA-implicit-Di-1.25</string_value>
+    <comment>This tests compressible stokes. It is a ALA case at a dissipation number of 1.25 and a Rayleigh number of 1e4, with a temperature dependent viscosity. Values are compared to the benchmark solutions of King et al. 2009.</comment>
   </simulation_name>
   <problem_type>
     <string_value lines="1">stokes</string_value>
@@ -110,7 +110,7 @@
   <physical_parameters>
     <gravity>
       <magnitude>
-        <real_value rank="0">0.25</real_value>
+        <real_value rank="0">1.25</real_value>
         <comment>Equivalent to Dissipation Number. Note that to achieve the desired Rayleigh number, other terms (e.g. viscosity, diffusivity) need to be scaled accordingly.</comment>
       </magnitude>
       <vector_field name="GravityDirection" rank="1">
@@ -137,9 +137,7 @@
   <material_phase name="Fluid">
     <equation_of_state>
       <compressible>
-        <linearised_mantle>
-          <exclude_pressure_buoyancy/>
-        </linearised_mantle>
+        <linearised_mantle/>
       </compressible>
     </equation_of_state>
     <scalar_field name="Pressure" rank="0">
@@ -147,7 +145,9 @@
         <mesh name="CoordinateMesh"/>
         <spatial_discretisation>
           <continuous_galerkin/>
-          <compressible/>
+          <compressible>
+            <implicit_pressure_buoyancy/>
+          </compressible>
         </spatial_discretisation>
         <scheme>
           <poisson_pressure_solution>
@@ -243,7 +243,7 @@
   
   rho_zero = 1.0
   gamma = 1.0
-  Di = 0.25
+  Di = 1.25
   depth = 1.0 - X[1]
   exp_val = (depth*Di)/gamma
   rho_ref = rho_zero * math.exp(exp_val)
@@ -352,7 +352,7 @@ import math
 T=state.scalar_fields["GalerkinProjection"]
 
 b = 6.907755279 * -1
-nu0 = 2.5e-5
+nu0 = 0.000125 # Di / Ra
 
 visc = numpy.zeros((2,2))
 
@@ -432,6 +432,7 @@ for n in range(field.node_count):
         <initial_condition name="WholeMesh">
           <python>
             <string_value lines="20" type="code" language="python">def val(X,t):
+  import math
   T = (1-X[1])
   return T</string_value>
           </python>
@@ -442,7 +443,7 @@ for n in range(field.node_count):
           </surface_ids>
           <type name="dirichlet">
             <constant>
-              <real_value rank="0">0.9742</real_value>
+              <real_value rank="0">0.773379</real_value>
             </constant>
           </type>
         </boundary_conditions>
@@ -546,7 +547,7 @@ for n in range(field.node_count):
   
   rho_zero = 1.0
   gamma = 1.0
-  Di = 0.25
+  Di = 1.25
   depth = 1.0 - X[1]
   exp_val = (depth*Di)/gamma
   rho_ref = rho_zero * math.exp(exp_val)
@@ -618,7 +619,7 @@ for n in range(field.node_count):
   
   T_Surf = 273.
   Delta_T = 3000.
-  Di = 0.25
+  Di = 1.25
   depth = 1.0 - X[1]
   exp_val = (depth*Di)
   # Note - to ensure full T field lies between 0 and 1, we subtract (T_Surf/Delta_T) here:
