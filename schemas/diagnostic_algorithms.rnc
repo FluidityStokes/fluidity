@@ -791,6 +791,16 @@ geostrophic_velocity_algorithm =
          }?
       }
    )
+rotational_velocity_algorithm =
+   (
+      ## Compute the average rotational velocity, which can be subtracted from
+      ## the velocity field, thus removing rigid body rotation.
+      element algorithm {
+         attribute name { "rotational_velocity" },
+         attribute material_phase_support { "single" },
+         attribute depends { "Velocity" }
+      }
+   )
 bulk_viscosity_algorithm =
    (
        ## The average (or bulk) viscosity formed from the MaterialViscosity for
@@ -1423,6 +1433,7 @@ vector_diagnostic_algorithms |= helmholtz_smoothed_vector_algorithm
 vector_diagnostic_algorithms |= helmholtz_anisotropic_smoothed_vector_algorithm
 vector_diagnostic_algorithms |= grad_algorithm
 vector_diagnostic_algorithms |= geostrophic_velocity_algorithm
+vector_diagnostic_algorithms |= rotational_velocity_algorithm
 vector_diagnostic_algorithms |= finite_element_divergence_transpose_algorithm
 vector_diagnostic_algorithms |= eigenvalues_symmetric_algorithm
 vector_diagnostic_algorithms |= curl_algorithm

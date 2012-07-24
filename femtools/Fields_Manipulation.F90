@@ -1030,7 +1030,7 @@ implicit none
   end subroutine set_vector_field_arr_dim
 
   subroutine set_vector_field_field(out_field, in_field )
-    !!< Set in_field to out_field. This will only work if the fields have
+    !!< Set out_field to in_field. This will only work if the fields have
     !!< the same mesh.
     type(vector_field), intent(inout) :: out_field
     type(vector_field), intent(in) :: in_field
@@ -2399,7 +2399,7 @@ implicit none
     end select
     
   end subroutine vector_scale_vector_field
-    
+
   subroutine bound_scalar_field(field, lower_bound, upper_bound)
     !!< Bound a field by the lower and upper bounds supplied
     type(scalar_field), intent(inout) :: field

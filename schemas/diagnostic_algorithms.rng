@@ -1066,6 +1066,21 @@ take the value g.</a:documentation>
       </optional>
     </element>
   </define>
+  <define name="rotational_velocity_algorithm">
+    <element name="algorithm">
+      <a:documentation>Compute the average rotational velocity, which can be subtracted from
+the velocity field, thus removing rigid body rotation.</a:documentation>
+      <attribute name="name">
+        <value>rotational_velocity</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single</value>
+      </attribute>
+      <attribute name="depends">
+        <value>Velocity</value>
+      </attribute>
+    </element>
+  </define>
   <define name="bulk_viscosity_algorithm">
     <element name="algorithm">
       <a:documentation>The average (or bulk) viscosity formed from the MaterialViscosity for
@@ -1992,6 +2007,9 @@ This field needs to be interpolated between adapts.</a:documentation>
   </define>
   <define name="vector_diagnostic_algorithms" combine="choice">
     <ref name="geostrophic_velocity_algorithm"/>
+  </define>
+  <define name="vector_diagnostic_algorithms" combine="choice">
+    <ref name="rotational_velocity_algorithm"/>
   </define>
   <define name="vector_diagnostic_algorithms" combine="choice">
     <ref name="finite_element_divergence_transpose_algorithm"/>

@@ -913,6 +913,10 @@ prognostic_velocity_field =
       element solver {
          linear_solver_options_asym
       },
+      ## Remove rotational component after solve
+      element remove_rigid_rotation {
+         empty
+      }?,
       (
          ## Initial condition for WholeMesh
          ##

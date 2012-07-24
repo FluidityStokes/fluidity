@@ -262,9 +262,11 @@
          integer :: submaterials_istate
          ! Do we have fluid-particle drag between phases?
          logical :: have_fp_drag
+         ! Are we removing the mean rotational velocity?
+         logical :: remove_rigid_rotation
+         type(vector_field) :: u_rot
 
          ewrite(1,*) 'Entering solve_momentum'
-
 
          !! Get diagnostics (equations of state, etc) and assemble matrices
 
@@ -1039,6 +1041,16 @@
                         FLAbort("Don't know how to correct the velocity.")
                      end if
 
+                     ! Remove rigid rotation from velocity field, if desired:
+                     remove_rigid_rotation = have_option(trim(u%option_path)//"/prognostic/remove_rigid_rotation")
+                     ewrite(1,*) 'RHODRI',remove_rigid_rotation
+                     if(remove_rigid_rotation) then
+                        call allocate(u_rot, u%dim, u%mesh, 'RotationalVelocity')
+!                        call calculate_rotational_velocity(istate,u_rot)
+!                        call addto(u, u_rot, scale = -1.)
+                        call deallocate(u_rot)
+                     end if
+
                      call profiler_toc(u, "assembly")
 
                      if(use_compressible_projection) then
@@ -1375,8 +1387,7 @@
          if(full_schur) then
             if(assemble_schur_auxiliary_matrix) then
                call petsc_solve_full_projection(p_theta, ctp_m(prognostic_p_istate)%ptr, inner_m(prognostic_p_istate)%ptr, ct_m(prognostic_p_istate)%ptr, poisson_rhs, &
-                  full_projection_preconditioner, state(prognostic_p_istate), u%mesh, &
-                  auxiliary_matrix=schur_auxiliary_matrix)
+                  full_projection_preconditioner, state(prognostic_p_istate), u%mesh, auxiliary_matrix=schur_auxiliary_matrix)
             else
                call petsc_solve_full_projection(p_theta, ctp_m(prognostic_p_istate)%ptr, inner_m(prognostic_p_istate)%ptr, ct_m(prognostic_p_istate)%ptr, poisson_rhs, &
                   full_projection_preconditioner, state(prognostic_p_istate), u%mesh)

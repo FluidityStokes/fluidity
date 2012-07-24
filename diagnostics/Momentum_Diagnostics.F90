@@ -53,9 +53,8 @@ module momentum_diagnostics
             calculate_tensor_second_invariant, calculate_imposed_material_velocity_source, &
             calculate_imposed_material_velocity_absorption, &
             calculate_scalar_potential, calculate_projection_scalar_potential, &
-            calculate_geostrophic_velocity
-           
-  
+            calculate_geostrophic_velocity, calculate_rotational_velocity
+             
 contains
 
   subroutine calculate_strain_rate(state, t_field)
@@ -427,5 +426,101 @@ contains
     if(stat == SPUD_NO_ERROR) call scale(v_field, scale_factor)
   
   end subroutine calculate_geostrophic_velocity
+
+  subroutine calculate_rotational_velocity(state, v_field)
+    type(state_type), intent(inout) :: state
+    type(vector_field), intent(inout) :: v_field
+    
+    type(vector_field), pointer :: velocity, positions_local
+    type(vector_field) :: positions_remap, rotational_mode
+
+    integer :: node, dim, ele
+    real :: radius, integral_top, integral_bot, scalar_constant, ele_top, ele_bot
+    real, dimension(2) :: nodal_coordinates, theta_hat ! Need to sort this for dimension 3
+
+    ewrite(1,*) 'In calculate_rotational_velocity'         
+
+    ! Extract velocity from state:
+    velocity => extract_vector_field(state, "Velocity")
+    assert(velocity%mesh == v_field%mesh)
+ 
+    ! Extract coordinates from state:
+    positions_local=>extract_vector_field(state,'Coordinate')
+    ! Check v_field and positions have same dimensions, as nodal_coordinates
+    ! has been allocated with velocity%dim.
+    assert(v_field%dim == positions_local%dim)
+    ! Remap positions to velocity mesh:
+    call allocate(positions_remap, positions_local%dim, v_field%mesh, 'RemappedCoordinate')
+    call remap_field(positions_local,positions_remap)
+
+    ! Quantify rotational mode - u_rot = r (\hat theta):
+    call allocate(rotational_mode, velocity%dim, v_field%mesh, 'RotationalMode')
+    call zero(rotational_mode)
+
+    do node = 1, node_count(v_field)
+       nodal_coordinates = node_val(positions_remap,node) 
+       ! Need to correct radius and theta calculation for 3D:
+       radius = sqrt(nodal_coordinates(1)**2+nodal_coordinates(2)**2)
+       theta_hat(1) = (-nodal_coordinates(2)/radius)  
+       theta_hat(2) = ( nodal_coordinates(1)/radius)  
+       do dim = 1, velocity%dim
+          call set(rotational_mode, dim, node, radius*theta_hat(dim))
+       end do
+    end do
+
+    ! Calculate integrals:
+    integral_top = 0.
+    integral_bot = 0.
+    do ele = 1, element_count(v_field)
+      if(element_owned(v_field, ele)) then
+         call quantify_scalar_constant_ele(ele, positions_local, velocity, rotational_mode, ele_top, ele_bot) 
+         integral_top = integral_top + ele_top
+         integral_bot = integral_bot + ele_bot
+      end if
+    end do
+
+    scalar_constant = integral_top / integral_bot
+
+    do dim = 1, velocity%dim
+       call set(v_field, dim, rotational_mode)
+    end do
+
+    call scale(v_field, scalar_constant)
+  
+    call deallocate(positions_remap)
+    call deallocate(rotational_mode)
+
+  contains
+
+    subroutine quantify_scalar_constant_ele(ele, positions, velocity, rotational_mode, ele_top, ele_bot)
+
+      integer, intent(in) :: ele
+      type(vector_field), intent(in) :: positions, velocity, rotational_mode
+      real, intent(inout) :: ele_top, ele_bot
+      
+      real, dimension(velocity%dim, ele_ngi(velocity, ele)) :: u_quad, u_rot_quad, positions_quad
+      real, dimension(ele_ngi(velocity, ele)) :: detwei
+      integer :: dim, gi
+      
+      ele_top = 0.
+      ele_bot = 0.
+      
+      call transform_to_physical(positions, ele, detwei = detwei)
+      
+      ! Derive quantities at Gauss integration points:
+      u_quad         = ele_val_at_quad(velocity, ele)
+      u_rot_quad     = ele_val_at_quad(rotational_mode, ele)
+      positions_quad = ele_val_at_quad(positions, ele)
+      ! Sum elemental contributions:
+      do dim = 1, velocity%dim
+         do gi = 1, ele_ngi(velocity, ele)
+            ele_top = ele_top + (u_quad(dim,gi) * u_rot_quad(dim,gi)) *detwei(gi)
+            ele_bot = ele_bot + (positions_quad(dim,gi) * positions_quad(dim,gi)) *detwei(gi)
+         end do
+      end do
+      
+    end subroutine quantify_scalar_constant_ele
+
+  end subroutine calculate_rotational_velocity
 
 end module momentum_diagnostics
