@@ -39,7 +39,7 @@
       use momentum_dg
       use assemble_cmc
       use field_priority_lists
-      use momentum_diagnostic_fields, only: calculate_momentum_diagnostics
+      use momentum_diagnostic_fields, only: calculate_momentum_diagnostics, quantify_rotational_velocity
       use field_options
       use compressible_projection
       use boundary_conditions
@@ -1041,16 +1041,6 @@
                         FLAbort("Don't know how to correct the velocity.")
                      end if
 
-                     ! Remove rigid rotation from velocity field, if desired:
-                     remove_rigid_rotation = have_option(trim(u%option_path)//"/prognostic/remove_rigid_rotation")
-                     ewrite(1,*) 'RHODRI',remove_rigid_rotation
-                     if(remove_rigid_rotation) then
-                        call allocate(u_rot, u%dim, u%mesh, 'RotationalVelocity')
-!                        call calculate_rotational_velocity(istate,u_rot)
-!                        call addto(u, u_rot, scale = -1.)
-                        call deallocate(u_rot)
-                     end if
-
                      call profiler_toc(u, "assembly")
 
                      if(use_compressible_projection) then
@@ -1135,8 +1125,6 @@
 
          end if ! end of 'if .not.reduced_model'
 
-
-
          !! Finalisation and memory deallocation
          call profiler_tic("finalisation_loop")
          finalisation_loop: do istate = 1, size(state)
@@ -1159,6 +1147,20 @@
                call finalise_state(state, istate, u, mass, inverse_mass, inverse_masslump, &
                                 visc_inverse_masslump, big_m, mom_rhs, ct_rhs, subcycle_m)
 
+            end if
+
+            ! Remove rigid rotation from velocity field, if desired:
+            remove_rigid_rotation = have_option(trim(u%option_path)//"/prognostic/remove_rigid_rotation")
+            if(remove_rigid_rotation) then
+               ! Allocate and calculate rotational velocity field:
+               call allocate(u_rot, u%dim, u%mesh, 'RotationalVelocity')
+               call quantify_rotational_velocity(state(istate), u_rot)
+               ewrite_minmax(u_rot)
+               ! Remove rotational velocity component from full velocity:
+               ewrite_minmax(u)
+               call addto(u, u_rot, scale=-1.)   
+               ewrite_minmax(u)
+               call deallocate(u_rot)
             end if
 
          end do finalisation_loop
@@ -1187,8 +1189,9 @@
          deallocate(lump_mass)
          deallocate(sphere_absorption)
 
-      end subroutine solve_momentum
+         ewrite_minmax(u)
 
+      end subroutine solve_momentum
 
       subroutine get_velocity_options(state, istate, u)
          !!< Gets some velocity options from the options tree
