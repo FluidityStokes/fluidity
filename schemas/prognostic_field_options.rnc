@@ -2018,7 +2018,7 @@ scalar_equation_choice =
          ## Select the equation used to solve for this field.
          ## Anelastic Energy equation for use with compressible mantle simulations.
          ##
-         ## ONLY WORKS FOR CONTINUOUS GALERKIN DISCRETISATIONS
+         ## ONLY WORKS FOR CONTINUOUS GALERKIN AND CONTROL VOLUME DISCRETISATIONS
          ##
          ## It depends on the prescribed/diagnostic fields:
          ##  - CompressibleReferenceDensity

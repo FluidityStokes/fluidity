@@ -146,6 +146,7 @@ contains
                     "/algorithm[0]/surface_temperature", T0)
 
     call allocate(surface_adiabat, s_field%mesh, "SurfaceAdiabat")
+
     call inner_product(surface_adiabat, velocity, gravity_direction)
 
     if(have_linear_eos) then
