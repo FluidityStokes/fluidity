@@ -479,7 +479,7 @@ contains
     ewrite(1,*) 'In quantify_rotational_velocity'         
 
     ! Extract velocity from state:
-    velocity => extract_vector_field(state, "Velocity")
+    velocity => extract_vector_field(state, "NonlinearVelocity")
     assert(velocity%mesh == u_rot%mesh)
  
     ! Extract coordinates from state:
