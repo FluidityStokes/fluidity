@@ -814,6 +814,7 @@ contains
       ! requirements for mantle anelastic energy equation type:
       type(scalar_field), intent(in) :: heatcap, reftemp
       type(scalar_field), intent(inout) :: source, absorption
+      type(scalar_field) :: rho_heatcap
       ! time discretisation parameter
       real, intent(in) :: theta
       ! bucket full of fields
@@ -1193,9 +1194,13 @@ contains
 
       case (FIELD_EQUATION_MANTLEANELASTICENERGY)
 
-        ! Form mass term prefactor (i.e. tdensity * heatcap)
-        call scale(tdensity,heatcap)
-        ! construct M
+        ! Allocate and calculate mass & advective term prefactor (i.e. tdensity * heatcap)
+        assert(tdensity%mesh == heatcap%mesh)
+        call allocate(rho_heatcap, tdensity%mesh, name="rhoheatcap")
+        call set(rho_heatcap,tdensity)
+        call scale(rho_heatcap,heatcap)
+
+        ! construct M:
         if(explicit) then
           if(include_mass) then
             call scale(m_cvmass, tdensity)
@@ -1213,8 +1218,7 @@ contains
           end if
         end if
 
-        ! Remove heatcap contribution to tdensity field:
-        call addto(tdensity,heatcap,scale=-1.)
+        call deallocate(rho_heatcap)
 
         if(include_source .and. (.not. add_src_directly_to_rhs)) call addto(rhs, masssource)
 
