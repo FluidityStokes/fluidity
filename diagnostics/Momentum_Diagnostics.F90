@@ -155,7 +155,9 @@ contains
           end do
        end do
        call set(s_field, node, val)
-    end do
+    end do    
+
+    ewrite_minmax(s_field)
 
     ! Deallocate:
     call deallocate(strain_rate_tensor)
@@ -193,6 +195,7 @@ contains
 
     ! Add surface adiabat to viscous dissipation and clean up:
     call addto(s_field, surface_adiabat_field)
+    ewrite_minmax(s_field)
     call deallocate(surface_adiabat_field)
 
   end subroutine calculate_viscous_dissipation_plus_surface_adiabat
@@ -215,6 +218,8 @@ contains
     else
        call adiabatic_heating_coefficient(state, s_field, include_surface_adiabat=.false.)
     end if
+
+    ewrite_minmax(s_field)
 
   end subroutine calculate_adiabatic_heating_coefficient
 

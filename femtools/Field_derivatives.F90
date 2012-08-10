@@ -298,6 +298,9 @@ module field_derivatives
       real, dimension(t_field%dim(1),t_field%dim(2)) :: t
       integer :: node
 
+      ewrite_minmax(infield)
+      ewrite_minmax(positions)
+
       ! Compute velocity gradient tensor:
       call grad(infield,positions,t_field)
       
@@ -306,6 +309,8 @@ module field_derivatives
            t=node_val(t_field, node)
            call set(t_field, node, (t+transpose(t))/2.) 
       end do 
+
+      ewrite_minmax(t_field)
  
     end subroutine strain_rate
 

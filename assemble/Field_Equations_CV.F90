@@ -1203,11 +1203,11 @@ contains
         ! construct M:
         if(explicit) then
           if(include_mass) then
-            call scale(m_cvmass, tdensity)
+            call scale(m_cvmass, rho_heatcap)
           end if
         else
           if(include_mass) then
-            call mult_diag(M, tdensity)
+            call mult_diag(M, rho_heatcap)
           end if
           if(include_advection) call addto(M, A_m, dt)
           if(include_absorption) call addto_diag(M, massabsorption, theta*dt)
