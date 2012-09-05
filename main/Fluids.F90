@@ -327,10 +327,10 @@ contains
           ! Initialise the OriginalDistanceToBottom field used for wetting and drying
           if (have_option("/mesh_adaptivity/mesh_movement/free_surface/wetting_and_drying")) then
              call insert_original_distance_to_bottom(state(1))
-             ! Wetting and drying only works with no poisson guess ... lets check that
-             call get_option("/material_phase::water/scalar_field::Pressure/prognostic/scheme/poisson_pressure_solution", option_buffer)
+             ! Wetting and drying only works with no poisson guess ... let's check that
+             call get_option("/material_phase[0]/scalar_field::Pressure/prognostic/scheme/poisson_pressure_solution", option_buffer)
              if (.not. trim(option_buffer) == "never") then 
-               FLExit("Please choose 'never' under /material_phase::water/scalar_field::Pressure/prognostic/scheme/poisson_pressure_solution when using wetting and drying")
+               FLExit("Please choose 'never' under /material_phase[0]/scalar_field::Pressure/prognostic/scheme/poisson_pressure_solution when using wetting and drying")
              end if
           end if
        end if
@@ -447,14 +447,6 @@ contains
         call gls_init(state(1))
     end if
 
-    ! Initialise k_epsilon
-    have_k_epsilon = .false.
-    keps_option_path="/material_phase[0]/subgridscale_parameterisations/k-epsilon/"
-    if (have_option(trim(keps_option_path))) then
-        have_k_epsilon = .true.
-        call keps_init(state(1))
-    end if
-
     ! ******************************
     ! *** Start of timestep loop ***
     ! ******************************
@@ -517,6 +509,15 @@ contains
        ! evaluate prescribed fields at time = current_time+dt
        call set_prescribed_field_values(state, exclude_interpolated=.true., &
             exclude_nonreprescribed=.true., time=current_time+dt)
+
+       ! momentum source term adjustment for k-epsilon model
+       ! this is a hack - we need to set a source term for the momentum equation
+       ! to take account of (-2/3 k delta(ij)) in the reynolds stresses, however we also
+       ! want to be able to have a prescribed momentum source term and hence need to add
+       ! the adjustment after the prescribed value is set
+       do i = 1, size(state)
+          call keps_momentum_source(state(i))
+       end do
 
        if(use_sub_state()) call set_full_domain_prescribed_fields(state,time=current_time+dt)
 
@@ -639,98 +640,89 @@ contains
                 end if
              end if
 
-             ! do we have the k-epsilon 2 equation turbulence model?
-             if(have_k_epsilon .and. have_option(trim(keps_option_path)//"/scalar_field::"//trim(field_name_list(it)//"/prognostic"))) then
-                if( (trim(field_name_list(it))=="TurbulentKineticEnergy")) then
-                    call keps_tke(state(1))
-                else if( (trim(field_name_list(it))=="TurbulentDissipation")) then
-                    call keps_eps(state(1))
+             ! Calculate the meltrate
+             if(have_option("/ocean_forcing/iceshelf_meltrate/Holland08/") ) then
+                if( (trim(field_name_list(it))=="MeltRate")) then
+                   call melt_surf_calc(state(1))
                 endif
              end if
 
-            ! Calculate the meltrate
-            if(have_option("/ocean_forcing/iceshelf_meltrate/Holland08/") ) then
-                if( (trim(field_name_list(it))=="MeltRate")) then
-                    call melt_surf_calc(state(1))
-                endif
-            end if
+             call get_option(trim(field_optionpath_list(it))//&
+                  '/prognostic/equation[0]/name', &
+                  option_buffer, default="UnknownEquationType")
+             select case(trim(option_buffer))
+             case ( "AdvectionDiffusion", "ConservationOfMass", "ReducedConservationOfMass", "InternalEnergy", "HeatTransfer", "KEpsilon" )
+                use_advdif=.true.
+             case default
+                use_advdif=.false.
+             end select
 
+             IF(use_advdif)THEN
 
-            call get_option(trim(field_optionpath_list(it))//&
-                 '/prognostic/equation[0]/name', &
-                 option_buffer, default="UnknownEquationType")
-            select case(trim(option_buffer))
-            case ( "AdvectionDiffusion", "ConservationOfMass", "ReducedConservationOfMass", "InternalEnergy", "HeatTransfer" )
-               use_advdif=.true.
-            case default
-               use_advdif=.false.
-            end select
+                sfield => extract_scalar_field(state(field_state_list(it)), field_name_list(it))
+                call calculate_diagnostic_children(state, field_state_list(it), sfield)
 
-            IF(use_advdif)THEN
+                !--------------------------------------------------
+                !This addition creates a field that is a copy of
+                !another to be used, i.e.: for diffusing.
+                call get_copied_field(field_name_list(it), state(field_state_list(it)))
+                !--------------------------------------------------
 
-               sfield => extract_scalar_field(state(field_state_list(it)), field_name_list(it))
-               call calculate_diagnostic_children(state, field_state_list(it), sfield)
+                IF(have_option(trim(field_optionpath_list(it))//&
+                     & "/prognostic/spatial_discretisation/discontinuous_galerkin")) then
 
-               !--------------------------------------------------
-               !This addition creates a field that is a copy of
-               !another to be used, i.e.: for diffusing.
-               call get_copied_field(field_name_list(it), state(field_state_list(it)))
-               !--------------------------------------------------
-               
-               IF(have_option(trim(field_optionpath_list(it))//&
-                    & "/prognostic/spatial_discretisation/discontinuous_galerkin")) then
+                   ! Solve the DG form of the equations.
+                   call solve_advection_diffusion_dg(field_name=field_name_list(it), &
+                        & state=state(field_state_list(it)))
 
-                  ! Solve the DG form of the equations.
-                  call solve_advection_diffusion_dg(field_name=field_name_list(it), &
-                       & state=state(field_state_list(it)))
-                  
-               ELSEIF(have_option(trim(field_optionpath_list(it))//&
-                    & "/prognostic/spatial_discretisation/finite_volume")) then
+                ELSEIF(have_option(trim(field_optionpath_list(it))//&
+                     & "/prognostic/spatial_discretisation/finite_volume")) then
 
-                  ! Solve the FV form of the equations.
-                  call solve_advection_diffusion_fv(field_name=field_name_list(it), &
-                       & state=state(field_state_list(it)))
+                   ! Solve the FV form of the equations.
+                   call solve_advection_diffusion_fv(field_name=field_name_list(it), &
+                        & state=state(field_state_list(it)))
 
-               ELSEIF(have_option(trim(field_optionpath_list(it))//&
-                    & "/prognostic/spatial_discretisation/control_volumes")) then
-                  
-                  ! Solve the pure control volume form of the equations
-                  call solve_field_eqn_cv(field_name=trim(field_name_list(it)), &
-                       state=state(field_state_list(it):field_state_list(it)), &
-                       global_it=its)
-                  
-               else if(have_option(trim(field_optionpath_list(it)) // &
-                    & "/prognostic/spatial_discretisation/continuous_galerkin")) then
-                  
-                  call solve_field_equation_cg(field_name_list(it), state(field_state_list(it)), dt)
-               else
+                ELSEIF(have_option(trim(field_optionpath_list(it))//&
+                     & "/prognostic/spatial_discretisation/control_volumes")) then
 
-                  ewrite(2, *) "Not solving scalar field " // trim(field_name_list(it)) // " in state " // trim(state(field_state_list(it))%name) //" in an advdif-like subroutine."
+                   ! Solve the pure control volume form of the equations
+                   call solve_field_eqn_cv(field_name=trim(field_name_list(it)), &
+                        state=state(field_state_list(it):field_state_list(it)), &
+                        global_it=its)
 
-               end if ! End of dg/cv/cg choice.
+                else if(have_option(trim(field_optionpath_list(it)) // &
+                     & "/prognostic/spatial_discretisation/continuous_galerkin")) then
 
-               ! Cap and overwrite values if appropriate:
-               cap_and_overwrite_values=have_option(trim(field_optionpath_list(it))//&
-                    '/prognostic/equation::AdvectionDiffusion/cap_and_overwrite_values')
+                   call solve_field_equation_cg(field_name_list(it), state, field_state_list(it), dt)
+                else
 
-               if(cap_and_overwrite_values) then
-                  ewrite(2,*) "Capping values of field " // trim(field_name_list(it))
+                   ewrite(2, *) "Not solving scalar field " // trim(field_name_list(it)) // " in state " // trim(state(field_state_list(it))%name) //" in an advdif-like subroutine."
 
-                  call get_option(trim(field_optionpath_list(it))//&
-                       '/prognostic/equation::AdvectionDiffusion/cap_and_overwrite_values/lower_cap',lower_cap)
-                  
-                  call get_option(trim(field_optionpath_list(it))//&
-                       '/prognostic/equation::AdvectionDiffusion/cap_and_overwrite_values/upper_cap',upper_cap)
-                  
-                  ewrite(2,*) "Upper_cap = ", upper_cap
-                  ewrite(2,*) "Lower_cap = ", lower_cap
+                end if ! End of dg/cv/cg choice.
 
-                  call bound(sfield, lower_cap, upper_cap)
-               end if
-                  
-            ENDIF
+                ! Cap and overwrite values if appropriate:
+                cap_and_overwrite_values=have_option(trim(field_optionpath_list(it))//&
+                     '/prognostic/equation::AdvectionDiffusion/cap_and_overwrite_values')
+                
+                if(cap_and_overwrite_values) then
+                   ewrite(2,*) "Capping values of field " // trim(field_name_list(it))
+                   
+                   call get_option(trim(field_optionpath_list(it))//&
+                        '/prognostic/equation::AdvectionDiffusion/cap_and_overwrite_values/lower_cap',lower_cap)
+                   
+                   call get_option(trim(field_optionpath_list(it))//&
+                        '/prognostic/equation::AdvectionDiffusion/cap_and_overwrite_values/upper_cap',upper_cap)
+                   
+                   ewrite(2,*) "Upper_cap = ", upper_cap
+                   ewrite(2,*) "Lower_cap = ", lower_cap
+                   
+                   call bound(sfield, lower_cap, upper_cap)
+                   
+                end if
+                ! ENDOF IF((TELEDI(IT).EQ.1).AND.D3) THEN ELSE...
+             ENDIF
 
-            ewrite(1, *) "Finished field " // trim(field_name_list(it)) // " in state " // trim(state(field_state_list(it))%name)
+             ewrite(1, *) "Finished field " // trim(field_name_list(it)) // " in state " // trim(state(field_state_list(it))%name)
 
           end do field_loop
 
@@ -739,11 +731,10 @@ contains
             call gls_diffusivity(state(1))
           end if
 
-          ! k_epsilon after the solve on Epsilon has finished
-          if(have_k_epsilon .and. have_option(trim(keps_option_path)//"/scalar_field::ScalarEddyViscosity/diagnostic")) then
-            ! Update the diffusivity, at each iteration.
-            call keps_eddyvisc(state(1))
-          end if
+          ! Update eddy viscosity after each iteration!
+          do i = 1, size(state)
+             call keps_eddyvisc(state(i))
+          end do
           
           !BC for ice melt
           if (have_option('/ocean_forcing/iceshelf_meltrate/Holland08/calculate_boundaries')) then
@@ -949,11 +940,6 @@ contains
         call gls_cleanup()
     end if
 
-    ! cleanup k_epsilon
-    if (have_k_epsilon) then
-        call keps_cleanup()
-    end if
-
     if (have_option("/material_phase[0]/sediment")) then
         call sediment_cleanup()
     end if
@@ -1035,12 +1021,6 @@ contains
         call gls_cleanup() ! deallocate everything
     end if
 
-    ! k_epsilon - we need to deallocate all module-level fields or the memory
-    ! management system complains
-    if (have_option("/material_phase[0]/subgridscale_parameterisations/k-epsilon/")) then
-        call keps_cleanup() ! deallocate everything
-    end if
-
     ! deallocate sub-state
     if(use_sub_state()) then
       do ss = 1, size(sub_state)
@@ -1058,6 +1038,7 @@ contains
     integer, intent(inout) :: nonlinear_iterations, nonlinear_iterations_adapt
     type(state_type), dimension(:), pointer :: sub_state
     character(len=OPTION_PATH_LEN) :: keps_option_path
+    integer :: i
 
     ! Overwrite the number of nonlinear iterations if the option is switched on
     if(have_option("/timestepping/nonlinear_iterations/nonlinear_iterations_at_adapt")) then
@@ -1120,14 +1101,6 @@ contains
     ! GLS
     if (have_option("/material_phase[0]/subgridscale_parameterisations/GLS/")) then
         call gls_adapt_mesh(state(1))
-    end if
-
-    ! k_epsilon
-    keps_option_path="/material_phase[0]/subgridscale_parameterisations/k-epsilon/"
-    if (have_option(trim(keps_option_path)//"/scalar_field::TurbulentKineticEnergy/prognostic") &
-        &.and. have_option(trim(keps_option_path)//"/scalar_field::TurbulentDissipation/prognostic") &
-        &.and. have_option(trim(keps_option_path)//"/scalar_field::ScalarEddyViscosity/diagnostic")) then
-        call keps_adapt_mesh(state(1))
     end if
 
   end subroutine update_state_post_adapt
