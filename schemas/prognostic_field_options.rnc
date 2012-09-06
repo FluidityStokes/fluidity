@@ -2025,7 +2025,38 @@ scalar_equation_choice =
          ##  - CompressibleReferenceTemperature
          ##  - IsobaricSpecificHeatCapacity
          element equation {
-            attribute name { "MantleAnelasticEnergy" }
+            attribute name { "MantleAnelasticEnergy" },
+            ## Set the discretisation options for the density weighting
+            ## (actually the CompressibleReferenceDensity*IsobaricSpecificHeatCapacity).
+            ##
+            ## ONLY REQUIRED FOR CONTROL VOLUME DISCRETISATIONS.
+            element density {
+              attribute name {"CompressibleReferenceDensity*IsobaricSpecificHeatCapacity"},
+              ## Provide discretisation options for the coefficient density field.
+              ##
+              ## If not provided then the discretisation options will default to those
+              ## under the field that is named (hence it will generally have to be a prognostic
+              ## field itself).
+              element discretisation_options {
+                element spatial_discretisation {
+                  element control_volumes {
+                    spatial_control_volume_options_excluding_none
+                  }
+                },
+                element temporal_discretisation {
+                  ## Implicit/explicit control
+                  ##  =0.  -- explicit
+                  ##  =0.5 -- Crank-Nicolson
+                  ##  =1.  -- implicit
+                  element theta {
+                    element real_value{
+                       attribute rank { "0" },
+                       ( "1.0" )
+                    }
+                  }
+                }
+              }?
+            }
          }|
          ## Option to solve for electrical potential from
          ## electrokinetic, electrochemical or electrothermal sources 
