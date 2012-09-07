@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<testproblem>
+  <name>cap-fields</name>
+  <owner userid="rhodrid"/>
+  <tags>flml</tags>
+
+  <problem_definition length="medium" nprocs="1">
+    <command_line>fluidity -v2 -l cap-fields.flml</command_line>
+  </problem_definition>
+
+<variables>  
+  <variable name="solvers_converged" language="python">
+import os
+files = os.listdir("./")
+solvers_converged = not "matrixdump" in files and not "matrixdump.info" in files
+  </variable>
+
+<variable name="T_Max" language="python">
+from fluidity_tools import stat_parser as stat
+T_Max = abs(stat("test-cap-fields.stat")["Fluid"]["Temperature"]["max"][-1])
+</variable>
+
+<variable name="T_Min" language="python">
+from fluidity_tools import stat_parser as stat
+T_Min = abs(stat("test-cap-fields.stat")["Fluid"]["Temperature"]["min"][-1])
+</variable>
+
+</variables>
+
+<pass_tests>
+  <test name="Solvers converged" language="python">
+    assert(solvers_converged)
+  </test>
+
+<test name="Tmax = 1.0" language="python">
+assert(T_Max == 1.0)
+</test>
+
+<test name="Tmin = 0.0" language="python">
+assert(T_Min == 0.0)
+</test>
+
+</pass_tests>                                                                                                                                                                                                
+<warn_tests>
+</warn_tests>
+
+</testproblem>
+
+
+
+
+
