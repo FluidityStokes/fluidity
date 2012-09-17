@@ -172,6 +172,7 @@ contains
     type(state_type), intent(inout) :: state
     type(scalar_field), intent(inout) :: s_field
 
+    type(scalar_field), pointer :: temperature
     type(scalar_field) :: surface_adiabat_field
     logical :: cv_disc, include_surface_adiabat
     
@@ -185,7 +186,8 @@ contains
     surface_adiabat_field%option_path = s_field%option_path
 
     ! Calculate surface adiabat term, for required spatial discretisation:
-    cv_disc=have_option("/material_phase[0]/scalar_field::Temperature/prognostic/spatial_discretisation/control_volumes")
+    temperature => extract_scalar_field(state,"Temperature")  
+    cv_disc=have_option(trim(temperature%option_path)//"/prognostic/spatial_discretisation/control_volumes")
 
     if(cv_disc) then
        call adiabatic_heating_coefficient_CV(state, surface_adiabat_field, include_surface_adiabat=.true.)
@@ -206,12 +208,14 @@ contains
     type(state_type), intent(inout) :: state
     type(scalar_field), intent(inout) :: s_field
 
+    type(scalar_field), pointer :: temperature
     logical :: cv_disc, include_surface_adiabat
 
     ewrite(1,*) 'In calculate_adiabatic_heating_coefficient'
 
     ! Are we using a control volume discretisation?
-    cv_disc=have_option("/material_phase[0]/scalar_field::Temperature/prognostic/spatial_discretisation/control_volumes")
+    temperature => extract_scalar_field(state,"Temperature")  
+    cv_disc=have_option(trim(temperature%option_path)//"/prognostic/spatial_discretisation/control_volumes")
 
     if(cv_disc) then
        call adiabatic_heating_coefficient_CV(state, s_field, include_surface_adiabat=.false.)

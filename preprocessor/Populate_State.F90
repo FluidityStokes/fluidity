@@ -3690,8 +3690,8 @@ contains
        ewrite(0,*) "WARNING: You have a salinity field but it will not affect the density of the fluid."
     end if
 
-   ! Temperature options checks
-   temperature_path="/material_phase[0]/scalar_field::Temperature/prognostic"
+    ! Temperature options checks
+    temperature_path="/material_phase[0]/scalar_field::Temperature/prognostic"
     if(have_option("/material_phase[0]/scalar_field::Temperature")&
          .and.(.not.(have_option("/material_phase[0]/equation_of_state/fluids/linear/temperature_dependency") ))) then
        ewrite(0,*) "WARNING: You have a temperature field but it will not affect the density of the fluid."
@@ -3819,120 +3819,147 @@ if (.not.have_option("/material_phase[0]/vector_field::Velocity/prognostic/vecto
 
     ! Check options for Stokes flow simulations.
 
-    integer :: i, nmat
-    character(len=OPTION_PATH_LEN) :: velocity_path, pressure_path, compressible_path
+    integer :: i, nmat, equation_type
+    character(len=OPTION_PATH_LEN) :: velocity_path, pressure_path
+    character(len=OPTION_PATH_LEN) :: compressible_path, temperature_path
     character(len=FIELD_NAME_LEN) :: schur_preconditioner, inner_matrix
-    logical :: exclude_mass, exclude_advection, implicit_pressure_buoyancy, exclude_pressure_buoyancy
+    logical :: exclude_mass, exclude_advection
+    logical :: implicit_pressure_buoyancy, exclude_pressure_buoyancy
     real :: theta
 
     nmat = option_count("/material_phase")
 
     do i = 0, nmat-1
-      velocity_path="/material_phase["//int2str(i)//"]/vector_field::Velocity/prognostic"
-
-      if (have_option(trim(velocity_path))) then
-
-         ! Check that mass and advective terms are excluded:
-         exclude_mass = have_option(trim(velocity_path)//&
-              "/spatial_discretisation"//&
-              &"/continuous_galerkin/mass_terms"//&
-              &"/exclude_mass_terms").or.&
-                        have_option(trim(velocity_path)//&
-              "/spatial_discretisation"//&
-              &"/discontinuous_galerkin/mass_terms"//&
-              &"/exclude_mass_terms")
-
-         exclude_advection = have_option(trim(velocity_path)//&
-              "/spatial_discretisation"//&
-              &"/continuous_galerkin/advection_terms"//&
-              &"/exclude_advection_terms").or.&
-                             have_option(trim(velocity_path)//&
-              "/spatial_discretisation"//&
-              &"/discontinuous_galerkin/advection_scheme/none") 
-
-         if(.not.(exclude_mass) .OR. .not.(exclude_advection)) then
-            FLExit("For Stokes problems you need to exclude the mass and advection terms.")
-         end if
-
-         ! Check that theta = 1 (we must be implicit as we have no time term!)
-         call get_option(trim(velocity_path)//'/temporal_discretisation/theta/', theta)
-         if(theta /= 1.) then
-            FLExit("For Stokes problems, theta (under velocity) must = 1")
-         end if
-
-      end if
-
-      pressure_path="/material_phase["//int2str(i)//"]/scalar_field::Pressure/prognostic"
-
-      if (have_option(trim(pressure_path))) then  
-
-         ! Check pressure_mass_matrix preconditioner is compatible with viscosity tensor:
+       velocity_path="/material_phase["//int2str(i)//"]/vector_field::Velocity/prognostic"
+       
+       if (have_option(trim(velocity_path))) then
+          
+          ! Check that mass and advective terms are excluded:
+          exclude_mass = have_option(trim(velocity_path)//&
+               "/spatial_discretisation"//&
+               &"/continuous_galerkin/mass_terms"//&
+               &"/exclude_mass_terms").or.&
+               have_option(trim(velocity_path)//&
+               "/spatial_discretisation"//&
+               &"/discontinuous_galerkin/mass_terms"//&
+               &"/exclude_mass_terms")
+          
+          exclude_advection = have_option(trim(velocity_path)//&
+               "/spatial_discretisation"//&
+               &"/continuous_galerkin/advection_terms"//&
+               &"/exclude_advection_terms").or.&
+               have_option(trim(velocity_path)//&
+               "/spatial_discretisation"//&
+               &"/discontinuous_galerkin/advection_scheme/none") 
+          
+          if(.not.(exclude_mass) .OR. .not.(exclude_advection)) then
+             FLExit("For Stokes problems you need to exclude the mass and advection terms.")
+          end if
+          
+          ! Check that theta = 1 (we must be implicit as we have no time term!)
+          call get_option(trim(velocity_path)//'/temporal_discretisation/theta/', theta)
+          if(theta /= 1.) then
+             FLExit("For Stokes problems, theta (under velocity) must = 1")
+          end if
+          
+       end if
+       
+       pressure_path="/material_phase["//int2str(i)//"]/scalar_field::Pressure/prognostic"
+       
+       if (have_option(trim(pressure_path))) then  
+          
+          ! Check pressure_mass_matrix preconditioner is compatible with viscosity tensor:
           if(have_option("/material_phase["//int2str(i)//&
                "]/vector_field::Velocity/prognostic"//&
                &"/tensor_field::Viscosity/prescribed/value"//&
                &"/anisotropic_symmetric").or.&
-             have_option("/material_phase["//int2str(i)//&
+               have_option("/material_phase["//int2str(i)//&
                "]/vector_field::Velocity/prognostic"//&
                &"/tensor_field::Viscosity/prescribed/value"//&
                &"/anisotropic_asymmetric")) then
+             
+             if(have_option("/material_phase["//int2str(i)//&
+                  "]/scalar_field::Pressure/prognostic"//&
+                  &"/scheme/use_projection_method")) then
+                
+                if(have_option("/material_phase["//int2str(i)//&
+                     "]/scalar_field::Pressure/prognostic"//&
+                     &"/scheme/use_projection_method"//&
+                     &"/full_schur_complement")) then
+                   
+                   call get_option("/material_phase["//int2str(i)//&
+                        &"]/scalar_field::Pressure/prognostic/scheme/use_projection_method"//&
+                        &"/full_schur_complement/preconditioner_matrix[0]/name", schur_preconditioner)
+                   
+                   select case(schur_preconditioner)
+                   case("ScaledPressureMassMatrix")
+                      ewrite(-1,*) "WARNING - At present, the viscosity scaling for the pressure mass matrix is"
+                      ewrite(-1,*) "taken from the 1st component of the viscosity tensor. Such a scaling"
+                      ewrite(-1,*) "is only valid when all components of each viscosity tensor are constant."
+                   end select
+                   
+                   ! Check inner matrix is valid for Stokes - must have full viscous terms
+                   ! included. Stokes does not have a mass matrix.
+                   call get_option("/material_phase["//int2str(i)//&
+                        &"]/scalar_field::Pressure/prognostic/scheme/use_projection_method"//&
+                        &"/full_schur_complement/inner_matrix[0]/name", inner_matrix)
+                   
+                   if(trim(inner_matrix)/="FullMomentumMatrix") then
+                      ewrite(-1,*) "For Stokes problems, FullMomentumMatrix must be specified under:"
+                      ewrite(-1,*) "scalar_field::Pressure/prognostic/scheme/use_projection_method& "
+                      ewrite(-1,*) "&/full_schur_complement/inner_matrix"
+                      FLExit("For Stokes problems, change --> FullMomentumMatrix")
+                   end if
 
-            if(have_option("/material_phase["//int2str(i)//&
-                 "]/scalar_field::Pressure/prognostic"//&
-                 &"/scheme/use_projection_method")) then
+                end if
+                
+             end if
+             
+          end if
+          
+       end if
 
-               if(have_option("/material_phase["//int2str(i)//&
-                    "]/scalar_field::Pressure/prognostic"//&
-                    &"/scheme/use_projection_method"//&
-                    &"/full_schur_complement")) then
+       ! Check options for compressible Stokes simulations:
+       compressible_path = "/material_phase["//int2str(i)//"]/equation_of_state/compressible"
+       
+       if (have_option(trim(compressible_path))) then
 
-                  call get_option("/material_phase["//int2str(i)//&
-                       &"]/scalar_field::Pressure/prognostic/scheme/use_projection_method"//&
-                       &"/full_schur_complement/preconditioner_matrix[0]/name", schur_preconditioner)
+          implicit_pressure_buoyancy=have_option(trim(pressure_path)//&
+               "/spatial_discretisation/compressible/implicit_pressure_buoyancy")
+          
+          exclude_pressure_buoyancy=have_option(trim(compressible_path)//&
+               "/linearised_mantle/exclude_pressure_buoyancy")
+         
+          if(implicit_pressure_buoyancy .AND. exclude_pressure_buoyancy) then
+             ewrite(-1,*) "For Compressible Stokes problems, if you exclude the pressure effect on buoyancy, you cannot"
+             ewrite(-1,*) "include it in the pressure projection (implicit pressure buoyancy), as it does not exist."
+             FLExit("Cannot exclude pressure buoyancy and subsequently include it in the pressure projection!")
+          end if
 
-                  select case(schur_preconditioner)
-                  case("ScaledPressureMassMatrix")
-                     ewrite(-1,*) "WARNING - At present, the viscosity scaling for the pressure mass matrix is"
-                     ewrite(-1,*) "taken from the 1st component of the viscosity tensor. Such a scaling"
-                     ewrite(-1,*) "is only valid when all components of each viscosity tensor are constant."
-                  end select
+          temperature_path="/material_phase["//int2str(i)//"]/scalar_field::Temperature" 
 
-                  ! Check inner matrix is valid for Stokes - must have full viscous terms
-                  ! included. Stokes does not have a mass matrix.
-                  call get_option("/material_phase["//int2str(i)//&
-                       &"]/scalar_field::Pressure/prognostic/scheme/use_projection_method"//&
-                       &"/full_schur_complement/inner_matrix[0]/name", inner_matrix)
-                  
-                  if(trim(inner_matrix)/="FullMomentumMatrix") then
-                     ewrite(-1,*) "For Stokes problems, FullMomentumMatrix must be specified under:"
-                     ewrite(-1,*) "scalar_field::Pressure/prognostic/scheme/use_projection_method& "
-                     ewrite(-1,*) "&/full_schur_complement/inner_matrix"
-                     FLExit("For Stokes problems, change --> FullMomentumMatrix")
-                  end if
+          if(have_option(trim(temperature_path))) then
+             equation_type=equation_type_index(trim(temperature_path))
+             if((equation_type /= FIELD_EQUATION_MANTLEANELASTICENERGY)) then
+                ewrite(-1,*) "For compressible Stokes problems, only the MantleAnelasticEnergy equation type has been configured correctly."
+                FLExit("The MantleAnalasticEnergy equation type must be used for compressible Stokes problems.")
+             else
+                ! Check all fields required for compressible mantle simulations are present
+                if(.not.(have_option("/material_phase["//int2str(i)//"]/scalar_field::CompressibleReferenceDensity"))) &
+                     FLExit("MantleAnalasticEnergy equation requires CompresibleReferenceDensity Field.")
+                if(.not.(have_option("/material_phase["//int2str(i)//"]/scalar_field::CompressibleReferenceTemperature"))) &
+                     FLExit("MantleAnalasticEnergy equation requires CompresibleReferenceTemperature Field.")
+                if(.not.(have_option("/material_phase["//int2str(i)//"]/scalar_field::IsobaricSpecificHeatCapacity"))) &
+                     FLExit("MantleAnalasticEnergy equation requires IsobaricSpecificHeatCapacity Field.")
+                if(.not.(have_option("/material_phase["//int2str(i)//"]/scalar_field::IsobaricThermalExpansivity"))) &
+                     FLExit("MantleAnalasticEnergy equation requires IsobaricThermalExpansivity Field.")
+                if(.not.(have_option("/material_phase["//int2str(i)//"]/scalar_field::IsothermalBulkModulus"))) &
+                     FLExit("MantleAnalasticEnergy equation requires IsothermalBulkModulus Field.")               
+             end if
+            
+          end if
 
-               end if
-
-            end if
-
-         end if
-
-      end if
-
-      compressible_path = "/material_phase["//int2str(i)//"]/equation_of_state/compressible"
-
-      if (have_option(trim(compressible_path))) then
-
-         implicit_pressure_buoyancy=have_option(trim(pressure_path)//&
-            "/spatial_discretisation/compressible/implicit_pressure_buoyancy")
-
-         exclude_pressure_buoyancy=have_option(trim(compressible_path)//&
-            "/linearised_mantle/exclude_pressure_buoyancy")
-
-         if(implicit_pressure_buoyancy .AND. exclude_pressure_buoyancy) then
-           ewrite(-1,*) "For Compressible Stokes problems, if you exclude the pressure effect on buoyancy, you cannot"
-           ewrite(-1,*) "include it in the pressure projection (implicit pressure buoyancy), as it does not exist."
-           FLExit("Cannot exclude pressure buoyancy and subsequently include it in the pressure projection!")
-         end if
-      end if
+       end if
 
     end do
 

@@ -112,6 +112,7 @@ contains
       type(scalar_field), pointer :: tdensity, oldtdensity
       ! Fields associated with mantle anelastic energy equation (heat capacity and reference temperature)
       type(scalar_field), pointer :: refdens, heatcap, reftemp
+      type(scalar_field) :: refdens_remap, heatcap_remap, reftemp_remap
       ! Coordinate field(s)
       type(vector_field), pointer :: x, x_old, x_new
       type(vector_field) :: x_tfield
@@ -275,23 +276,29 @@ contains
         reftemp => dummyscalar
 
      case( FIELD_EQUATION_MANTLEANELASTICENERGY )
-        include_density = .true.
-        ! Extract required fields from state:
 
+        include_density = .true.
+
+        ! Extract required fields from state:
+        call allocate(refdens_remap, tfield%mesh, "Remap_CompressibleReferenceDensity")
         refdens=>extract_scalar_field(state, "CompressibleReferenceDensity")
-        ewrite_minmax(refdens)
-        assert(refdens%mesh==tfield%mesh)
+        call remap_field(refdens,refdens_remap)
+        ewrite_minmax(refdens_remap)
+        
+        call allocate(heatcap_remap, tfield%mesh, "Remap_IsobaricSpecificHeatCapacity")
         heatcap=>extract_scalar_field(state, "IsobaricSpecificHeatCapacity")
-        ewrite_minmax(heatcap)
-        assert(heatcap%mesh==tfield%mesh)
+        call remap_field(heatcap,heatcap_remap)
+        ewrite_minmax(heatcap_remap)
+
+        call allocate(reftemp_remap, tfield%mesh, "Remap_CompressibleReferenceTemperature")
         reftemp=>extract_scalar_field(state, "CompressibleReferenceTemperature")
-        ewrite_minmax(reftemp)
-        assert(reftemp%mesh==tfield%mesh)
+        call remap_field(reftemp,reftemp_remap)
+        ewrite_minmax(reftemp_remap)
 
         allocate(tdensity)
         call allocate(tdensity, tfield%mesh, name="CompressibleReferenceDensity*IsobaricSpecificHeatCapacity")
-        call set(tdensity, refdens)
-        call scale(tdensity, heatcap)
+        call set(tdensity, refdens_remap)
+        call scale(tdensity, heatcap_remap)
        
         if (.not.have_option(trim(option_path)//'/prognostic/equation[0]/density[0]/discretisation_options')) then
           FLExit("MantleAnelasticEnergy equation requires additional discretisation options for the density coefficient.")
@@ -299,6 +306,9 @@ contains
 
         ! Old density not needed, so use a constant field.
         oldtdensity=>dummyscalar
+
+        call deallocate(refdens_remap)
+        call deallocate(heatcap_remap)
 
      end select
 
@@ -701,7 +711,7 @@ contains
           ! assemble it all into a coherent equation
           call assemble_field_eqn_cv(M, A_m, cvmass, rhs, &
                                     tfield, l_old_tfield, &
-                                    tdensity, oldtdensity, tdensity_options, reftemp, &
+                                    tdensity, oldtdensity, tdensity_options, reftemp_remap, &
                                     source, absorption, tfield_options%theta, &
                                     state, advu, sub_dt, explicit, &
                                     t_cvmass, t_abs_src_cvmass, t_cvmass_old, t_cvmass_new, & 
@@ -791,6 +801,7 @@ contains
       if (equation_type==FIELD_EQUATION_MANTLEANELASTICENERGY) then
         call deallocate(tdensity)
         deallocate(tdensity)
+        call deallocate(reftemp_remap)
       end if
 
     end subroutine solve_field_eqn_cv
