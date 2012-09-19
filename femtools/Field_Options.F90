@@ -1232,11 +1232,11 @@ contains
             FLExit("Selected equation type only compatible with control volume or continuous galerkin spatial_discretisation")
           end if
         case(FIELD_EQUATION_MANTLEANELASTICENERGY)
-          if(.not.(cg_disc)) then
+          if(.not.(cg_disc.or.cv_disc)) then
             ewrite(-1,*) "Options checking field "//&
                           trim(field_name)//" in material_phase "//&
                           trim(mat_name)//"."
-            FLExit("Selected equation type only compatible with continuous galerkin spatial_discretisation")
+            FLExit("Selected equation type only compatible with continuous galerkin and control volume spatial_discretisation")
           end if
         case(FIELD_EQUATION_HEATTRANSFER)
           if(.not.cv_disc) then

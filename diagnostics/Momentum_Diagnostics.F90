@@ -44,6 +44,7 @@ module momentum_diagnostics
   use spud
   use state_fields_module
   use state_module
+  use fefields, only : compute_cv_mass
   
   implicit none
   
@@ -53,10 +54,8 @@ module momentum_diagnostics
             calculate_tensor_second_invariant, calculate_imposed_material_velocity_source, &
             calculate_imposed_material_velocity_absorption, &
             calculate_scalar_potential, calculate_projection_scalar_potential, &
-            calculate_geostrophic_velocity, &
-            calculate_viscous_dissipation,calculate_adiabatic_heating_coefficient, &
-            calculate_adiabatic_heating_absorption,calculate_viscous_dissipation_plus_surface_adiabat
-           
+            calculate_geostrophic_velocity, calculate_viscous_dissipation, calculate_adiabatic_heating_coefficient, &
+            calculate_adiabatic_heating_absorption, calculate_viscous_dissipation_plus_surface_adiabat           
   
 contains
 
@@ -89,80 +88,6 @@ contains
     call tensor_second_invariant(source_field, s_field)
 
   end subroutine calculate_tensor_second_invariant
-
-  subroutine calculate_viscous_dissipation_plus_surface_adiabat(state, s_field)
-    ! A routine to calculate the viscous dissipation plus the surface adiabatic term. 
-    ! Currently assumes a constant viscosity:
-    type(state_type), intent(inout) :: state
-    type(scalar_field), intent(inout) :: s_field
-
-    type(vector_field), pointer :: gravity_direction, velocity
-    type(scalar_field), pointer :: thermal_expansion_local, reference_density_local
-    type(scalar_field) :: surface_adiabat, thermal_expansion_remap, reference_density_remap
-
-    real :: gravity_magnitude, gamma, T0, rho0
-
-    character(len=OPTION_PATH_LEN) eos_option_path
-    logical :: have_linear_eos, have_linearised_mantle_compressible_eos
-    
-    ewrite(1,*) 'In calculate_viscous_dissipation_plus_surface_adiabat'
-
-    ! this must be done first since it sets the scalar field:
-    call calculate_viscous_dissipation(state, s_field)
-
-    ! Extract velocity field from state and determine component in gravitational direction:
-    call get_option("/physical_parameters/gravity/magnitude", gravity_magnitude)
-    gravity_direction => extract_vector_field(state, "GravityDirection")
-    velocity => extract_vector_field(state, "NonlinearVelocity")
-
-    ! Extract other relevant thermodynamic parameters:
-    eos_option_path='/material_phase::'//trim(state%name)//'/equation_of_state'
-
-    ! Determine which EOS is relevant:
-    have_linear_eos = (have_option(trim(eos_option_path)//'/fluids/linear'))
-    have_linearised_mantle_compressible_eos = (have_option(trim(eos_option_path)//'/compressible/linearised_mantle'))
-
-    ! Extract relevant parameters from options/state:
-    if(have_linear_eos) then
-       ! Get value for thermal expansion coefficient (constant)
-       call get_option(trim(eos_option_path)//'/fluids/linear/temperature_dependency/thermal_expansion_coefficient', gamma)
-       ! Get value for reference density (constant)
-       call get_option(trim(eos_option_path)//'/fluids/linear/reference_density', rho0)
-    else if(have_linearised_mantle_compressible_eos) then
-       ! Get spatially varying thermal expansion field and remap to s_field%mesh if required:
-       thermal_expansion_local=>extract_scalar_field(state,'IsobaricThermalExpansivity')
-       call allocate(thermal_expansion_remap, s_field%mesh, 'RemappedIsobaricThermalExpansivity')
-       call remap_field(thermal_expansion_local, thermal_expansion_remap)
-       ! Get spatially varying thermal expansion field and remap to s_field%mesh if required:
-       reference_density_local=>extract_scalar_field(state,'CompressibleReferenceDensity')
-       call allocate(reference_density_remap, s_field%mesh, 'RemappedCompressibleReferenceDensity')
-       call remap_field(reference_density_local, reference_density_remap)
-    else
-       FLExit("Selected EOS not yet configured for viscous dissipation plus surface adiabat algorithm")
-    end if
-
-    ! Get surface temperature from options:
-    call get_option(trim(complete_field_path(trim(s_field%option_path))) // &
-                    "/algorithm[0]/surface_temperature", T0)
-
-    call allocate(surface_adiabat, s_field%mesh, "SurfaceAdiabat")
-    call inner_product(surface_adiabat, velocity, gravity_direction)
-
-    if(have_linear_eos) then
-       call scale(surface_adiabat, T0*gravity_magnitude*gamma*rho0)
-    else if(have_linearised_mantle_compressible_eos) then
-       call scale(surface_adiabat, T0*gravity_magnitude)
-       call scale(surface_adiabat, thermal_expansion_remap)
-       call scale(surface_adiabat, reference_density_remap)
-       call deallocate(thermal_expansion_remap)
-       call deallocate(reference_density_remap)
-    end if
-
-    call addto(s_field, surface_adiabat)
-
-    call deallocate(surface_adiabat)
-
-  end subroutine calculate_viscous_dissipation_plus_surface_adiabat
 
   subroutine calculate_viscous_dissipation(state, s_field)
     ! A routine to calculate the viscous dissipation. Currently
@@ -230,7 +155,9 @@ contains
           end do
        end do
        call set(s_field, node, val)
-    end do
+    end do    
+
+    ewrite_minmax(s_field)
 
     ! Deallocate:
     call deallocate(strain_rate_tensor)
@@ -239,78 +166,296 @@ contains
 
   end subroutine calculate_viscous_dissipation
 
+  subroutine calculate_viscous_dissipation_plus_surface_adiabat(state, s_field)
+    ! A routine to calculate the viscous dissipation plus the surface adiabatic term. 
+    ! Currently assumes a constant viscosity:
+    type(state_type), intent(inout) :: state
+    type(scalar_field), intent(inout) :: s_field
+
+    type(scalar_field) :: surface_adiabat_field
+    logical :: include_surface_adiabat
+    
+    ewrite(1,*) 'In calculate_viscous_dissipation_plus_surface_adiabat'
+
+    ! This must be done first since it sets the scalar field to the viscous dissipation
+    call calculate_viscous_dissipation(state, s_field)
+
+    ! Allocate surface adiabat field, which will later be added to viscous dissipation:
+    call allocate(surface_adiabat_field, s_field%mesh, "SurfaceAdiabatField")
+    surface_adiabat_field%option_path = s_field%option_path
+
+    ! Calculate surface adiabat term:
+    call adiabatic_heating_coefficient(state, surface_adiabat_field, include_surface_adiabat=.true.)
+
+    ! Add surface adiabat to viscous dissipation and clean up:
+    call addto(s_field, surface_adiabat_field)
+    call deallocate(surface_adiabat_field)
+
+    ewrite_minmax(s_field)
+
+  end subroutine calculate_viscous_dissipation_plus_surface_adiabat
+
   subroutine calculate_adiabatic_heating_coefficient(state, s_field)
     ! Calculates adiabatic heating coefficient, which is later multiplied
     ! by Temperature to form an absorption term :
     type(state_type), intent(inout) :: state
     type(scalar_field), intent(inout) :: s_field
 
-    type(scalar_field), pointer :: temperature, thermal_expansion_local, reference_density_local
-    type(vector_field), pointer :: velocity
-    type(vector_field), pointer :: gravity_direction
+    logical :: include_surface_adiabat
 
-    type(scalar_field) :: velocity_component, thermal_expansion_remap, reference_density_remap
-    real :: gravity_magnitude, gamma, rho0
-    integer :: node
+    ewrite(1,*) 'In calculate_adiabatic_heating_coefficient'
+
+    call adiabatic_heating_coefficient(state, s_field, include_surface_adiabat=.false.)
+
+    ewrite_minmax(s_field)
+
+  end subroutine calculate_adiabatic_heating_coefficient
+
+  subroutine adiabatic_heating_coefficient(state, s_field, include_surface_adiabat)
+    ! Calculates adiabatic heating coefficient, which is later multiplied
+    ! by Temperature to form an absorption term:
+    type(state_type), intent(inout) :: state
+    type(scalar_field), intent(inout) :: s_field
+    logical :: include_surface_adiabat
+
+    type(scalar_field), pointer :: thermal_expansion_local, reference_density_local
+    type(vector_field), pointer :: velocity, gravity_direction
+
+    type(vector_field) :: velocity_remap
+    type(scalar_field) :: velocity_component, thermal_expansion_remap
+    type(scalar_field) :: reference_density_remap
+    real :: gravity_magnitude, gamma, rho0, T0
+    integer :: node, stat_vel, stat_rho, stat_gamma
 
     character(len=OPTION_PATH_LEN) eos_option_path
     logical :: have_linear_eos, have_linearised_mantle_compressible_eos
 
-    ewrite(1,*) 'In calculate_adiabatic_heating_coefficient'
+    ewrite(1,*) 'In adiabatic_heating_coefficient'
 
-    ! Extract temperature from state:
-    temperature => extract_scalar_field(state, "Temperature")
-
-    ! Extract velocity field from state:
+    ! Get velocity field from state and verify that it can be remapped on to s_field%mesh
+    ! in order to calculate inner product with gravity direction vector:
     velocity => extract_vector_field(state, "NonlinearVelocity")
+    call allocate(velocity_remap, velocity%dim, s_field%mesh, "RemappedVelocity")
+    call test_remap_validity(velocity,velocity_remap,stat_vel)
+    call deallocate(velocity_remap)
 
-    ! Get physical parameters and determine velocity component in gravitational direction:
+    ! Extract gravitational info from state:
+    gravity_direction => extract_vector_field(state, "GravityDirection")
+    call get_option("/physical_parameters/gravity/magnitude", gravity_magnitude)
+
+    if(stat_vel == 0) then
+
+       call allocate(velocity_component, s_field%mesh, "VerticalVelocityComponent")
+       ! Take inner product of velocity and gravity to determine vertical component of velocity:
+       call inner_product(velocity_component, velocity, gravity_direction)
+       
+       ! Determine which EOS is relevant:
+       eos_option_path='/material_phase::'//trim(state%name)//'/equation_of_state'
+       have_linear_eos = (have_option(trim(eos_option_path)//'/fluids/linear'))
+       have_linearised_mantle_compressible_eos = (have_option(trim(eos_option_path)//'/compressible/linearised_mantle'))
+
+       if(have_linear_eos) then
+
+          ! Get value for thermal expansion coefficient (constant)
+          call get_option(trim(eos_option_path)//'/fluids/linear/temperature_dependency/thermal_expansion_coefficient', gamma)
+          ! Get value for reference density (constant)
+          call get_option(trim(eos_option_path)//'/fluids/linear/reference_density', rho0)
+          ! Calculate and set adiabatic heating coefficient:
+          do node = 1, node_count(s_field)
+             call set(s_field, node, -gamma*rho0*gravity_magnitude*node_val(velocity_component,node))
+          end do
+
+       elseif(have_linearised_mantle_compressible_eos) then
+
+          ! Get spatially varying thermal expansion field and remap to s_field%mesh if possible and required:
+          thermal_expansion_local=>extract_scalar_field(state,'IsobaricThermalExpansivity')       
+          call allocate(thermal_expansion_remap, s_field%mesh, 'RemappedIsobaricThermalExpansivity')
+          call test_remap_validity(thermal_expansion_local,thermal_expansion_remap,stat_gamma)
+          if(stat_gamma == 0) then
+             ! Remap to s_field%mesh:
+             call remap_field(thermal_expansion_local, thermal_expansion_remap)
+          else
+             ! Remap is not possible:
+             ewrite(-1,*) "IsobaricThermalExpansivity cannot be remapped to the adiabatic_heating_coefficient mesh,"
+             ewrite(-1,*) "in the adiabatic heating coefficient algorithm."
+             FLExit("Please put the IsobaricThermalExpansivity Field on a mesh that can be remapped to the adiabatic_heating_coefficient mesh.")
+          end if
+
+          ! Get spatially varying compressible reference density and remap to s_field%mesh if possible and required:
+          reference_density_local=>extract_scalar_field(state,'CompressibleReferenceDensity')
+          call allocate(reference_density_remap, s_field%mesh, 'RemappedCompressibleReferenceDensity')
+          call test_remap_validity(reference_density_local,reference_density_remap,stat_rho)
+          if(stat_rho == 0) then
+             ! Remap to s_field%mesh:
+             call remap_field(reference_density_local, reference_density_remap)
+          else
+             ! Remap is not possible:
+             ewrite(-1,*) "CompressibleReferenceDensity cannot be remapped to the adiabatic_heating_coefficient mesh,"
+             ewrite(-1,*) "in the adiabatic heating coefficient algorithm."
+             FLExit("Please put the CompressibleReferenceDensity Field on a mesh that can be remapped to the adiabatic_heating_coefficient mesh.")
+          end if
+
+          ! Calculate and set adiabatic heating coefficient:
+          do node = 1, node_count(s_field)
+             call set(s_field, node, -node_val(thermal_expansion_remap,node) * node_val(reference_density_remap, node) &
+                  * gravity_magnitude * node_val(velocity_component,node))
+          end do
+
+          call deallocate(thermal_expansion_remap)
+          call deallocate(reference_density_remap)
+
+       else
+
+          FLExit("Selected EOS not yet configured for adiabatic_heating_algorithm")
+
+       end if
+
+       call deallocate(velocity_component)
+
+    else
+
+       ! Velocity cannot be remapped to the s_field%mesh. We therefore calculate the adiabatic heating coefficient
+       ! using a 'projection':
+       call adiabatic_heating_coefficient_projection(state, s_field)
+
+    end if
+
+    if(include_surface_adiabat) then
+       ! Scale solutions by T0 and reverse sign:
+       call get_option(trim(complete_field_path(trim(s_field%option_path))) // &
+            "/algorithm[0]/surface_temperature", T0)
+       call scale(s_field, -T0)
+    end if
+
+  end subroutine adiabatic_heating_coefficient
+
+  subroutine adiabatic_heating_coefficient_projection(state, s_field)
+    ! Calculates adiabatic heating coefficient, which is later multiplied
+    ! by Temperature to form an absorption term. 
+    type(state_type), intent(inout) :: state
+    type(scalar_field), intent(inout) :: s_field
+
+    type(vector_field), pointer :: positions, gravity_direction, velocity
+    type(scalar_field), pointer :: thermal_expansion, reference_density
+    type(scalar_field), pointer :: dummyscalar
+
+    type(scalar_field) :: lumped_mass
+
+    real :: gravity_magnitude, rho0, gamma
+    integer :: ele
+
+    character(len=OPTION_PATH_LEN) eos_option_path
+    logical :: have_linear_eos, have_linearised_mantle_compressible_eos
+
+    ewrite(1,*) 'In adiabatic_heating_coefficient_projection'
+
+    ! Allocate dummy scalar for instances where a spatially varying reference density/thermal_expansion 
+    ! field is not required:
+    allocate(dummyscalar)
+    call allocate(dummyscalar, s_field%mesh, name="DummyScalar", field_type=FIELD_TYPE_CONSTANT)
+    call zero(dummyscalar)
+
+    ! Extract gravitational unit vector and velocity from state:
     call get_option("/physical_parameters/gravity/magnitude", gravity_magnitude)
     gravity_direction => extract_vector_field(state, "GravityDirection")
-
-    call allocate(velocity_component, s_field%mesh, "VerticalVelocityComponent")
-    call inner_product(velocity_component, velocity, gravity_direction)
+    velocity => extract_vector_field(state, "NonlinearVelocity")
+    
+    ! Extract coordinates from state (required for detwei in integration):
+    positions=>extract_vector_field(state,'Coordinate')
 
     ! Determine which EOS is relevant:
     eos_option_path='/material_phase::'//trim(state%name)//'/equation_of_state'
     have_linear_eos = (have_option(trim(eos_option_path)//'/fluids/linear'))
     have_linearised_mantle_compressible_eos = (have_option(trim(eos_option_path)//'/compressible/linearised_mantle'))
 
+    ! Extract relevant parameters from options/state:
     if(have_linear_eos) then
        ! Get value for thermal expansion coefficient (constant)
        call get_option(trim(eos_option_path)//'/fluids/linear/temperature_dependency/thermal_expansion_coefficient', gamma)
        ! Get value for reference density (constant)
        call get_option(trim(eos_option_path)//'/fluids/linear/reference_density', rho0)
+       ! As these values are constant for this eos, we need to point reference density and 
+	   ! thermal_expansion to dummy scalars:
+       reference_density => dummyscalar
+       thermal_expansion => dummyscalar
     elseif(have_linearised_mantle_compressible_eos) then
-       ! Get spatially varying thermal expansion field and remap to s_field%mesh if required:
-       thermal_expansion_local=>extract_scalar_field(state,'IsobaricThermalExpansivity')
-       call allocate(thermal_expansion_remap, s_field%mesh, 'RemappedIsobaricThermalExpansivity')
-       call remap_field(thermal_expansion_local, thermal_expansion_remap)
-       ! Get spatially varying compressible reference density and remap to s_field%mesh if required:
-       reference_density_local=>extract_scalar_field(state,'CompressibleReferenceDensity')
-       call allocate(reference_density_remap, s_field%mesh, 'RemappedCompressibleReferenceDensity')
-       call remap_field(reference_density_local, reference_density_remap)
+       ! Get spatially varying thermal expansion field:
+       thermal_expansion=>extract_scalar_field(state,'IsobaricThermalExpansivity')
+       ! Get spatially varying reference density field:
+       reference_density=>extract_scalar_field(state,'CompressibleReferenceDensity')
     else
-       FLExit("Selected EOS not yet configured for adiabatic heating algorithm")
+       FLExit("Selected EOS not yet configured for adiabatic_heating_coefficient_CV algorithm")
+    endif
+
+    ! Integrate to determine RHS:
+    call zero(s_field)
+    do ele = 1, element_count(s_field)
+       if(element_owned(s_field, ele)) then      
+          if(have_linear_eos) then
+             call integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, reference_density, gravity_magnitude, ele, rho0, gamma)
+          else if(have_linearised_mantle_compressible_eos) then             
+             call integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, reference_density, gravity_magnitude, ele)
+          end if
+       end if
+    end do
+
+    ! Compute inverse lumped mass matrix:
+    call allocate(lumped_mass, s_field%mesh, name="Lumped_mass")        
+    call compute_cv_mass(positions, lumped_mass)
+    call invert(lumped_mass)
+    
+    ! Multiply RHS by inverse lumped mass matrix to determine final adiabatic_heating_coefficient:
+    call scale(s_field, lumped_mass)
+    
+    ! Clean up:
+    call deallocate(lumped_mass)
+    call deallocate(dummyscalar)
+
+  end subroutine adiabatic_heating_coefficient_projection
+
+  subroutine integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, reference_density, gravity_magnitude, ele, rho0, gamma)
+    type(scalar_field), intent(inout) :: s_field
+    type(vector_field), intent(in), pointer :: positions
+    type(scalar_field), intent(in), pointer :: thermal_expansion, reference_density
+    type(vector_field), intent(in), pointer :: velocity, gravity_direction
+    real, intent(in)    :: gravity_magnitude
+    real, optional      :: rho0, gamma
+    integer, intent(in) :: ele
+    
+    ! For integration:
+    integer :: dim, gi
+    real, dimension(ele_loc(s_field,ele)) :: ele_val
+    real, dimension(positions%dim, ele_ngi(positions, ele)) :: positions_quad, velocity_quad, gravity_direction_quad
+    real, dimension(ele_ngi(positions, ele)) :: detwei, density_quad, gamma_quad, inner_prod
+
+
+    ! Evaluate key parameters at gauss points:
+    call transform_to_physical(positions, ele, detwei = detwei)
+    positions_quad          = ele_val_at_quad(positions, ele)
+    velocity_quad           = ele_val_at_quad(velocity, ele)
+    gravity_direction_quad  = ele_val_at_quad(gravity_direction, ele)
+    density_quad            = ele_val_at_quad(reference_density, ele)
+    gamma_quad              = ele_val_at_quad(thermal_expansion, ele)
+
+    ! Calculate inner product of velocity and gravity unit vector at gauss points:
+    inner_prod = 0.
+    do dim = 1, velocity%dim
+       do gi = 1, ele_ngi(velocity, ele)
+          inner_prod(gi) = inner_prod(gi) + velocity_quad(dim,gi)*gravity_direction_quad(dim,gi)
+       end do
+    end do
+
+    ! Evaluate nodal values of integral:
+    if(present(rho0) .and. present(gamma)) then
+       ele_val = shape_rhs(ele_shape(s_field,ele), -inner_prod*gravity_magnitude*gamma*rho0*detwei)
+    else
+       ele_val = shape_rhs(ele_shape(s_field,ele), -inner_prod*gravity_magnitude*gamma_quad*density_quad*detwei)
     end if
 
-    ! Calculate and set adiabatic heating coefficient:
-    if(have_linear_eos) then
-       do node = 1, node_count(s_field)
-          call set(s_field, node, -gamma*rho0*gravity_magnitude*node_val(velocity_component,node))
-       end do
-    else if(have_linearised_mantle_compressible_eos) then
-       do node = 1, node_count(s_field)
-          call set(s_field, node, -node_val(thermal_expansion_remap,node) * node_val(reference_density_remap, node) &
-                  * gravity_magnitude * node_val(velocity_component,node))
-       end do
-       call deallocate(thermal_expansion_remap)
-       call deallocate(reference_density_remap)
-    end if
-
-    call deallocate(velocity_component)
-
-  end subroutine calculate_adiabatic_heating_coefficient
+    ! Add this to the global RHS vector:
+    call addto(s_field, ele_nodes(s_field, ele), ele_val)
+         
+  end subroutine integrate_RHS_ele
 
   subroutine calculate_adiabatic_heating_absorption(state, s_field)
     ! Calculates adiabatic heating absorption term - i.e. the adiabatic heating
