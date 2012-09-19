@@ -44,7 +44,7 @@ module momentum_diagnostics
   use spud
   use state_fields_module
   use state_module
-  use fefields, only : compute_lumped_mass
+  use fefields, only : compute_cv_mass
   
   implicit none
   
@@ -54,8 +54,8 @@ module momentum_diagnostics
             calculate_tensor_second_invariant, calculate_imposed_material_velocity_source, &
             calculate_imposed_material_velocity_absorption, &
             calculate_scalar_potential, calculate_projection_scalar_potential, &
-            calculate_geostrophic_velocity, calculate_viscous_dissipation,calculate_adiabatic_heating_coefficient, &
-            calculate_adiabatic_heating_absorption,calculate_viscous_dissipation_plus_surface_adiabat           
+            calculate_geostrophic_velocity, calculate_viscous_dissipation, calculate_adiabatic_heating_coefficient, &
+            calculate_adiabatic_heating_absorption, calculate_viscous_dissipation_plus_surface_adiabat           
   
 contains
 
@@ -189,8 +189,9 @@ contains
 
     ! Add surface adiabat to viscous dissipation and clean up:
     call addto(s_field, surface_adiabat_field)
-    ewrite_minmax(s_field)
     call deallocate(surface_adiabat_field)
+
+    ewrite_minmax(s_field)
 
   end subroutine calculate_viscous_dissipation_plus_surface_adiabat
 
@@ -373,17 +374,18 @@ contains
        call get_option(trim(eos_option_path)//'/fluids/linear/temperature_dependency/thermal_expansion_coefficient', gamma)
        ! Get value for reference density (constant)
        call get_option(trim(eos_option_path)//'/fluids/linear/reference_density', rho0)
-       ! As these values are constant for this eos, we need to point reference density and thermal_expansion to dummy scalars:
+       ! As these values are constant for this eos, we need to point reference density and 
+	   ! thermal_expansion to dummy scalars:
        reference_density => dummyscalar
        thermal_expansion => dummyscalar
-    else if(have_linearised_mantle_compressible_eos) then
+    elseif(have_linearised_mantle_compressible_eos) then
        ! Get spatially varying thermal expansion field:
        thermal_expansion=>extract_scalar_field(state,'IsobaricThermalExpansivity')
        ! Get spatially varying reference density field:
        reference_density=>extract_scalar_field(state,'CompressibleReferenceDensity')
     else
        FLExit("Selected EOS not yet configured for adiabatic_heating_coefficient_CV algorithm")
-    end if
+    endif
 
     ! Integrate to determine RHS:
     call zero(s_field)
@@ -399,7 +401,7 @@ contains
 
     ! Compute inverse lumped mass matrix:
     call allocate(lumped_mass, s_field%mesh, name="Lumped_mass")        
-    call compute_lumped_mass(positions, lumped_mass)
+    call compute_cv_mass(positions, lumped_mass)
     call invert(lumped_mass)
     
     ! Multiply RHS by inverse lumped mass matrix to determine final adiabatic_heating_coefficient:

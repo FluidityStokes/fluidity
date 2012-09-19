@@ -298,9 +298,6 @@ module field_derivatives
       real, dimension(t_field%dim(1),t_field%dim(2)) :: t
       integer :: node
 
-      ewrite_minmax(infield)
-      ewrite_minmax(positions)
-
       ! Compute velocity gradient tensor:
       call grad(infield,positions,t_field)
       

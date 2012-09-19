@@ -110,7 +110,7 @@ contains
       type(scalar_field), pointer :: tfield, oldtfield, it_tfield
       ! Density fields associated with tfield's equation (i.e. if its not pure advection)
       type(scalar_field), pointer :: tdensity, oldtdensity
-      ! Fields associated with mantle anelastic energy equation (heat capacity and reference temperature)
+      ! Fields associated with mantle anelastic energy equation:
       type(scalar_field), pointer :: refdens, heatcap, reftemp
       type(scalar_field) :: refdens_remap, heatcap_remap, reftemp_remap
       ! Coordinate field(s)
@@ -1237,7 +1237,6 @@ contains
           end if
         end if
 
-
         if(include_source .and. (.not. add_src_directly_to_rhs)) call addto(rhs, masssource)
 
         if(include_absorption) then
@@ -2244,7 +2243,7 @@ contains
       type(scalar_field), pointer :: tmpfield
       ! Density fields associated with tfield's equation (i.e. if its not pure advection)
       type(scalar_field_pointer), dimension(nfields) :: tdensity, oldtdensity
-      ! Fields associated with mantle anelastic energy equation (heat capacity and reference temperature)
+      ! Fields associated with mantle anelastic energy equation:
       type(scalar_field_pointer), dimension(nfields) :: reftemp
       ! Coordinate field
       type(vector_field), pointer :: x, x_old, x_new
