@@ -306,6 +306,8 @@ module field_derivatives
            t=node_val(t_field, node)
            call set(t_field, node, (t+transpose(t))/2.) 
       end do 
+
+      ewrite_minmax(t_field)
  
     end subroutine strain_rate
 

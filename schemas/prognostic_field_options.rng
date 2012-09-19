@@ -2493,7 +2493,7 @@ Uses a nonconservative time discretisation.</a:documentation>
         <a:documentation>Select the equation used to solve for this field.
 Anelastic Energy equation for use with compressible mantle simulations.
 
-ONLY WORKS FOR CONTINUOUS GALERKIN DISCRETISATIONS
+ONLY WORKS FOR CONTINUOUS GALERKIN AND CONTROL VOLUME DISCRETISATIONS
 
 It depends on the prescribed/diagnostic fields:
  - CompressibleReferenceDensity
@@ -2502,6 +2502,43 @@ It depends on the prescribed/diagnostic fields:
         <attribute name="name">
           <value>MantleAnelasticEnergy</value>
         </attribute>
+        <element name="density">
+          <a:documentation>Set the discretisation options for the density weighting
+(actually the CompressibleReferenceDensity*IsobaricSpecificHeatCapacity).
+
+ONLY REQUIRED FOR CONTROL VOLUME DISCRETISATIONS.</a:documentation>
+          <attribute name="name">
+            <value>CompressibleReferenceDensity*IsobaricSpecificHeatCapacity</value>
+          </attribute>
+          <optional>
+            <element name="discretisation_options">
+              <a:documentation>Provide discretisation options for the coefficient density field.
+
+If not provided then the discretisation options will default to those
+under the field that is named (hence it will generally have to be a prognostic
+field itself).</a:documentation>
+              <element name="spatial_discretisation">
+                <element name="control_volumes">
+                  <ref name="spatial_control_volume_options_excluding_none"/>
+                </element>
+              </element>
+              <element name="temporal_discretisation">
+                <element name="theta">
+                  <a:documentation>Implicit/explicit control
+ =0.  -- explicit
+ =0.5 -- Crank-Nicolson
+ =1.  -- implicit</a:documentation>
+                  <element name="real_value">
+                    <attribute name="rank">
+                      <value>0</value>
+                    </attribute>
+                    <value>1.0</value>
+                  </element>
+                </element>
+              </element>
+            </element>
+          </optional>
+        </element>
       </element>
       <element name="equation">
         <a:documentation>Option to solve for electrical potential from

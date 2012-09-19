@@ -110,6 +110,9 @@ contains
       type(scalar_field), pointer :: tfield, oldtfield, it_tfield
       ! Density fields associated with tfield's equation (i.e. if its not pure advection)
       type(scalar_field), pointer :: tdensity, oldtdensity
+      ! Fields associated with mantle anelastic energy equation:
+      type(scalar_field), pointer :: refdens, heatcap, reftemp
+      type(scalar_field) :: refdens_remap, heatcap_remap, reftemp_remap
       ! Coordinate field(s)
       type(vector_field), pointer :: x, x_old, x_new
       type(vector_field) :: x_tfield
@@ -249,8 +252,10 @@ contains
       case(FIELD_EQUATION_ADVECTIONDIFFUSION)
 
         ! density not needed so use a constant field for assembly
-        tdensity=>dummyscalar
-        oldtdensity=>dummyscalar
+        tdensity    => dummyscalar
+        oldtdensity => dummyscalar
+        ! reftemp not needed so use a constant field also:
+        reftemp => dummyscalar
 
       case(FIELD_EQUATION_CONSERVATIONOFMASS, FIELD_EQUATION_REDUCEDCONSERVATIONOFMASS, &
            FIELD_EQUATION_INTERNALENERGY, FIELD_EQUATION_HEATTRANSFER )
@@ -266,7 +271,46 @@ contains
         ! is solved for with this subroutine and the correct priority ordering.
         oldtdensity=>extract_scalar_field(state(1), "Old"//trim(tmpstring))
         ewrite_minmax(oldtdensity)
-      end select
+
+        ! reftemp not needed so use a constant field:
+        reftemp => dummyscalar
+
+     case( FIELD_EQUATION_MANTLEANELASTICENERGY )
+
+        include_density = .true.
+
+        ! Extract required fields from state:
+        call allocate(refdens_remap, tfield%mesh, "Remap_CompressibleReferenceDensity")
+        refdens=>extract_scalar_field(state, "CompressibleReferenceDensity")
+        call remap_field(refdens,refdens_remap)
+        ewrite_minmax(refdens_remap)
+        
+        call allocate(heatcap_remap, tfield%mesh, "Remap_IsobaricSpecificHeatCapacity")
+        heatcap=>extract_scalar_field(state, "IsobaricSpecificHeatCapacity")
+        call remap_field(heatcap,heatcap_remap)
+        ewrite_minmax(heatcap_remap)
+
+        call allocate(reftemp_remap, tfield%mesh, "Remap_CompressibleReferenceTemperature")
+        reftemp=>extract_scalar_field(state, "CompressibleReferenceTemperature")
+        call remap_field(reftemp,reftemp_remap)
+        ewrite_minmax(reftemp_remap)
+
+        allocate(tdensity)
+        call allocate(tdensity, tfield%mesh, name="CompressibleReferenceDensity*IsobaricSpecificHeatCapacity")
+        call set(tdensity, refdens_remap)
+        call scale(tdensity, heatcap_remap)
+       
+        if (.not.have_option(trim(option_path)//'/prognostic/equation[0]/density[0]/discretisation_options')) then
+          FLExit("MantleAnelasticEnergy equation requires additional discretisation options for the density coefficient.")
+        end if
+
+        ! Old density not needed, so use a constant field.
+        oldtdensity=>dummyscalar
+
+        call deallocate(refdens_remap)
+        call deallocate(heatcap_remap)
+
+     end select
 
       ! get the density option path
       if(have_option(trim(option_path)//'/prognostic/equation[0]/density[0]/discretisation_options')) then
@@ -667,7 +711,7 @@ contains
           ! assemble it all into a coherent equation
           call assemble_field_eqn_cv(M, A_m, cvmass, rhs, &
                                     tfield, l_old_tfield, &
-                                    tdensity, oldtdensity, tdensity_options, &
+                                    tdensity, oldtdensity, tdensity_options, reftemp_remap, &
                                     source, absorption, tfield_options%theta, &
                                     state, advu, sub_dt, explicit, &
                                     t_cvmass, t_abs_src_cvmass, t_cvmass_old, t_cvmass_new, & 
@@ -754,6 +798,11 @@ contains
       if (include_porosity) then
         call deallocate(t_cvmass_with_porosity)
       end if
+      if (equation_type==FIELD_EQUATION_MANTLEANELASTICENERGY) then
+        call deallocate(tdensity)
+        deallocate(tdensity)
+        call deallocate(reftemp_remap)
+      end if
 
     end subroutine solve_field_eqn_cv
     ! end of solution wrapping subroutines
@@ -762,7 +811,7 @@ contains
     ! equation wrapping subroutines
     subroutine assemble_field_eqn_cv(M, A_m, m_cvmass, rhs, &
                                     tfield, oldtfield, &
-                                    tdensity, oldtdensity, tdensity_options, &
+                                    tdensity, oldtdensity, tdensity_options, reftemp, &
                                     source, absorption, theta, &
                                     state, advu, dt, explicit, &
                                     cvmass, abs_src_cvmass, cvmass_old, cvmass_new, &
@@ -788,6 +837,8 @@ contains
       type(scalar_field), intent(inout) :: oldtfield, tdensity, oldtdensity
       ! options wrappers for tdensity
       type(cv_options_type) :: tdensity_options
+      ! requirements for mantle anelastic energy equation type:
+      type(scalar_field), intent(in) :: reftemp
       type(scalar_field), intent(inout) :: source, absorption
       ! time discretisation parameter
       real, intent(in) :: theta
@@ -899,6 +950,7 @@ contains
       ! rate of change form (as well as adding in any extra terms for InternalEnergy
       ! for instance)
       select case(equation_type)
+
       case (FIELD_EQUATION_ADVECTIONDIFFUSION)
 
         ! [M + dt*A_m + theta*dt*D_m](T^{n+1}-T^{n})/dt = rhs - [A_m+D_m]*T^{n} - diff_rhs
@@ -914,7 +966,6 @@ contains
             call addto(rhs, MT_old, -1.0)
           end if
         end if
-
 
         if(include_source .and. (.not. add_src_directly_to_rhs)) call addto(rhs, masssource)
 
@@ -1160,6 +1211,53 @@ contains
           if(.not.explicit) then
             call addto(M, D_m, theta*dt)
           end if
+        end if
+        
+        if(move_mesh) then
+          FLExit("Moving mesh with this equation type not yet supported.")
+        end if
+
+      case (FIELD_EQUATION_MANTLEANELASTICENERGY)
+
+        ! construct M:
+        if(explicit) then
+          if(include_mass) then
+            call scale(m_cvmass, tdensity)
+          end if
+        else
+          if(include_mass) then
+            call mult_diag(M, tdensity)
+          end if
+          if(include_advection) call addto(M, A_m, dt)
+          if(include_absorption) call addto_diag(M, massabsorption, theta*dt)
+        
+          if(include_advection) then
+            call mult(MT_old, A_m, oldtfield)
+            call addto(rhs, MT_old, -1.0)
+          end if
+        end if
+
+        if(include_source .and. (.not. add_src_directly_to_rhs)) call addto(rhs, masssource)
+
+        if(include_absorption) then
+          ! massabsorption has already been added to the matrix so it can now be scaled
+          ! by the old field value to add it to the rhs
+          call scale(massabsorption, oldtfield)
+          call addto(rhs, massabsorption, -1.0)
+        end if
+
+        if(include_diffusion) then
+          call mult(MT_old, D_m, oldtfield)
+          call addto(rhs, MT_old, -1.0)
+          call addto(rhs, diff_rhs, -1.0)
+
+          if(.not.explicit) then
+            call addto(M, D_m, theta*dt)
+          end if
+
+          call zero(MT_old)
+          call mult(MT_old, D_m, reftemp)
+          call addto(rhs, MT_old, -1.0)
         end if
         
         if(move_mesh) then
@@ -2145,6 +2243,8 @@ contains
       type(scalar_field), pointer :: tmpfield
       ! Density fields associated with tfield's equation (i.e. if its not pure advection)
       type(scalar_field_pointer), dimension(nfields) :: tdensity, oldtdensity
+      ! Fields associated with mantle anelastic energy equation:
+      type(scalar_field_pointer), dimension(nfields) :: reftemp
       ! Coordinate field
       type(vector_field), pointer :: x, x_old, x_new
       type(vector_field) :: x_tfield
@@ -2315,6 +2415,7 @@ contains
           ! is solved for with this subroutine and the correct priority ordering.
           oldtdensity(f)%ptr=>extract_scalar_field(state(state_indices(f)), "Old"//trim(tmpstring))
         end select
+        reftemp(f)%ptr => dummyscalar
         ! its option path
         if(have_option(trim(option_path(f))//'/prognostic/equation[0]/density[0]/discretisation_options')) then
           tdensity_option_path(f)=trim(option_path(f))//'/prognostic/equation[0]/density[0]/discretisation_options'
@@ -2590,7 +2691,7 @@ contains
             ! assemble it all into a coherent equation
             call assemble_field_eqn_cv(M(f), A_m(f), cvmass(f), rhs(f), &
                                       tfield(f)%ptr, l_old_tfield(f)%ptr, &
-                                      tdensity(f)%ptr, oldtdensity(f)%ptr, tdensity_options(f), &
+                                      tdensity(f)%ptr, oldtdensity(f)%ptr, tdensity_options(f), reftemp(f)%ptr, &
                                       source(f)%ptr, absorption(f)%ptr, tfield_options(f)%theta, &
                                       state(state_indices(f):state_indices(f)), advu, sub_dt, explicit(f), &
                                       t_cvmass(f)%ptr, t_abs_src_cvmass, t_cvmass_old, t_cvmass_new)

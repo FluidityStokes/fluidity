@@ -59,6 +59,7 @@ implicit none
   public :: set_ele_nodes, normalise, tensor_second_invariant
   public :: remap_to_subdomain, remap_to_full_domain
   public :: get_coordinates_remapped_to_surface, get_remapped_coordinates
+  public :: test_remap_validity
   
   integer, parameter, public :: REMAP_ERR_DISCONTINUOUS_CONTINUOUS = 1, &
                                 REMAP_ERR_HIGHER_LOWER_CONTINUOUS  = 2, &
