@@ -3927,6 +3927,8 @@ if (.not.have_option("/material_phase[0]/vector_field::Velocity/prognostic/vecto
        if(have_option(trim(temperature_path))) then
           equation_type = equation_type_index(trim(temperature_path))       
           have_mantle_anelastic_energy = (equation_type == FIELD_EQUATION_MANTLEANELASTICENERGY)
+       else
+          have_mantle_anelastic_energy = .false.
        end if
 
        if(have_mantle_anelastic_energy .and. (.not.(have_option(trim(compressible_path))))) then
