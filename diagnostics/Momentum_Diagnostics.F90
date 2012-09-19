@@ -235,12 +235,12 @@ contains
     logical :: include_surface_adiabat
 
     type(scalar_field), pointer :: thermal_expansion_local, reference_density_local
-    type(vector_field), pointer :: velocity
-    type(vector_field), pointer :: gravity_direction
+    type(vector_field), pointer :: velocity, gravity_direction
 
-    type(scalar_field) :: velocity_component, thermal_expansion_remap, reference_density_remap
+    type(scalar_field) :: velocity_component, thermal_expansion_remap
+    type(scalar_field) :: reference_density_remap
     real :: gravity_magnitude, gamma, rho0, T0
-    integer :: node
+    integer :: node, stat
 
     character(len=OPTION_PATH_LEN) eos_option_path
     logical :: have_linear_eos, have_linearised_mantle_compressible_eos
@@ -266,14 +266,25 @@ contains
        ! Get value for reference density (constant)
        call get_option(trim(eos_option_path)//'/fluids/linear/reference_density', rho0)
     elseif(have_linearised_mantle_compressible_eos) then
-       ! Get spatially varying thermal expansion field and remap to s_field%mesh if required:
-       thermal_expansion_local=>extract_scalar_field(state,'IsobaricThermalExpansivity')
+       ! Get spatially varying thermal expansion field and remap to s_field%mesh if possible and required:
+       thermal_expansion_local=>extract_scalar_field(state,'IsobaricThermalExpansivity')       
        call allocate(thermal_expansion_remap, s_field%mesh, 'RemappedIsobaricThermalExpansivity')
-       call remap_field(thermal_expansion_local, thermal_expansion_remap)
+       call test_remap_validity(thermal_expansion_local,thermal_expansion_remap,stat)
+       if(stat == 0) then
+          ! Remap to s_field%mesh
+          call remap_field(thermal_expansion_local, thermal_expansion_remap)
+       else
+          ! Remap is not possible, so use a projection instead:
+       end if
+
        ! Get spatially varying compressible reference density and remap to s_field%mesh if required:
        reference_density_local=>extract_scalar_field(state,'CompressibleReferenceDensity')
        call allocate(reference_density_remap, s_field%mesh, 'RemappedCompressibleReferenceDensity')
-       call remap_field(reference_density_local, reference_density_remap)
+       call test_remap_validity(reference_density_local,reference_density_remap,stat)
+       if(stat == 0) then
+          call remap_field(reference_density_local, reference_density_remap)
+       else
+       end if
     else
        FLExit("Selected EOS not yet configured for adiabatic_heating_algorithm")
     end if
@@ -312,7 +323,7 @@ contains
 
     type(vector_field), pointer :: positions, gravity_direction, velocity
     type(scalar_field), pointer :: thermal_expansion, reference_density
-    type(scalar_field), pointer :: dummyscalar    
+    type(scalar_field), pointer :: dummyscalar, velocity_component
 
     type(scalar_field) :: cv_mass
 
@@ -334,6 +345,8 @@ contains
     call get_option("/physical_parameters/gravity/magnitude", gravity_magnitude)
     gravity_direction => extract_vector_field(state, "GravityDirection")
     velocity => extract_vector_field(state, "Velocity")
+    call allocate(velocity_component, s_field%mesh, "VerticalVelocityComponent")
+    call inner_product(velocity_component, velocity, gravity_direction)
     
     ! Extract coordinates from state (required for detwei in integration):
     positions=>extract_vector_field(state,'Coordinate')
@@ -366,9 +379,9 @@ contains
     do ele = 1, element_count(s_field)
        if(element_owned(s_field, ele)) then      
           if(have_linear_eos) then
-             call integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, reference_density, gravity_magnitude, ele, rho0, gamma)
+             call integrate_RHS_ele(s_field, positions, velocity_component, thermal_expansion, reference_density, gravity_magnitude, ele, rho0, gamma)
           else if(have_linearised_mantle_compressible_eos) then             
-             call integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, reference_density, gravity_magnitude, ele)
+             call integrate_RHS_ele(s_field, positions, velocity_component, thermal_expansion, reference_density, gravity_magnitude, ele)
           end if
        end if
     end do
@@ -394,10 +407,10 @@ contains
 
   end subroutine adiabatic_heating_coefficient_CV
 
-  subroutine integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, reference_density, gravity_magnitude, ele, rho0, gamma)
+  subroutine integrate_RHS_ele(s_field, positions, velocity_component, thermal_expansion, reference_density, gravity_magnitude, ele, rho0, gamma)
     type(scalar_field), intent(inout) :: s_field
-    type(vector_field), intent(in), pointer :: positions, velocity, gravity_direction    
-    type(scalar_field), intent(in), pointer :: thermal_expansion, reference_density
+    type(vector_field), intent(in), pointer :: positions
+    type(scalar_field), intent(in), pointer :: thermal_expansion, reference_density, velocity_component
     real, intent(in)    :: gravity_magnitude
     real, optional      :: rho0, gamma
     integer, intent(in) :: ele
@@ -405,31 +418,22 @@ contains
     ! For integration:
     integer :: dim, gi
     real, dimension(ele_loc(s_field,ele)) :: ele_val
-    real, dimension(velocity%dim, ele_ngi(velocity, ele)) :: velocity_quad, positions_quad, gravity_direction_quad
-    real, dimension(ele_ngi(velocity, ele)) :: detwei, density_quad, gamma_quad, inner_prod
+    real, dimension(positions%dim, ele_ngi(positions, ele)) :: positions_quad
+    real, dimension(ele_ngi(positions, ele)) :: detwei, density_quad, gamma_quad, velocity_component_quad
 
 
     ! Evaluate key parameters at gauss points:
     call transform_to_physical(positions, ele, detwei = detwei)
-    velocity_quad          = ele_val_at_quad(velocity, ele)
-    positions_quad         = ele_val_at_quad(positions, ele)
-    gravity_direction_quad = ele_val_at_quad(gravity_direction, ele)
-    density_quad           = ele_val_at_quad(reference_density, ele)
-    gamma_quad             = ele_val_at_quad(thermal_expansion, ele)
-
-    ! Calculate inner product of velocity and gravity unit vector at gauss points:
-    inner_prod = 0.
-    do dim = 1, velocity%dim
-       do gi = 1, ele_ngi(velocity, ele)
-          inner_prod(gi) = inner_prod(gi) + velocity_quad(dim,gi)*gravity_direction_quad(dim,gi)
-       end do
-    end do
+    positions_quad          = ele_val_at_quad(positions, ele)
+    density_quad            = ele_val_at_quad(reference_density, ele)
+    gamma_quad              = ele_val_at_quad(thermal_expansion, ele)
+    velocity_component_quad = ele_val_at_quad(velocity_component, ele)
 
     ! Evaluate nodal values of integral:
     if(present(rho0) .and. present(gamma)) then
-       ele_val = shape_rhs(ele_shape(s_field,ele), -inner_prod*gravity_magnitude*gamma*rho0*detwei)
+       ele_val = shape_rhs(ele_shape(s_field,ele), -velocity_component_quad*gravity_magnitude*gamma*rho0*detwei)
     else
-       ele_val = shape_rhs(ele_shape(s_field,ele), -inner_prod*gravity_magnitude*gamma_quad*density_quad*detwei)
+       ele_val = shape_rhs(ele_shape(s_field,ele), -velocity_component_quad*gravity_magnitude*gamma_quad*density_quad*detwei)
     end if
 
     ! Add this to the global RHS vector:

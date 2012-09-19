@@ -1,5 +1,5 @@
 FLFLAGS = -v2 -l
-FLMLMODEL = stokes-1e4-p2p1-ALA-implicit-Di-1.5
+FLMLMODEL = stokes-1e4-p2p1-ALA-implicit-Di-1.5-p1cv
 FLUIDITY = dfluidity
 MESH = square-structured-linear
 
