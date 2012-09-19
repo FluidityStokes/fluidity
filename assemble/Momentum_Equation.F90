@@ -282,7 +282,7 @@
             multiphase = .false.
          end if
          ! Do we have fluid-particle drag (for multi-phase simulations)?
-         have_fp_drag = option_count("/material_phase/multiphase_properties/particle_diameter") > 0
+         have_fp_drag = have_option("/multiphase_interaction/fluid_particle_drag")
 
          ! Get the pressure p^{n}, and get the assembly options for the divergence and CMC matrices
          ! find the first non-aliased pressure
@@ -468,15 +468,15 @@
             end if
 
             if (has_boundary_condition(u, "free_surface") .or. compressible_eos) then
-               ! this needs fixing for multiphase theta_pg could in principle be chosen
+               ! This needs fixing for multiphase. theta_pg could in principle be chosen
                ! per phase but then we need an array and we'd have to include theta_pg
                ! in cmc_m, i.e. solve for theta_div*dt*dp instead of theta_div*theta_pg*dt*dp
                ! theta_div can only be set once, but where and what is the default?
-               if (multiphase) then
-                 FLExit("Multiphase does not work with a free surface or compressible flow.")
+               if (has_boundary_condition(u, "free_surface") .and. multiphase) then
+                 FLExit("Multiphase does not work with a free surface.")
                end if
 
-               ! With free surface or compressible-projection pressures are at integer
+               ! With free surface or compressible-projection, pressures are at integer
                ! time levels and we apply a theta-weighting to the pressure gradient term
                ! Also, obtain theta-weighting to be used in divergence term
                call get_option( trim(u%option_path)//'/prognostic/temporal_discretisation/theta', &
@@ -490,6 +490,15 @@
                ewrite(2,*) "theta_pg: ", theta_pg
                ewrite(2,*) "Velocity divergence is evaluated at n+theta_divergence"
                ewrite(2,*) "theta_divergence: ", theta_divergence
+               
+               ! Note: Compressible multiphase simulations work, but only when use_theta_pg and use_theta_divergence
+               ! are false. This needs improving - see comment above.
+               if(compressible_eos .and. multiphase .and. (use_theta_pg .or. use_theta_divergence)) then
+                  ewrite(-1,*) "Currently, for compressible multiphase flow simulations, the"
+                  ewrite(-1,*) "temporal_discretisation/theta and temporal_discretisation/theta_divergence values"
+                  ewrite(-1,*) "for each Velocity field must be set to 1.0."
+                  FLExit("Multiphase does not work when use_theta_pg or use_theta_divergence are true.")
+               end if
             else
                ! Pressures are, as usual, staggered in time with the velocities
                use_theta_pg=.false.
@@ -513,6 +522,7 @@
             ! Allocation of big_m
             if(dg(istate)) then
                call allocate_big_m_dg(state(istate), big_m(istate), u)
+
                if(subcycle(istate)) then
                   u_sparsity => get_csr_sparsity_firstorder(state, u%mesh, u%mesh)
                   ! subcycle_m currently only contains advection, so diagonal=.true.
@@ -530,7 +540,7 @@
             ! Initialise the big_m, ct_m and ctp_m matrices
             call zero(big_m(istate))
             if(reassemble_ct_m) then
-               call zero(ct_m(istate)%ptr)               
+               call zero(ct_m(istate)%ptr)         
                if ((.not. compressible_eos) .and. cg_pressure_cv_test_continuity) then
                   call zero(ctp_m(istate)%ptr)
                end if
@@ -688,6 +698,10 @@
                ! Set up the left C matrix in CMC
                
                if(compressible_eos) then
+                  ! Note: If we are running a compressible multiphase simulation then the C^T matrix for each phase becomes:
+                  ! rho*div(vfrac*u) for each incompressible phase
+                  ! rho*div(vfrac*u) + vfrac*u*grad(rho) for the single compressible phase.
+
                   allocate(ctp_m(istate)%ptr)
                   call allocate(ctp_m(istate)%ptr, ct_m(istate)%ptr%sparsity, (/1, u%dim/), name="CTP_m")
                   ! NOTE that this is not optimal in that the ct_rhs
@@ -695,7 +709,7 @@
                   if(cv_pressure) then
                      call assemble_compressible_divergence_matrix_cv(ctp_m(istate)%ptr, state, ct_rhs(istate))
                   else
-                     call assemble_compressible_divergence_matrix_cg(ctp_m(istate)%ptr, state, ct_rhs(istate))
+                     call assemble_compressible_divergence_matrix_cg(ctp_m(istate)%ptr, state, istate, ct_rhs(istate))
                   end if               
                else                  
                   ! Incompressible scenario
@@ -791,7 +805,7 @@
                          call assemble_compressible_projection_cv(state, schur_auxiliary_matrix, dt, theta_pg, &
                                                                   theta_divergence, assemble_schur_auxiliary_matrix)
                        else
-                         call assemble_compressible_projection_cg(state, schur_auxiliary_matrix, dt, theta_pg, &
+                         call assemble_compressible_projection_cg(state, istate, schur_auxiliary_matrix, dt, theta_pg, &
                                                                   theta_divergence, assemble_schur_auxiliary_matrix)
                        end if
                      end if
@@ -1260,14 +1274,10 @@
 
          type(scalar_field), pointer :: p
 
-         integer :: compressible_eos_count
-
          ewrite(1,*) 'Entering get_pressure_options'
 
-
          ! Are we using a compressible projection?
-         compressible_eos_count = option_count("/material_phase/equation_of_state/compressible")
-         compressible_eos = compressible_eos_count > 0
+         compressible_eos = option_count("/material_phase/equation_of_state/compressible") > 0
 
          reassemble_all_cmc_m = have_option(trim(p%option_path)//&
                      "/prognostic/scheme/update_discretised_equation") .or. &
@@ -1591,14 +1601,14 @@
 
          cmc_m => extract_csr_matrix(state(istate), "PressurePoissonMatrix", stat)
 
-         if(compressible_eos) then
+         if(compressible_eos .and. have_option(trim(state(istate)%option_path)//'/equation_of_state/compressible')) then
             call allocate(compress_projec_rhs, p%mesh, "CompressibleProjectionRHS")
 
             if(cv_pressure) then
                call assemble_compressible_projection_cv(state, cmc_m, dt, &
                                                       theta_pg, theta_divergence, reassemble_cmc_m, rhs=compress_projec_rhs)
-            else 
-               call assemble_compressible_projection_cg(state, cmc_m, dt, &
+            else
+               call assemble_compressible_projection_cg(state, istate, cmc_m, dt, &
                                                       theta_pg, theta_divergence, reassemble_cmc_m, rhs=compress_projec_rhs)
             end if
 
@@ -1926,28 +1936,6 @@
                   FLExit("Use tensor_form or anisotropic_symmetric Viscosity.")
                end if
 
-            end if
-
-            ! If we are running a multiphase flow simulation, the stress term can only be in tensor form and
-            ! viscosity must be isotropic.
-            if(option_count("/material_phase/vector_field::Velocity/prognostic") > 1 .and. &
-               & have_option("/material_phase["//int2str(i)//"]/vector_field::Velocity/prognostic&
-               &/tensor_field::Viscosity/prescribed")) then
-
-               if(.not.have_option("/material_phase["//int2str(i)//&
-                                 "]/vector_field::Velocity/prognostic&
-                                 &/tensor_field::Viscosity/prescribed/value/isotropic") .or. &
-                  ! Note: DG only uses tensor form, so only check the CG options
-                  &(have_option("/material_phase["//int2str(i)//&
-                                 &"]/vector_field::Velocity/prognostic"//&
-                                 &"/spatial_discretisation/continuous_galerkin/") .and. &
-                                 &.not.have_option("/material_phase["//int2str(i)//&
-                                 &"]/vector_field::Velocity/prognostic"//&
-                                 &"/spatial_discretisation/continuous_galerkin/stress_terms/tensor_form"))) then
-                  ewrite(-1,*) "For multiphase simulations, the stress term can only be in tensor form"
-                  ewrite(-1,*) "and viscosity must be isotropic."
-                  FLExit("For multiphase flow simulations, use tensor_form and isotropic Viscosity only.")
-               end if
             end if
 
             if(have_option("/material_phase["//int2str(i)//"]/vector_field::Velocity/prognostic/"//&
