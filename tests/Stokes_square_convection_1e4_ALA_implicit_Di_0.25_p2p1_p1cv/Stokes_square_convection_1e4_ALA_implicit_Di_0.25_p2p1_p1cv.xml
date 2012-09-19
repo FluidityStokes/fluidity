@@ -48,7 +48,7 @@ viscous_dissipation= stat("stokes-1e4-p2p1-ALA-implicit-Di-0.25-p1cv.stat")["Flu
 
 <test name="Temperature integral Validity:" language="python">
 Full_T_int = T_int + T_ref_int
-assert(abs(Full_T_int-0.515) &lt; 0.001)
+assert(abs(Full_T_int-0.515) &lt; 0.002)
 </test>
 
 <test name="Surface Nusselt Number Validity:" language="python">
