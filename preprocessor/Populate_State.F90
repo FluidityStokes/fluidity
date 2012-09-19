@@ -3825,6 +3825,7 @@ if (.not.have_option("/material_phase[0]/vector_field::Velocity/prognostic/vecto
     character(len=FIELD_NAME_LEN) :: schur_preconditioner, inner_matrix
     logical :: exclude_mass, exclude_advection
     logical :: implicit_pressure_buoyancy, exclude_pressure_buoyancy
+    logical :: have_mantle_anelastic_energy
     real :: theta
 
     nmat = option_count("/material_phase")
@@ -3921,7 +3922,18 @@ if (.not.have_option("/material_phase[0]/vector_field::Velocity/prognostic/vecto
 
        ! Check options for compressible Stokes simulations:
        compressible_path = "/material_phase["//int2str(i)//"]/equation_of_state/compressible"
-       
+       temperature_path="/material_phase["//int2str(i)//"]/scalar_field::Temperature" 
+
+       if(have_option(trim(temperature_path))) then
+          equation_type = equation_type_index(trim(temperature_path))       
+          have_mantle_anelastic_energy = (equation_type == FIELD_EQUATION_MANTLEANELASTICENERGY)
+       end if
+
+       if(have_mantle_anelastic_energy .and. (.not.(have_option(trim(compressible_path))))) then
+          ewrite(-1,*) "Mantle anelastic energy equation type requires a compressible EOS."
+          FLExit("To use Mantle Anelastic Energy equation type, select /equation_of_state/compressible.")
+       end if
+
        if (have_option(trim(compressible_path))) then
 
           implicit_pressure_buoyancy=have_option(trim(pressure_path)//&
@@ -3936,29 +3948,23 @@ if (.not.have_option("/material_phase[0]/vector_field::Velocity/prognostic/vecto
              FLExit("Cannot exclude pressure buoyancy and subsequently include it in the pressure projection!")
           end if
 
-          temperature_path="/material_phase["//int2str(i)//"]/scalar_field::Temperature" 
-
-          if(have_option(trim(temperature_path))) then
-             equation_type=equation_type_index(trim(temperature_path))
-             if((equation_type /= FIELD_EQUATION_MANTLEANELASTICENERGY)) then
-                ewrite(-1,*) "For compressible Stokes problems, only the MantleAnelasticEnergy equation type has been configured correctly."
-                FLExit("The MantleAnalasticEnergy equation type must be used for compressible Stokes problems.")
-             else
-                ! Check all fields required for compressible mantle simulations are present
-                if(.not.(have_option("/material_phase["//int2str(i)//"]/scalar_field::CompressibleReferenceDensity"))) &
-                     FLExit("MantleAnalasticEnergy equation requires CompresibleReferenceDensity Field.")
-                if(.not.(have_option("/material_phase["//int2str(i)//"]/scalar_field::CompressibleReferenceTemperature"))) &
-                     FLExit("MantleAnalasticEnergy equation requires CompresibleReferenceTemperature Field.")
-                if(.not.(have_option("/material_phase["//int2str(i)//"]/scalar_field::IsobaricSpecificHeatCapacity"))) &
-                     FLExit("MantleAnalasticEnergy equation requires IsobaricSpecificHeatCapacity Field.")
-                if(.not.(have_option("/material_phase["//int2str(i)//"]/scalar_field::IsobaricThermalExpansivity"))) &
-                     FLExit("MantleAnalasticEnergy equation requires IsobaricThermalExpansivity Field.")
-                if(.not.(have_option("/material_phase["//int2str(i)//"]/scalar_field::IsothermalBulkModulus"))) &
-                     FLExit("MantleAnalasticEnergy equation requires IsothermalBulkModulus Field.")               
-             end if
-            
+          if(have_mantle_anelastic_energy) then
+             ! Check all fields required for compressible mantle simulations are present
+             if(.not.(have_option("/material_phase["//int2str(i)//"]/scalar_field::CompressibleReferenceDensity"))) &
+                  FLExit("MantleAnalasticEnergy equation requires CompresibleReferenceDensity Field.")
+             if(.not.(have_option("/material_phase["//int2str(i)//"]/scalar_field::CompressibleReferenceTemperature"))) &
+                  FLExit("MantleAnalasticEnergy equation requires CompresibleReferenceTemperature Field.")
+             if(.not.(have_option("/material_phase["//int2str(i)//"]/scalar_field::IsobaricSpecificHeatCapacity"))) &
+                  FLExit("MantleAnalasticEnergy equation requires IsobaricSpecificHeatCapacity Field.")
+             if(.not.(have_option("/material_phase["//int2str(i)//"]/scalar_field::IsobaricThermalExpansivity"))) &
+                  FLExit("MantleAnalasticEnergy equation requires IsobaricThermalExpansivity Field.")
+             if(.not.(have_option("/material_phase["//int2str(i)//"]/scalar_field::IsothermalBulkModulus"))) &
+                  FLExit("MantleAnalasticEnergy equation requires IsothermalBulkModulus Field.")               
+          else
+             ewrite(-1,*) "For compressible Stokes problems, only the Mantle Anelastic Energy equation type has been configured correctly."
+             FLExit("The Mantle Analastic Energy equation type must be used for compressible Stokes problems.")
           end if
-
+            
        end if
 
     end do
