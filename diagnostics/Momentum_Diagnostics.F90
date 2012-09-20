@@ -229,6 +229,7 @@ contains
 
     character(len=OPTION_PATH_LEN) eos_option_path
     logical :: have_linear_eos, have_linearised_mantle_compressible_eos
+    logical :: have_mantle_lookup_eos
 
     ewrite(1,*) 'In adiabatic_heating_coefficient'
 
@@ -253,6 +254,7 @@ contains
        eos_option_path='/material_phase::'//trim(state%name)//'/equation_of_state'
        have_linear_eos = (have_option(trim(eos_option_path)//'/fluids/linear'))
        have_linearised_mantle_compressible_eos = (have_option(trim(eos_option_path)//'/compressible/linearised_mantle'))
+       have_mantle_lookup_eos = (have_option(trim(eos_option_path)//'/compressible/mantle_lookup'))
 
        if(have_linear_eos) then
 
@@ -265,7 +267,7 @@ contains
              call set(s_field, node, -gamma*rho0*gravity_magnitude*node_val(velocity_component,node))
           end do
 
-       elseif(have_linearised_mantle_compressible_eos) then
+       elseif(have_linearised_mantle_compressible_eos .OR. have_mantle_lookup_eos) then
 
           ! Get spatially varying thermal expansion field and remap to s_field%mesh if possible and required:
           thermal_expansion_local=>extract_scalar_field(state,'IsobaricThermalExpansivity')       
@@ -346,6 +348,7 @@ contains
 
     character(len=OPTION_PATH_LEN) eos_option_path
     logical :: have_linear_eos, have_linearised_mantle_compressible_eos
+    logical :: have_mantle_lookup_eos
 
     ewrite(1,*) 'In adiabatic_heating_coefficient_projection'
 
@@ -379,7 +382,7 @@ contains
        ! thermal_expansion to dummy scalars:
        reference_density => dummyscalar
        thermal_expansion => dummyscalar
-    elseif(have_linearised_mantle_compressible_eos) then
+    elseif(have_linearised_mantle_compressible_eos .OR. have_mantle_lookup_eos) then
        ! Get spatially varying thermal expansion field:
        thermal_expansion=>extract_scalar_field(state,'IsobaricThermalExpansivity')
        ! Get spatially varying reference density field:
