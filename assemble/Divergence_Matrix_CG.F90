@@ -447,7 +447,7 @@ module divergence_matrix_cg
       type(scalar_field) :: density_bc
       
       character(len=OPTION_PATH_LEN) :: density_option_path
-      integer :: i, stat
+      integer :: i, stat, icomp
 
       !! Multiphase variables
       ! Volume fraction fields
@@ -468,30 +468,36 @@ module divergence_matrix_cg
 
       if(have_option(trim(state(istate)%option_path)//"/equation_of_state/compressible")) then
          is_compressible_phase = .true.
+         density => extract_scalar_field(state(istate), "Density")
+         icomp = istate
       else
          is_compressible_phase = .false.
 
          ! Find the compressible phase and extract it's density to form rho_c * div(vfrac_i*u_i), where _c and _i represent
          ! the compressible and incompressible phases respectively.
+         icomp = 0
          do i = 1, size(state)
             if(have_option(trim(state(i)%option_path)//"/equation_of_state/compressible")) then
               density => extract_scalar_field(state(i), "Density")
-              density_option_path = density%option_path
-
-              use_reference_density=have_option(trim(complete_field_path(density_option_path, stat=stat))//&
-                  &"/spatial_discretisation/use_reference_density")
-
-              if(use_reference_density) then
-                density => extract_scalar_field(state(istate), "CompressibleReferenceDensity")
-                olddensity => extract_scalar_field(state(istate), "OldCompressibleReferenceDensity", stat=stat)
-                if(stat/=0) then
-                  olddensity => density
-                end if
-              else
-                olddensity => extract_scalar_field(state(istate), "OldDensity")
-              end if
+              icomp = i
             end if
          end do
+         if (icomp==0) icomp=istate
+      end if
+
+      density_option_path = density%option_path
+
+      use_reference_density=have_option(trim(complete_field_path(density_option_path, stat=stat))//&
+          &"/spatial_discretisation/use_reference_density")
+
+      if(use_reference_density) then
+        density => extract_scalar_field(state(icomp), "CompressibleReferenceDensity")
+        olddensity => extract_scalar_field(state(icomp), "OldCompressibleReferenceDensity", stat=stat)
+        if(stat/=0) then
+          olddensity => density
+        end if
+      else
+        olddensity => extract_scalar_field(state(icomp), "OldDensity")
       end if
       
       pressure => extract_scalar_field(state(istate), "Pressure")
