@@ -170,7 +170,7 @@ compressible_eos_options =
             }?
          }|
          ## Mantle lookup EOS
-	 element mantle_lookup {
+	     element mantle_lookup {
            empty
          }
       }   

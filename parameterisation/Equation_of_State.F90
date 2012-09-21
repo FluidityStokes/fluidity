@@ -750,23 +750,29 @@ contains
                           compressibility, dpdrho, thermalexpansion_remap, &
                           temperatureproduct
     logical :: implicit_pressure_buoyancy, exclude_pressure_buoyancy
+    character(len=OPTION_PATH_LEN) :: linearised_mantle_eos_path
     
     call zero(drhodp)
+
+    linearised_mantle_eos_path = "/equation_of_state/compressible/linearised_mantle/"
+    exclude_pressure_buoyancy = have_option(trim(state%option_path)//&
+         trim(linearised_mantle_eos_path)//"/exclude_pressure_buoyancy")
 
     ! Extract relevant parameters from state and remap to drhodp mesh so that all
     ! parameters are on same mesh:    
     referencedensity_local=>extract_scalar_field(state, 'CompressibleReferenceDensity')
     call allocate(referencedensity_remap, drhodp%mesh, 'RemappedCompressibleReferenceDensity')
     call remap_field(referencedensity_local, referencedensity_remap)
+    call set(drhodp, referencedensity_remap)
 
-    bulkmodulus_local=>extract_scalar_field(state,'IsothermalBulkModulus')
-    call allocate(compressibility, drhodp%mesh, 'RemappedIsothermalBulkModulus')
-    call remap_field(bulkmodulus_local, compressibility)
-    ! Compressibility = 1. / bulkmodulus, therefore invert bulk_modulus here:
-    call invert(compressibility)
-      
-    call set(drhodp, compressibility)
-    call scale(drhodp, referencedensity_remap)
+    if(.not.(exclude_pressure_buoyancy)) then
+       bulkmodulus_local=>extract_scalar_field(state,'IsothermalBulkModulus')
+       call allocate(compressibility, drhodp%mesh, 'RemappedIsothermalBulkModulus')
+       call remap_field(bulkmodulus_local, compressibility)
+       ! Compressibility = 1. / bulkmodulus, therefore invert bulk_modulus here:
+       call invert(compressibility)      
+       call scale(drhodp, compressibility)
+    end if
       
     if(present(density).or.present(buoyancy_density).or.present(pressure)) then
 
@@ -802,9 +808,6 @@ contains
 
             implicit_pressure_buoyancy = have_option(trim(pressure_local%option_path)//'/prognostic'//&
                                                           '/spatial_discretisation/compressible/implicit_pressure_buoyancy')
-
-            exclude_pressure_buoyancy = have_option(trim(state%option_path)// &
-                                              '/equation_of_state/compressible/linearised_mantle/exclude_pressure_buoyancy')
 
             if(implicit_pressure_buoyancy.or.exclude_pressure_buoyancy) then
               call zero(buoyancy_density)
@@ -852,7 +855,7 @@ contains
     end if
 
     call deallocate(referencedensity_remap)
-    call deallocate(compressibility)
+    if(.not.(exclude_pressure_buoyancy)) call deallocate(compressibility)
 
   end subroutine compressible_eos_linearised_mantle
 

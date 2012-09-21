@@ -3750,6 +3750,7 @@ if (.not.have_option("/material_phase[0]/vector_field::Velocity/prognostic/vecto
     logical :: exclude_mass, exclude_advection
     logical :: implicit_pressure_buoyancy, exclude_pressure_buoyancy
     logical :: have_mantle_anelastic_energy
+    logical :: have_linearised_mantle_eos, have_mantle_lookup_eos
     real :: theta
 
     nmat = option_count("/material_phase")
@@ -3874,7 +3875,14 @@ if (.not.have_option("/material_phase[0]/vector_field::Velocity/prognostic/vecto
              FLExit("Cannot exclude pressure buoyancy and subsequently include it in the pressure projection!")
           end if
 
+          have_linearised_mantle_eos = have_option(trim(compressible_path)//"/linearised_mantle")
+          have_mantle_lookup_eos = have_option(trim(compressible_path)//"/mantle_lookup")
+
+          if((have_mantle_lookup_eos .OR. have_linearised_mantle_eos) .AND. (.not.(have_mantle_anelastic_energy))) &
+                  FLExit("Linearised_Mantle and Mantle_Lookup EOS both require the mantle_anelastic_energy equation.")
+
           if(have_mantle_anelastic_energy) then
+
              ! Check all fields required for compressible mantle simulations are present
              if(.not.(have_option("/material_phase["//int2str(i)//"]/scalar_field::CompressibleReferenceDensity"))) &
                   FLExit("MantleAnalasticEnergy equation requires CompresibleReferenceDensity Field.")
@@ -3884,11 +3892,30 @@ if (.not.have_option("/material_phase[0]/vector_field::Velocity/prognostic/vecto
                   FLExit("MantleAnalasticEnergy equation requires IsobaricSpecificHeatCapacity Field.")
              if(.not.(have_option("/material_phase["//int2str(i)//"]/scalar_field::IsobaricThermalExpansivity"))) &
                   FLExit("MantleAnalasticEnergy equation requires IsobaricThermalExpansivity Field.")
-             if(.not.(have_option("/material_phase["//int2str(i)//"]/scalar_field::IsothermalBulkModulus"))) &
-                  FLExit("MantleAnalasticEnergy equation requires IsothermalBulkModulus Field.")               
+
+             if(have_linearised_mantle_eos) then
+                if(.not.(have_option("/material_phase["//int2str(i)//"]/scalar_field::IsothermalBulkModulus")) &
+                     .AND. (.not.(exclude_pressure_buoyancy))) &
+                     FLExit("MantleAnalasticEnergy equation requires IsothermalBulkModulus Field.")
+             end if
+
+             if(have_mantle_lookup_eos) then
+                if(have_option("/material_phase["//int2str(i)//"]/scalar_field::IsothermalBulkModulus")) then
+                   ewrite(-1,*) "The IsothermalBulkModulus Field is not required when using the mantle_lookup EOS."
+                   ewrite(-1,*) "For this EOS, the perturbation density comes naturally from the lookup tables."
+                   ewrite(-1,*) "The IsobaticThermalExpansivity Field, however, remains required, as this is"
+                   ewrite(-1,*) "Treated as an effective expansivity for this EOS."
+                   FLExit("IsothermalBulkModulus Field is not required when using the mantle_lookup EOS. Turn it off.")               
+                end if
+                if(.not.(have_option("/material_phase["//int2str(i)//"]/scalar_field::FullLookupDensity"))) &
+                     FLExit("Mantle Lookup EOS Requires FullLookupDensity Field.")               
+             end if
+                
           else
+
              ewrite(-1,*) "For compressible Stokes problems, only the Mantle Anelastic Energy equation type has been configured correctly."
              FLExit("The Mantle Analastic Energy equation type must be used for compressible Stokes problems.")
+
           end if
             
        end if

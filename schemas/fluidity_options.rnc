@@ -3938,7 +3938,7 @@ scalar_field_choice =
          ## compressible mantle_lookup equation of state.
          ## It is used in the momentum equation to calculate
          ## the purtubation density (full density - compressible
-	 ## reference density).
+	     ## reference density).
          element scalar_field {
             attribute rank { "0" },
             attribute name { "FullLookupDensity" },
