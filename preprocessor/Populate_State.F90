@@ -3884,7 +3884,8 @@ if (.not.have_option("/material_phase[0]/vector_field::Velocity/prognostic/vecto
                   FLExit("MantleAnalasticEnergy equation requires IsobaricSpecificHeatCapacity Field.")
              if(.not.(have_option("/material_phase["//int2str(i)//"]/scalar_field::IsobaricThermalExpansivity"))) &
                   FLExit("MantleAnalasticEnergy equation requires IsobaricThermalExpansivity Field.")
-             if(.not.(have_option("/material_phase["//int2str(i)//"]/scalar_field::IsothermalBulkModulus"))) &
+             if(.not.(have_option("/material_phase["//int2str(i)//"]/scalar_field::IsothermalBulkModulus")) &
+                  .AND. (.not.(exclude_pressure_buoyancy))) &
                   FLExit("MantleAnalasticEnergy equation requires IsothermalBulkModulus Field.")               
           else
              ewrite(-1,*) "For compressible Stokes problems, only the Mantle Anelastic Energy equation type has been configured correctly."

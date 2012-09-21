@@ -562,21 +562,6 @@ for n in range(field.node_count):
         </detectors>
       </prescribed>
     </scalar_field>
-    <scalar_field name="IsothermalBulkModulus" rank="0">
-      <prescribed>
-        <mesh name="CoordinateMesh"/>
-        <value name="WholeMesh">
-          <constant>
-            <real_value rank="0">1.0</real_value>
-          </constant>
-        </value>
-        <output/>
-        <stat/>
-        <detectors>
-          <exclude_from_detectors/>
-        </detectors>
-      </prescribed>
-    </scalar_field>
     <scalar_field name="IsobaricThermalExpansivity" rank="0">
       <prescribed>
         <mesh name="CoordinateMesh"/>
