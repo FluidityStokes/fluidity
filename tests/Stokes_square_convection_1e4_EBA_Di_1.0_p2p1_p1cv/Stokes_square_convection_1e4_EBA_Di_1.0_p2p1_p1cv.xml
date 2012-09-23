@@ -59,11 +59,11 @@ assert(abs(rms_vel-24.23) &lt; 0.1)
 </test>
 
 <test name="Adiabatic_Absorption Validity:" language="python">
-assert(abs(adiabatic_absorption-1.1875) &lt; 0.01)
+assert(abs(adiabatic_absorption-1.1875) &lt; 0.015)
 </test>
 
 <test name="Viscous_Dissipation Validity:" language="python">
-assert(abs(viscous_dissipation-1.1875) &lt; 0.01)
+assert(abs(viscous_dissipation-1.1875) &lt; 0.015)
 </test>
 
 <test name="Divergence small .lt. 1.0E-3" language="python">
