@@ -1468,7 +1468,7 @@ contains
   end subroutine update_pressure_and_viscous_free_surface
 
   function get_extended_velocity_divergence_matrix(state, u, fs, &
-      extended_mesh, get_ct) result (ct_m_ptr)
+      extended_mesh, get_ct, ct_m_name) result (ct_m_ptr)
     ! returns the velocity divergence matrix from state (or creates a new one if none present)
     ! with extra rows associated with prognostic fs nodes
     ! this routine mimicks the behaviour of get_velocity_divergence_matrix()
@@ -1478,6 +1478,7 @@ contains
     type(mesh_type), intent(in):: extended_mesh
     ! returns .true. if the matrix needs to be reassembled (because it has just been allocated or because of mesh movement)
     logical, optional, intent(out):: get_ct
+    character(len=*), intent(in), optional :: ct_m_name
     type(block_csr_matrix), pointer:: ct_m_ptr
 
     type(block_csr_matrix):: new_ct_m
@@ -1489,7 +1490,14 @@ contains
     mesh_moved = eventcount(EVENT_MESH_MOVEMENT)/=last_mesh_movement
     last_mesh_movement = eventcount(EVENT_MESH_MOVEMENT)
 
-    ct_m_ptr => extract_block_csr_matrix(state, "ExtendedVelocityDivergenceMatrix", stat=stat)
+    ! Form the ct_m_name dependent on interface argument
+    if (present(ct_m_name)) then
+       l_ct_m_name = trim(ct_m_name)
+    else
+       l_ct_m_name = "ExtendedVelocityDivergenceMatrix"
+    end if
+
+    ct_m_ptr => extract_block_csr_matrix(state, l_ct_m_name, stat=stat)
     if (stat==0) then
       if (present(get_ct)) then
         get_ct = mesh_moved
@@ -1499,11 +1507,11 @@ contains
 
     sparsity => get_extended_velocity_divergence_sparsity(state, u, fs, extended_mesh)
 
-    call allocate(new_ct_m, sparsity, blocks=(/ 1, u%dim /), name="ExtendedVelocityDivergenceMatrix")
+    call allocate(new_ct_m, sparsity, blocks=(/ 1, u%dim /), name=l_ct_m_name)
     call insert(state, new_ct_m, new_ct_m%name)
     call deallocate(new_ct_m)
 
-    ct_m_ptr => extract_block_csr_matrix(state, "ExtendedVelocityDivergenceMatrix")
+    ct_m_ptr => extract_block_csr_matrix(state, l_ct_m_name)
 
     if (present(get_ct)) then
       get_ct = .true.
@@ -1768,15 +1776,15 @@ contains
 
   end subroutine add_implicit_viscous_free_surface_integrals
 
-  subroutine add_explicit_viscous_free_surface_integrals(state, mom_rhs, ct_m, &
-        reassemble_ct_m, u, p_mesh, fs)
+  subroutine add_explicit_viscous_free_surface_integrals(state, ct_m, &
+        reassemble_ct_m, u, p_mesh, fs, mom_rhs)
    type(state_type), intent(inout):: state
-   type(vector_field), intent(inout):: mom_rhs 
    type(block_csr_matrix), intent(inout):: ct_m
    logical, intent(in):: reassemble_ct_m
    type(vector_field), intent(in):: u
    type(mesh_type), intent(in):: p_mesh
    type(scalar_field), intent(in):: fs
+   type(vector_field), intent(inout), optional:: mom_rhs 
 
    type(scalar_field), pointer:: it_fs, old_fs, density
    type(vector_field), pointer:: x
@@ -1786,6 +1794,8 @@ contains
    integer, dimension(:), pointer:: surface_element_list
    integer:: i, j, dens_stat, stat
    logical:: variable_density, have_density, move_mesh
+
+   if (.not.present(mom_rhs) .and. .not. reassemble_ct_m) return
 
    assert(have_option(trim(fs%option_path)//"/prognostic"))
 
@@ -1854,10 +1864,12 @@ contains
       call transform_facet_to_physical(x, sele, &
            detwei_f=detwei_bdy, normal=normal_bdy)
                                      
-      call addto(mom_rhs, u_nodes_bdy, shape_vector_rhs(face_shape(u, sele), normal_bdy, &
-                                    -detwei_bdy*delta_rho_g_quad* &
-                                    (itheta*face_val_at_quad(it_fs, sele) + &
-                                     (1.0-itheta)*face_val_at_quad(old_fs, sele))))
+      if (present(mom_rhs)) then
+        call addto(mom_rhs, u_nodes_bdy, shape_vector_rhs(face_shape(u, sele), normal_bdy, &
+                                      -detwei_bdy*delta_rho_g_quad* &
+                                      (itheta*face_val_at_quad(it_fs, sele) + &
+                                       (1.0-itheta)*face_val_at_quad(old_fs, sele))))
+      end if
 
       if(reassemble_ct_m) then
         p_nodes_bdy = face_global_nodes(p_mesh, sele)

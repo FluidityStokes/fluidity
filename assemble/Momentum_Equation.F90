@@ -427,7 +427,11 @@
                ! if required with a different unique name. Note there is no need
                ! to again decide reassemble_ct_m as ctp_m for this case is assembled when ct_m is.
                if ((.not. compressible_eos) .and. cg_pressure_cv_test_continuity) then
-                  ctp_m(istate)%ptr => get_velocity_divergence_matrix(state(istate), ct_m_name = "CVTestedVelocityDivergenceMatrix")
+                 if (implicit_prognostic_fs) then
+                   ctp_m(istate)%ptr => get_extended_velocity_divergence_matrix(state(istate), u, free_surface, p_mesh, ct_m_name = "CVTestedExtendedVelocityDivergenceMatrix") 
+                 else
+                   ctp_m(istate)%ptr => get_velocity_divergence_matrix(state(istate), ct_m_name = "CVTestedVelocityDivergenceMatrix")
+                 end if
                end if
 
                ! Get the pressure poisson matrix (i.e. the CMC/projection matrix)
@@ -717,8 +721,8 @@
             end if
             if (explicit_prognostic_fs) then
               call add_explicit_viscous_free_surface_integrals(state(istate), &
-                mom_rhs(istate), ct_m(istate)%ptr, reassemble_ct_m, &
-                u, p_mesh, free_surface)
+                ct_m(istate)%ptr, reassemble_ct_m, &
+                u, p_mesh, free_surface, mom_rhs=mom_rhs(istate))
             end if
 
             call profiler_toc(p, "assembly")
@@ -769,15 +773,37 @@
                   else
                      call assemble_compressible_divergence_matrix_cg(ctp_m(istate)%ptr, state, istate, ct_rhs(istate))
                   end if               
+
+                  if (implicit_prognostic_fs) then
+                    call add_implicit_viscous_free_surface_integrals(state(istate), &
+                      ctp_m(istate)%ptr, u, p_mesh, free_surface)
+                  end if
+
+                  if (explicit_prognostic_fs) then
+                    call add_explicit_viscous_free_surface_integrals(state(istate), &
+                      ctp_m(istate)%ptr, .true., & ! reassemble_ct_m is true here because ctp_m has always just been assembled
+                      u, p_mesh, free_surface) ! don't pass in mom_rhs as it has already been modified
+                  end if
                else                  
                   ! Incompressible scenario
                   if (cg_pressure_cv_test_continuity) then
-                     ! Form the CV tested divergence matrix and ct_rhs.
-                     ! This will only reassemble ctp_m when ct_m 
-                     ! also requires reassemble. NOTE that this is not optimal in that the ct_rhs
-                     ! was formed already above. The call here will overwrite those values.
-                     call assemble_divergence_matrix_cv(ctp_m(istate)%ptr, state(istate), ct_rhs=ct_rhs(istate), &
+                    ! Form the CV tested divergence matrix and ct_rhs.
+                    ! This will only reassemble ctp_m when ct_m 
+                    ! also requires reassemble. NOTE that this is not optimal in that the ct_rhs
+                    ! was formed already above. The call here will overwrite those values.
+                    call assemble_divergence_matrix_cv(ctp_m(istate)%ptr, state(istate), ct_rhs=ct_rhs(istate), &
                                                         test_mesh=p%mesh, field=u, get_ct=reassemble_ct_m)
+
+                    if (implicit_prognostic_fs .and. reassemble_ct_m) then
+                      call add_implicit_viscous_free_surface_integrals(state(istate), &
+                        ctp_m(istate)%ptr, u, p_mesh, free_surface)
+                    end if
+
+                    if (explicit_prognostic_fs) then
+                      call add_explicit_viscous_free_surface_integrals(state(istate), &
+                        ctp_m(istate)%ptr, reassemble_ct_m, &
+                        u, p_mesh, free_surface) ! don't pass in mom_rhs as it has already been modified
+                    end if
                   else                  
                      ! ctp_m is identical to ct_m
                      ctp_m(istate)%ptr => ct_m(istate)%ptr
@@ -791,6 +817,7 @@
                      end if
                      call rotate_ct_m(ctp_m(istate)%ptr, u)
                   end if
+
                   if (sphere_absorption(istate)) then
                      if (dg(istate)) then
                        call zero_non_owned(u)
