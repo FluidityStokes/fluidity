@@ -1486,6 +1486,7 @@ contains
     integer:: stat
     integer, save:: last_mesh_movement = -1
     logical:: mesh_moved
+    character(len=FIELD_NAME_LEN) :: l_ct_m_name
 
     mesh_moved = eventcount(EVENT_MESH_MOVEMENT)/=last_mesh_movement
     last_mesh_movement = eventcount(EVENT_MESH_MOVEMENT)
