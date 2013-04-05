@@ -765,31 +765,31 @@ module compressible_projection
     logical :: compressible_eos
 
     do iphase = 0, option_count("/material_phase")-1
-      compressible_eos = have_option("/material_phase["//int2str(iphase)//"]/equation_of_state/compressible")
-      pressure_option_path = "/material_phase["//int2str(iphase)//"]/scalar_field::Pressure"
-      if(compressible_eos.and. &
-         have_option(trim(pressure_option_path)//"/prognostic/spatial_discretisation/discontinuous_galerkin")) then
-        FLExit("With a prognostic DG pressure you cannot use a compressible eos.")
-      end if
-      if(have_option(trim(pressure_option_path)//"/prognostic/spatial_discretisation/compressible/implicit_pressure_buoyancy")) then
-        if(have_option(trim(pressure_option_path)//"/prognostic/spatial_discretisation/control_volumes")) then
-          FLExit("Compressible option implicit_pressure_buoyancy does not work with control volume Pressure discretisations.")
-        end if
-      end if
-      density_option_path = "/material_phase["//int2str(iphase)//"]/scalar_field::Density"
-      if(have_option(trim(density_option_path)//"/prognostic/spatial_discretisation/use_reference_density")) then
-        if(.not.have_option(trim(density_option_path)// &
-            "/prognostic/spatial_discretisation/continuous_galerkin/mass_terms/exclude_mass_terms").and. &
-           .not.have_option(trim(density_option_path)// &
-            "/prognostic/spatial_discretisation/control_volumes/mass_terms/exclude_mass_terms")) then
-          FLExit("Using reference density in the continuity equation only really makes sense with exclude_mass_terms.")
-        end if
-        if(have_option(trim(density_option_path)//"/prognostic/scalar_field::Absorption")) then
-          FLExit("Using reference density in the continuity equation doesn't make sense with absorption.")
-        end if
-      end if
+       compressible_eos = have_option("/material_phase["//int2str(iphase)//"]/equation_of_state/compressible")
+       pressure_option_path = "/material_phase["//int2str(iphase)//"]/scalar_field::Pressure"
+       if(compressible_eos.and. &
+            have_option(trim(pressure_option_path)//"/prognostic/spatial_discretisation/discontinuous_galerkin")) then
+          FLExit("With a DG pressure you cannot have use_compressible_projection_method")
+       end if
+       if(have_option(trim(pressure_option_path)//"/prognostic/spatial_discretisation/compressible/implicit_pressure_buoyancy")) then
+          if(have_option(trim(pressure_option_path)//"/prognostic/spatial_discretisation/control_volumes")) then
+             FLExit("Compressible option implicit_pressure_buoyancy does not work with control volume Pressure discretisations.")
+          end if
+       end if
+       density_option_path = "/material_phase["//int2str(iphase)//"]/scalar_field::Density"
+       if(have_option(trim(density_option_path)//"/prognostic/spatial_discretisation/use_reference_density")) then
+          if(.not.have_option(trim(density_option_path)// &
+               "/prognostic/spatial_discretisation/continuous_galerkin/mass_terms/exclude_mass_terms").and. &
+               .not.have_option(trim(density_option_path)// &
+               "/prognostic/spatial_discretisation/control_volumes/mass_terms/exclude_mass_terms")) then
+             FLExit("Using reference density in the continuity equation only really makes sense with exclude_mass_terms.")
+          end if
+          if(have_option(trim(density_option_path)//"/prognostic/scalar_field::Absorption")) then
+             FLExit("Using reference density in the continuity equation doesn't make sense with absorption.")
+          end if
+       end if
     end do
-
+ 
   end subroutine compressible_projection_check_options
 
 end module compressible_projection
