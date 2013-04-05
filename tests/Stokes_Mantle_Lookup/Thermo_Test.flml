@@ -155,7 +155,9 @@
               <inner_matrix name="FullMomentumMatrix">
                 <solver>
                   <iterative_method name="preonly"/>
-                  <preconditioner name="lu"/>
+                  <preconditioner name="lu">
+                    <factorization_package name="petsc"/>
+                  </preconditioner>
                   <relative_error>
                     <real_value rank="0">1.0e-7</real_value>
                   </relative_error>
@@ -297,7 +299,9 @@
         </temporal_discretisation>
         <solver>
           <iterative_method name="preonly"/>
-          <preconditioner name="lu"/>
+          <preconditioner name="lu">
+            <factorization_package name="petsc"/>
+          </preconditioner>
           <relative_error>
             <real_value rank="0">1.0e-7</real_value>
           </relative_error>
@@ -379,7 +383,9 @@
     <scalar_field name="Temperature" rank="0">
       <prognostic>
         <mesh name="VelocityMesh"/>
-        <equation name="MantleAnelasticEnergy"/>
+        <equation name="MantleAnelasticEnergy">
+          <density name="CompressibleReferenceDensity*IsobaricSpecificHeatCapacity"/>
+        </equation>
         <spatial_discretisation>
           <continuous_galerkin>
             <stabilisation>
@@ -399,7 +405,9 @@
         </temporal_discretisation>
         <solver>
           <iterative_method name="preonly"/>
-          <preconditioner name="lu"/>
+          <preconditioner name="lu">
+            <factorization_package name="petsc"/>
+          </preconditioner>
           <relative_error>
             <real_value rank="0">1.0e-10</real_value>
           </relative_error>
@@ -931,7 +939,9 @@ for node in range(field.node_count):
         <mesh name="CoordinateMesh"/>
         <solver>
           <iterative_method name="preonly"/>
-          <preconditioner name="lu"/>
+          <preconditioner name="lu">
+            <factorization_package name="petsc"/>
+          </preconditioner>
           <relative_error>
             <real_value rank="0">1.0e-12</real_value>
           </relative_error>
