@@ -75,8 +75,6 @@ module field_equations_cv
   logical :: move_mesh = .false.
   ! are we including density?
   logical :: include_density = .false.
-  ! is the Density field prognostic?
-  logical :: prognostic_density = .false.  
   ! are we including a souce?
   logical :: include_source = .false.
   ! Add source directly to the right hand side?
@@ -301,11 +299,6 @@ contains
               include_density = .true.
               tdensity=>extract_scalar_field(state(istate), "Density")
               oldtdensity=>extract_scalar_field(state(istate), "OldDensity")
-              if(have_option(trim(tdensity%option_path)//"/prognostic")) then
-                 prognostic_density = .true.
-              else
-                 prognostic_density = .false.
-              end if
            case("Boussinesq")
               tdensity => dummydensity
               oldtdensity => dummydensity
@@ -377,12 +370,6 @@ contains
         call deallocate(refdens_remap)
         call deallocate(heatcap_remap)
 
-        if(have_option(trim(tdensity%option_path)//"/prognostic")) then
-           prognostic_density = .true.
-        else
-           prognostic_density = .false.
-        end if
-
       end select
 
       ! here I'm reverting back some crap that was introduced by merging from the trunk that would have
@@ -399,11 +386,7 @@ contains
       ! handily wrapped in a new type...
       tfield_options=get_cv_options(tfield%option_path, tfield%mesh%shape%numbering%family, mesh_dim(tfield))
       if(include_density) then
-        if(prognostic_density) then
           tdensity_options=get_cv_options(tdensity_option_path, tdensity%mesh%shape%numbering%family, mesh_dim(tdensity),  coefficient_field=.true.)
-        else
-          tdensity_options=tfield_options
-        end if
       end if
 
       ! extract fields from state
