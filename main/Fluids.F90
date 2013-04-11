@@ -786,9 +786,10 @@ contains
              ewrite(2,*) 'out of solid_data_update'
           end if
 
-          ! Note these have been moved here temporarily:
-          call calculate_diagnostic_variables(State, exclude_nonrecalculated=.true.)
-          call calculate_diagnostic_variables_new(state, exclude_nonrecalculated = .true.)
+!          ! Note these have been copied here temporarily - a more robust fix needs to be implemented for
+!          ! Diagnostic fields:
+!          call calculate_diagnostic_variables(State, exclude_nonrecalculated=.true.)
+!          call calculate_diagnostic_variables_new(state, exclude_nonrecalculated = .true.)
 
        end do nonlinear_iteration_loop
 
