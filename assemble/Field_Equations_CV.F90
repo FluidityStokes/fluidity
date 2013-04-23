@@ -310,12 +310,6 @@ contains
               FLAbort("Unknown equation type for velocity")
         end select
 
-        if (.not.have_option(trim(tdensity%option_path)//"/prognostic")) then
-          if (.not.have_option(trim(option_path)//'/prognostic/equation[0]/density[0]/discretisation_options')) then
-            FLExit("KEpsilon equation requires additional discretisation options for the density coefficient.")
-          end if
-        end if
-
       case(FIELD_EQUATION_CONSERVATIONOFMASS, FIELD_EQUATION_REDUCEDCONSERVATIONOFMASS, &
            FIELD_EQUATION_INTERNALENERGY, FIELD_EQUATION_HEATTRANSFER )
         call get_option(trim(option_path)//'/prognostic/equation[0]/density[0]/name', &
@@ -360,10 +354,6 @@ contains
         call set(tdensity, refdens_remap)
         call scale(tdensity, heatcap_remap)
        
-        if (.not.have_option(trim(option_path)//'/prognostic/equation[0]/density[0]/discretisation_options')) then
-          FLExit("MantleAnelasticEnergy equation requires additional discretisation options for the density coefficient.")
-        end if
-           
         ! Old density not needed, so use a constant field.
         oldtdensity=>dummyscalar
 
@@ -372,14 +362,18 @@ contains
 
       end select
 
-      ! here I'm reverting back some crap that was introduced by merging from the trunk that would have
-      ! completely ignored user specified options if the density wasn't prognostic.  who the hell thought
-      ! that was a good idea? Instead, I'm adding an options check for KEPSILON above since it seems to have been in
-      ! its name that this act of hackery and code vandalism was committed.
+      ! get the tdensity discretisation options from:
+      ! 1) the user specified options for the coefficient of this field
+      ! 2) the options underneath the density field itself if it is prognostic
+      ! 3) default back to the same discretisation options as used for this field - Q: is this a really a good idea?
       if(have_option(trim(option_path)//'/prognostic/equation[0]/density[0]/discretisation_options')) then
         tdensity_option_path = trim(option_path)//'/prognostic/equation[0]/density[0]/discretisation_options'
       else
-        tdensity_option_path = trim(tdensity%option_path)
+        if(have_option(trim(tdensity%option_path)//"/prognostic")) then
+          tdensity_option_path = trim(tdensity%option_path)
+        else
+          tdensity_option_path = trim(tfield%option_path)
+        end if
       end if
 
       ! now we can get the options for these fields
@@ -2636,13 +2630,21 @@ contains
           oldtdensity(f)%ptr=>extract_scalar_field(state(state_indices(f)), "Old"//trim(tmpstring))
         end select
         reftemp(f)%ptr => dummyscalar
-        ! its option path
+
+        ! get the tdensity discretisation options from:
+        ! 1) the user specified options for the coefficient of this field
+        ! 2) the options underneath the density field itself if it is prognostic
+        ! 3) default back to the same discretisation options as used for this field - Q: is this a really a good idea?
         if(have_option(trim(option_path(f))//'/prognostic/equation[0]/density[0]/discretisation_options')) then
-          tdensity_option_path(f)=trim(option_path(f))//'/prognostic/equation[0]/density[0]/discretisation_options'
+          tdensity_option_path(f) = trim(option_path(f))//'/prognostic/equation[0]/density[0]/discretisation_options'
         else
-          tdensity_option_path(f)=tdensity(f)%ptr%option_path
+          if(have_option(trim(tdensity(f)%ptr%option_path)//"/prognostic")) then
+            tdensity_option_path(f) = trim(tdensity(f)%ptr%option_path)
+          else
+            tdensity_option_path(f) = trim(tfield(f)%ptr%option_path)
+          end if
         end if
-        
+
         ! now we can get the options for these fields
         ! handily wrapped in a new type...
         tfield_options(f)=get_cv_options(tfield(f)%ptr%option_path, tfield(f)%ptr%mesh%shape%numbering%family, mesh_dim(tfield(f)%ptr))
