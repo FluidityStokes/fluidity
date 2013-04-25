@@ -309,6 +309,8 @@ contains
               ! developer error... out of sync options input and code
               FLAbort("Unknown equation type for velocity")
         end select
+        ! reftemp not needed so use a constant field also:
+        reftemp => dummyscalar
 
       case(FIELD_EQUATION_CONSERVATIONOFMASS, FIELD_EQUATION_REDUCEDCONSERVATIONOFMASS, &
            FIELD_EQUATION_INTERNALENERGY, FIELD_EQUATION_HEATTRANSFER )
@@ -364,23 +366,29 @@ contains
 
       ! get the tdensity discretisation options from:
       ! 1) the user specified options for the coefficient of this field
-      ! 2) the options underneath the density field itself if it is prognostic
-      ! 3) default back to the same discretisation options as used for this field - Q: is this a really a good idea?
-      if(have_option(trim(option_path)//'/prognostic/equation[0]/density[0]/discretisation_options')) then
-        tdensity_option_path = trim(option_path)//'/prognostic/equation[0]/density[0]/discretisation_options'
-      else
-        if(have_option(trim(tdensity%option_path)//"/prognostic")) then
-          tdensity_option_path = trim(tdensity%option_path)
+      ! 2) the options underneath the density field itself if it is prognostic and cv
+      ! 3) throw an error as otherwise it would default to poorly defined options
+      if(include_density) then
+        if(have_option(trim(option_path)//'/prognostic/equation[0]/density[0]/discretisation_options')) then
+          tdensity_option_path = trim(option_path)//'/prognostic/equation[0]/density[0]/discretisation_options'
         else
-          tdensity_option_path = trim(tfield%option_path)
+          if(have_option(trim(tdensity%option_path)//"/prognostic/spatial_discretisation/control_volumes")) then
+            tdensity_option_path = trim(tdensity%option_path)
+          else
+            FLExit("Additional discretisation options required for the density coefficient. Please set equation/density/discretisation_options.")
+          end if
         end if
+      else
+        tdensity_option_path = ""
       end if
 
       ! now we can get the options for these fields
       ! handily wrapped in a new type...
       tfield_options=get_cv_options(tfield%option_path, tfield%mesh%shape%numbering%family, mesh_dim(tfield))
       if(include_density) then
-          tdensity_options=get_cv_options(tdensity_option_path, tdensity%mesh%shape%numbering%family, mesh_dim(tdensity),  coefficient_field=.true.)
+        tdensity_options=get_cv_options(tdensity_option_path, tdensity%mesh%shape%numbering%family, mesh_dim(tdensity),  coefficient_field=.true.)
+      else
+        tdensity_options=tfield_options  ! dummy so we don't leave variables undefined but shouldn't get used
       end if
 
       ! extract fields from state
@@ -2633,23 +2641,29 @@ contains
 
         ! get the tdensity discretisation options from:
         ! 1) the user specified options for the coefficient of this field
-        ! 2) the options underneath the density field itself if it is prognostic
-        ! 3) default back to the same discretisation options as used for this field - Q: is this a really a good idea?
-        if(have_option(trim(option_path(f))//'/prognostic/equation[0]/density[0]/discretisation_options')) then
-          tdensity_option_path(f) = trim(option_path(f))//'/prognostic/equation[0]/density[0]/discretisation_options'
-        else
-          if(have_option(trim(tdensity(f)%ptr%option_path)//"/prognostic")) then
-            tdensity_option_path(f) = trim(tdensity(f)%ptr%option_path)
+        ! 2) the options underneath the density field itself if it is prognostic and cv
+        ! 3) throw an error as otherwise it would default to poorly defined options
+        if(include_density) then
+          if(have_option(trim(option_path(f))//'/prognostic/equation[0]/density[0]/discretisation_options')) then
+            tdensity_option_path(f) = trim(option_path(f))//'/prognostic/equation[0]/density[0]/discretisation_options'
           else
-            tdensity_option_path(f) = trim(tfield(f)%ptr%option_path)
+            if(have_option(trim(tdensity(f)%ptr%option_path)//"/prognostic/spatial_discretisation/control_volumes")) then
+              tdensity_option_path(f) = trim(tdensity(f)%ptr%option_path)
+            else
+              FLExit("Additional discretisation options required for the density coefficient. Please set equation/density/discretisation_options.")
+            end if
           end if
+        else
+          tdensity_option_path(f) = ""
         end if
 
         ! now we can get the options for these fields
         ! handily wrapped in a new type...
         tfield_options(f)=get_cv_options(tfield(f)%ptr%option_path, tfield(f)%ptr%mesh%shape%numbering%family, mesh_dim(tfield(f)%ptr))
         if(include_density) then
-          tdensity_options(f)=get_cv_options(tdensity_option_path(f), tdensity(f)%ptr%mesh%shape%numbering%family, mesh_dim(tdensity(f)%ptr), coefficient_field=.true.)
+          tdensity_options(f)=get_cv_options(tdensity_option_path(f), tdensity(f)%ptr%mesh%shape%numbering%family, mesh_dim(tdensity(f)%ptr),  coefficient_field=.true.)
+        else
+          tdensity_options(f)=tfield_options(f)  ! dummy so we don't leave variables undefined but shouldn't get used
         end if
 
         source(f)%ptr=>extract_scalar_field(state(state_indices(f)), trim(field_name)//"Source", stat=stat)
