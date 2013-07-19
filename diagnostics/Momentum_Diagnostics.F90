@@ -463,51 +463,53 @@ contains
     call deallocate(lumped_mass)
     call deallocate(dummyscalar)
 
+  contains
+
+    subroutine integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, reference_density, gravity_magnitude, ele, rho0, gamma)
+      type(scalar_field), intent(inout) :: s_field
+      type(vector_field), intent(in), pointer :: positions
+      type(scalar_field), intent(in), pointer :: thermal_expansion, reference_density
+      type(vector_field), intent(in), pointer :: velocity, gravity_direction
+      real, intent(in)    :: gravity_magnitude
+      real, optional      :: rho0, gamma
+      integer, intent(in) :: ele
+      
+      ! For integration:
+      integer :: dim, gi
+      real, dimension(ele_loc(s_field,ele)) :: ele_val
+      real, dimension(positions%dim, ele_ngi(positions, ele)) :: positions_quad, velocity_quad, gravity_direction_quad
+      real, dimension(ele_ngi(positions, ele)) :: detwei, density_quad, gamma_quad, inner_prod
+
+
+      ! Evaluate key parameters at gauss points:
+      call transform_to_physical(positions, ele, detwei = detwei)
+      positions_quad          = ele_val_at_quad(positions, ele)
+      velocity_quad           = ele_val_at_quad(velocity, ele)
+      gravity_direction_quad  = ele_val_at_quad(gravity_direction, ele)
+      density_quad            = ele_val_at_quad(reference_density, ele)
+      gamma_quad              = ele_val_at_quad(thermal_expansion, ele)
+
+      ! Calculate inner product of velocity and gravity unit vector at gauss points:
+      inner_prod = 0.
+      do dim = 1, velocity%dim
+         do gi = 1, ele_ngi(velocity, ele)
+            inner_prod(gi) = inner_prod(gi) + velocity_quad(dim,gi)*gravity_direction_quad(dim,gi)
+         end do
+      end do
+
+      ! Evaluate nodal values of integral:
+      if(present(rho0) .and. present(gamma)) then
+         ele_val = shape_rhs(ele_shape(s_field,ele), -inner_prod*gravity_magnitude*gamma*rho0*detwei)
+      else
+         ele_val = shape_rhs(ele_shape(s_field,ele), -inner_prod*gravity_magnitude*gamma_quad*density_quad*detwei)
+      end if
+
+      ! Add this to the global RHS vector:
+      call addto(s_field, ele_nodes(s_field, ele), ele_val)
+           
+    end subroutine integrate_RHS_ele
+
   end subroutine adiabatic_heating_coefficient_projection
-
-  subroutine integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, reference_density, gravity_magnitude, ele, rho0, gamma)
-    type(scalar_field), intent(inout) :: s_field
-    type(vector_field), intent(in), pointer :: positions
-    type(scalar_field), intent(in), pointer :: thermal_expansion, reference_density
-    type(vector_field), intent(in), pointer :: velocity, gravity_direction
-    real, intent(in)    :: gravity_magnitude
-    real, optional      :: rho0, gamma
-    integer, intent(in) :: ele
-    
-    ! For integration:
-    integer :: dim, gi
-    real, dimension(ele_loc(s_field,ele)) :: ele_val
-    real, dimension(positions%dim, ele_ngi(positions, ele)) :: positions_quad, velocity_quad, gravity_direction_quad
-    real, dimension(ele_ngi(positions, ele)) :: detwei, density_quad, gamma_quad, inner_prod
-
-
-    ! Evaluate key parameters at gauss points:
-    call transform_to_physical(positions, ele, detwei = detwei)
-    positions_quad          = ele_val_at_quad(positions, ele)
-    velocity_quad           = ele_val_at_quad(velocity, ele)
-    gravity_direction_quad  = ele_val_at_quad(gravity_direction, ele)
-    density_quad            = ele_val_at_quad(reference_density, ele)
-    gamma_quad              = ele_val_at_quad(thermal_expansion, ele)
-
-    ! Calculate inner product of velocity and gravity unit vector at gauss points:
-    inner_prod = 0.
-    do dim = 1, velocity%dim
-       do gi = 1, ele_ngi(velocity, ele)
-          inner_prod(gi) = inner_prod(gi) + velocity_quad(dim,gi)*gravity_direction_quad(dim,gi)
-       end do
-    end do
-
-    ! Evaluate nodal values of integral:
-    if(present(rho0) .and. present(gamma)) then
-       ele_val = shape_rhs(ele_shape(s_field,ele), -inner_prod*gravity_magnitude*gamma*rho0*detwei)
-    else
-       ele_val = shape_rhs(ele_shape(s_field,ele), -inner_prod*gravity_magnitude*gamma_quad*density_quad*detwei)
-    end if
-
-    ! Add this to the global RHS vector:
-    call addto(s_field, ele_nodes(s_field, ele), ele_val)
-         
-  end subroutine integrate_RHS_ele
 
   subroutine calculate_adiabatic_heating_absorption(state, s_field)
     ! Calculates adiabatic heating absorption term - i.e. the adiabatic heating
