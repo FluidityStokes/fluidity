@@ -444,13 +444,11 @@ contains
     ! Integrate to determine RHS:
     call zero(s_field)
     do ele = 1, element_count(s_field)
-       if(element_owned(s_field, ele)) then      
-          if(have_linear_eos) then
-             call integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, reference_density, gravity_magnitude, ele, rho0, gamma)
-          else if(have_linearised_mantle_compressible_eos) then             
-             call integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, reference_density, gravity_magnitude, ele)
-          end if
-       end if
+        if(have_linear_eos) then
+           call integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, reference_density, gravity_magnitude, ele, rho0, gamma)
+        else if(have_linearised_mantle_compressible_eos) then             
+           call integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, reference_density, gravity_magnitude, ele)
+        end if
     end do
 
     ! Compute inverse lumped mass matrix:
