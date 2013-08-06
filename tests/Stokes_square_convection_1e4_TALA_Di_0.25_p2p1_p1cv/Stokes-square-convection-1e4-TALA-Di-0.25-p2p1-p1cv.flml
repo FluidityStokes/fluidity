@@ -1,8 +1,8 @@
 <?xml version='1.0' encoding='utf-8'?>
 <fluidity_options>
   <simulation_name>
-    <string_value lines="1">stokes-1e4-p2p1-ALA-implicit-Di-0.25-p1cv</string_value>
-    <comment>This tests compressible stokes. It is a ALA case at a dissipation number of 0.25 and a Rayleigh number of 1e4. Values are compared to the benchmark solutions of King et al. 2009. A P1_CV control volume discretisation is used for temperature.</comment>
+    <string_value lines="1">stokes-1e4-p2p1-p1cv-TALA-Di-0.25</string_value>
+    <comment>This tests compressible stokes. It is a TALA case at a dissipation number of 0.25 and a Rayleigh number of 1e4. Values are compared to the benchmark solutions of King et al. 2009.</comment>
   </simulation_name>
   <problem_type>
     <string_value lines="1">stokes</string_value>
@@ -25,6 +25,35 @@
         <mesh_shape>
           <polynomial_degree>
             <integer_value rank="0">2</integer_value>
+          </polynomial_degree>
+        </mesh_shape>
+        <stat>
+          <exclude_from_stat/>
+        </stat>
+      </from_mesh>
+    </mesh>
+    <mesh name="P2DGMesh">
+      <from_mesh>
+        <mesh name="CoordinateMesh"/>
+        <mesh_shape>
+          <polynomial_degree>
+            <integer_value rank="0">2</integer_value>
+          </polynomial_degree>
+        </mesh_shape>
+        <mesh_continuity>
+          <string_value>discontinuous</string_value>
+        </mesh_continuity>
+        <stat>
+          <exclude_from_stat/>
+        </stat>
+      </from_mesh>
+    </mesh>
+    <mesh name="P4Mesh">
+      <from_mesh>
+        <mesh name="CoordinateMesh"/>
+        <mesh_shape>
+          <polynomial_degree>
+            <integer_value rank="0">4</integer_value>
           </polynomial_degree>
         </mesh_shape>
         <stat>
@@ -73,7 +102,7 @@
     </adaptive_timestep>
     <steady_state>
       <tolerance>
-        <real_value rank="0">5.0e-3</real_value>
+        <real_value rank="0">1.0e-4</real_value>
         <infinity_norm/>
       </tolerance>
     </steady_state>
@@ -108,7 +137,9 @@
   <material_phase name="Fluid">
     <equation_of_state>
       <compressible>
-        <linearised_mantle/>
+        <linearised_mantle>
+          <exclude_pressure_buoyancy/>
+        </linearised_mantle>
       </compressible>
     </equation_of_state>
     <scalar_field name="Pressure" rank="0">
@@ -116,9 +147,7 @@
         <mesh name="CoordinateMesh"/>
         <spatial_discretisation>
           <continuous_galerkin/>
-          <compressible>
-            <implicit_pressure_buoyancy/>
-          </compressible>
+          <compressible/>
         </spatial_discretisation>
         <scheme>
           <poisson_pressure_solution>
@@ -213,13 +242,9 @@
             <string_value lines="20" type="code" language="python">def val(X,t):
 
   import math
-  
-  rho_zero = 1.0
-  gamma = 1.0
-  Di = 0.25
+  from constants import *
   depth = 1.0 - X[1]
-  exp_val = (depth*Di)/gamma
-  rho_ref = rho_zero * math.exp(exp_val)
+  rho_ref = rho_0 * math.exp((depth*Di)/gamma)
   return rho_ref</string_value>
           </python>
         </initial_condition>
@@ -319,11 +344,19 @@
         </boundary_conditions>
         <tensor_field name="Viscosity" rank="2">
           <prescribed>
+            <mesh name="CoordinateMesh"/>
             <value name="WholeMesh">
               <anisotropic_symmetric>
-                <constant>
-                  <real_value symmetric="true" dim2="dim" shape="2 2" dim1="dim" rank="2">2.5e-5 2.5e-5 2.5e-5 2.5e-5</real_value>
-                </constant>
+                <python>
+                  <string_value lines="20" type="code" language="python">def val(X, t):
+  from constants import *
+  mu = Di / Ra
+  visc = numpy.zeros((2,2))
+  for i in range(2):
+    for j in range(2):
+      visc[i][j] = mu
+  return visc</string_value>
+                </python>
               </anisotropic_symmetric>
             </value>
             <output/>
@@ -361,7 +394,12 @@
                 <control_volumes>
                   <face_value name="FiniteElement">
                     <limit_face_value>
-                      <limiter name="Sweby"/>
+                      <limiter name="Sweby">
+                        <project_upwind_value_from_point>
+                          <bound_projected_value_locally/>
+                          <store_upwind_elements/>
+                        </project_upwind_value_from_point>
+                      </limiter>
                     </limit_face_value>
                   </face_value>
                 </control_volumes>
@@ -378,7 +416,12 @@
           <control_volumes>
             <face_value name="FiniteElement">
               <limit_face_value>
-                <limiter name="Sweby"/>
+                <limiter name="Sweby">
+                  <project_upwind_value_from_point>
+                    <bound_projected_value_locally/>
+                    <store_upwind_elements/>
+                  </project_upwind_value_from_point>
+                </limiter>
               </limit_face_value>
             </face_value>
             <diffusion_scheme name="ElementGradient"/>
@@ -393,7 +436,7 @@
           </theta>
           <control_volumes>
             <number_advection_iterations>
-              <integer_value rank="0">3</integer_value>
+              <integer_value rank="0">2</integer_value>
             </number_advection_iterations>
           </control_volumes>
         </temporal_discretisation>
@@ -418,7 +461,10 @@
         <initial_condition name="WholeMesh">
           <python>
             <string_value lines="20" type="code" language="python">def val(X,t):
-  T = (1 - X[0])*0.97415
+  import math
+  from constants import *
+  T_CMB  = 1.0 - (T_s*math.exp(Di) - T_s)
+  T = (1 - X[0])*T_CMB
   return T</string_value>
           </python>
         </initial_condition>
@@ -427,10 +473,13 @@
             <integer_value shape="1" rank="1">4</integer_value>
           </surface_ids>
           <type name="dirichlet">
-            <constant>
-              <real_value rank="0">0.97415</real_value>
-              <comment>1.0 - Tsurf*exp(Di) + Tsurf</comment>
-            </constant>
+            <python>
+              <string_value lines="20" type="code" language="python">def val(X,t):
+  import math
+  from constants import *
+  T_CMB  = 1.0 - (T_s*math.exp(Di) - T_s)
+  return T_CMB</string_value>
+            </python>
           </type>
         </boundary_conditions>
         <boundary_conditions name="ColdTop">
@@ -530,30 +579,12 @@
             <string_value lines="20" type="code" language="python">def val(X,t):
 
   import math
-  
-  rho_zero = 1.0
-  gamma = 1.0
-  Di = 0.25
+  from constants import *
+ 
   depth = 1.0 - X[1]
-  exp_val = (depth*Di)/gamma
-  rho_ref = rho_zero * math.exp(exp_val)
+  rho_ref = rho_0 * math.exp((depth*Di)/gamma)
   return rho_ref</string_value>
           </python>
-        </value>
-        <output/>
-        <stat/>
-        <detectors>
-          <exclude_from_detectors/>
-        </detectors>
-      </prescribed>
-    </scalar_field>
-    <scalar_field name="IsothermalBulkModulus" rank="0">
-      <prescribed>
-        <mesh name="CoordinateMesh"/>
-        <value name="WholeMesh">
-          <constant>
-            <real_value rank="0">1.0</real_value>
-          </constant>
         </value>
         <output/>
         <stat/>
@@ -580,7 +611,7 @@
     <scalar_field name="CompressibleEOSDensity" rank="0">
       <diagnostic>
         <algorithm name="Internal" material_phase_support="multiple"/>
-        <mesh name="CoordinateMesh"/>
+        <mesh name="VelocityMesh"/>
         <output/>
         <stat/>
         <convergence>
@@ -602,14 +633,10 @@
             <string_value lines="20" type="code" language="python">def val(X,t):
 
   import math
-  
-  T_Surf = 273.
-  Delta_T = 3000.
-  Di = 0.25
+  from constants import *  
   depth = 1.0 - X[1]
-  exp_val = (depth*Di)
   # Note - to ensure full T field lies between 0 and 1, we subtract (T_Surf/Delta_T) here:
-  temp_ref = ((T_Surf/Delta_T) * math.exp(exp_val)) - T_Surf/Delta_T
+  temp_ref =  T_s*math.exp(depth*Di) - T_s
   return temp_ref</string_value>
           </python>
         </value>
@@ -638,7 +665,7 @@
     <scalar_field name="Adiabatic_Absorption" rank="0">
       <diagnostic>
         <algorithm name="adiabatic_heating_absorption" material_phase_support="single "/>
-        <mesh name="CoordinateMesh"/>
+        <mesh name="P4Mesh"/>
         <output/>
         <stat/>
         <convergence>
