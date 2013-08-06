@@ -321,9 +321,16 @@
           <prescribed>
             <value name="WholeMesh">
               <anisotropic_symmetric>
-                <constant>
-                  <real_value symmetric="true" dim2="dim" shape="2 2" dim1="dim" rank="2">2.5e-5 2.5e-5 2.5e-5 2.5e-5</real_value>
-                </constant>
+                <python>
+                  <string_value type="code" lines="20" language="python">def val(X, t):
+  from constants import *
+  mu = Di / Ra
+  visc = numpy.zeros((2,2))
+  for i in range(2):
+    for j in range(2):
+      visc[i][j] = mu
+  return visc</string_value>
+                </python>
               </anisotropic_symmetric>
             </value>
             <output/>
