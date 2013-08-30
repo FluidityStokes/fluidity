@@ -752,14 +752,14 @@ contains
     linearised_mantle_eos_path = "/equation_of_state/compressible/linearised_mantle/"
     exclude_pressure_buoyancy = have_option(trim(state%option_path)//&
          trim(linearised_mantle_eos_path)//"/exclude_pressure_buoyancy")
-
+    
     ! Extract relevant parameters from state and remap to drhodp mesh so that all
     ! parameters are on same mesh:    
     referencedensity_local=>extract_scalar_field(state, 'CompressibleReferenceDensity')
     call allocate(referencedensity_remap, drhodp%mesh, 'RemappedCompressibleReferenceDensity')
     call remap_field(referencedensity_local, referencedensity_remap)
     call set(drhodp, referencedensity_remap)
-
+    
     if(.not.(exclude_pressure_buoyancy)) then
        bulkmodulus_local=>extract_scalar_field(state,'IsothermalBulkModulus')
        call allocate(compressibility, drhodp%mesh, 'RemappedIsothermalBulkModulus')
@@ -767,90 +767,104 @@ contains
        ! Compressibility = 1. / bulkmodulus, therefore invert bulk_modulus here:
        call invert(compressibility)      
        call scale(drhodp, compressibility)
+       call deallocate(compressibility)
     end if
-      
+    
     if(present(density).or.present(buoyancy_density).or.present(pressure)) then
-
-      thermalexpansion_local=>extract_scalar_field(state,'IsobaricThermalExpansivity')
-      call allocate(thermalexpansion_remap, drhodp%mesh, 'RemappedIsobaricThermalExpansivity')
-      call remap_field(thermalexpansion_local, thermalexpansion_remap)
-
-      temperature_local => extract_scalar_field(state, "Temperature")
-      call allocate(temperatureproduct, drhodp%mesh, "TemperatureProduct")
-      call remap_field(temperature_local, temperatureproduct)
-      call scale(temperatureproduct, thermalexpansion_remap)
-      call scale(temperatureproduct, referencedensity_remap)
-
-      if(present(density).or.present(buoyancy_density)) then
-        ! calculate the density
-        pressure_local=>extract_scalar_field(state,'Pressure',stat=stat)
-        if (stat==0) then
-        
-          ! density = reference_density + drhodp*pressure
-          !                  + thermalexpansion*referencedensity*temperature
-          call allocate(pressure_remap, drhodp%mesh, "RemappedPressure")
-          call remap_field(pressure_local, pressure_remap)
-
-          if(present(density)) then
-            assert(density%mesh==drhodp%mesh)
-            call set(density, drhodp)
-            call scale(density, pressure_remap)
-            call addto(density, temperatureproduct, -1.0)
-            call addto(density, referencedensity_remap)
+       
+       thermalexpansion_local=>extract_scalar_field(state,'IsobaricThermalExpansivity')
+       call allocate(thermalexpansion_remap, drhodp%mesh, 'RemappedIsobaricThermalExpansivity')
+       call remap_field(thermalexpansion_local, thermalexpansion_remap)
+       
+       temperature_local => extract_scalar_field(state, "Temperature")
+       call allocate(temperatureproduct, drhodp%mesh, "TemperatureProduct")
+       call remap_field(temperature_local, temperatureproduct)
+       call scale(temperatureproduct, thermalexpansion_remap)
+       call scale(temperatureproduct, referencedensity_remap)
+       
+       if(present(density).or.present(buoyancy_density)) then
+          ! Calculate the density field:
+          
+          if(exclude_pressure_buoyancy) then ! TALA Cases
+             ! density = reference_density + (referencedensity*thermalexpansion*temperature)
+             if(present(density)) then
+                assert(density%mesh==drhodp%mesh)
+                call set(density, drhodp)
+                call addto(density, temperatureproduct, -1.0)
+             end if
+             
+             if(present(buoyancy_density)) then
+                assert(buoyancy_density%mesh==drhodp%mesh)
+                call zero(buoyancy_density)
+                call addto(buoyancy_density, temperatureproduct, -1.0)
+             end if
+             
+          else ! ALA Cases
+             ! density = reference_density + (referencedensity*drhodp*pressure)
+             !         + (referencedensity*thermalexpansion*temperature)
+             pressure_local=>extract_scalar_field(state,'Pressure',stat=stat)
+             if (stat==0) then
+                call allocate(pressure_remap, drhodp%mesh, "RemappedPressure")
+                call remap_field(pressure_local, pressure_remap)
+                if(present(density)) then
+                   assert(density%mesh==drhodp%mesh)
+                   call set(density, drhodp)
+                   call scale(density, pressure_remap)
+                   call addto(density, temperatureproduct, -1.0)
+                   call addto(density, referencedensity_remap)
+                end if
+                
+                if(present(buoyancy_density)) then
+                   assert(buoyancy_density%mesh==drhodp%mesh)
+                   implicit_pressure_buoyancy = have_option(trim(pressure_local%option_path)//'/prognostic'//&
+                        '/spatial_discretisation/compressible/implicit_pressure_buoyancy')
+                   if(implicit_pressure_buoyancy) then
+                      call zero(buoyancy_density)
+                   else 
+                      call set(buoyancy_density, drhodp)
+                      call scale(buoyancy_density, pressure_remap)
+                   end if
+                   call addto(buoyancy_density, temperatureproduct, -1.0)
+                end if
+                call deallocate(pressure_remap)
+             else
+                FLExit('No Pressure in material_phase::'//trim(state%name))
+             end if
+             
           end if
-          if(present(buoyancy_density)) then
-            assert(buoyancy_density%mesh==drhodp%mesh)
-
-            implicit_pressure_buoyancy = have_option(trim(pressure_local%option_path)//'/prognostic'//&
-                                                          '/spatial_discretisation/compressible/implicit_pressure_buoyancy')
-
-            if(implicit_pressure_buoyancy.or.exclude_pressure_buoyancy) then
-              call zero(buoyancy_density)
-            else 
-              call set(buoyancy_density, drhodp)
-              call scale(buoyancy_density, pressure_remap)
-            end if
-            call addto(buoyancy_density, temperatureproduct, -1.0)
+          
+       end if
+       
+       if(present(pressure)) then
+          ! Calculate the pressure using the eos and the calculated (probably prognostic) density:
+          density_local=>extract_scalar_field(state,'Density',stat=stat)
+          if (stat==0) then
+             assert(pressure%mesh==drhodp%mesh)
+             ! pressure = density - referencedensity - temperature*thermalexpansion*referencedensity/drhodp
+             call allocate(density_remap, drhodp%mesh, "RemappedDensity")
+             call remap_field(density_local, density_remap)
+             
+             call set(pressure, density_remap)
+             call addto(pressure, referencedensity_remap, -1.0)
+             call addto(pressure, temperatureproduct)
+             
+             call allocate(dpdrho, drhodp%mesh, "dpdrho")
+             call invert(drhodp, dpdrho)
+             call scale(pressure, dpdrho) 
+             
+             call deallocate(dpdrho)
+             call deallocate(density_remap)
+          else
+             FLExit('No Density in material_phase::'//trim(state%name))
           end if
-            
-          call deallocate(pressure_remap)
-        else
-          FLExit('No Pressure in material_phase::'//trim(state%name))
-        end if
-      end if
+       end if
 
-      if(present(pressure)) then
-        ! calculate the pressure using the eos and the calculated (probably prognostic)
-        ! density
-        density_local=>extract_scalar_field(state,'Density',stat=stat)
-        if (stat==0) then
-          assert(pressure%mesh==drhodp%mesh)
-          
-          ! pressure = density - referencedensity - temperature*thermalexpansion*referencedensity/drhodp
-          
-          call allocate(density_remap, drhodp%mesh, "RemappedDensity")
-          call remap_field(density_local, density_remap)
-          
-          call set(pressure, density_remap)
-          call addto(pressure, referencedensity_remap, -1.0)
-          call addto(pressure, temperatureproduct)
-          
-          call allocate(dpdrho, drhodp%mesh, "dpdrho")
-          call invert(drhodp, dpdrho)
-          call scale(pressure, dpdrho) 
+       call deallocate(thermalexpansion_remap)
+       call deallocate(temperatureproduct)
 
-          call deallocate(dpdrho)
-          call deallocate(density_remap)
-        else
-          FLExit('No Density in material_phase::'//trim(state%name))
-        end if
-      end if
-      call deallocate(thermalexpansion_remap)
-      call deallocate(temperatureproduct)
     end if
 
     call deallocate(referencedensity_remap)
-    if(.not.(exclude_pressure_buoyancy)) call deallocate(compressibility)
 
   end subroutine compressible_eos_linearised_mantle
 
