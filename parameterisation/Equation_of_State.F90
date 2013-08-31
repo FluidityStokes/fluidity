@@ -879,7 +879,7 @@ contains
     type(scalar_field), intent(inout) :: drhodp
     type(scalar_field), intent(inout), optional :: density, pressure, buoyancy_density
     
-    !locals
+    ! Locals fields:
     integer :: stat
     type(scalar_field), pointer :: fulldensity_local, referencedensity_local
     type(scalar_field) :: fulldensity_remap, referencedensity_remap
@@ -903,6 +903,7 @@ contains
           ! Extract Reference density from state and remap:
           referencedensity_local=>extract_scalar_field(state, 'CompressibleReferenceDensity')
           ewrite_minmax(referencedensity_local)
+          ! Buoyancy density = density - compressiblereferencedensity:
           call addto(buoyancy_density,referencedensity_local,-1.0)
        end if
     end if
