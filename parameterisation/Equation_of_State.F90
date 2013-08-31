@@ -783,8 +783,7 @@ contains
        call scale(temperatureproduct, referencedensity_remap)
        
        if(present(density).or.present(buoyancy_density)) then
-          ! Calculate the density field:
-          
+          ! Calculate the density field:          
           if(exclude_pressure_buoyancy) then ! TALA Cases
              ! density = reference_density + (referencedensity*thermalexpansion*temperature)
              if(present(density)) then
@@ -800,7 +799,7 @@ contains
              end if
              
           else ! ALA Cases
-             ! density = reference_density + (referencedensity*drhodp*pressure)
+             ! density = reference_density + (referencedensity*compressibility*pressure)
              !         + (referencedensity*thermalexpansion*temperature)
              pressure_local=>extract_scalar_field(state,'Pressure',stat=stat)
              if (stat==0) then
