@@ -63,7 +63,7 @@
     </mesh>
     <quadrature>
       <degree>
-        <integer_value rank="0">8</integer_value>
+        <integer_value rank="0">5</integer_value>
       </degree>
     </quadrature>
   </geometry>
