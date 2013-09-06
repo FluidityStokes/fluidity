@@ -1984,37 +1984,71 @@ scalar_equation_choice =
          ##  - IsobaricSpecificHeatCapacity
          element equation {
             attribute name { "MantleAnelasticEnergy" },
-            ## Set the discretisation options for the density weighting
-            ## (actually the CompressibleReferenceDensity*IsobaricSpecificHeatCapacity).
-            ##
-            ## ONLY REQUIRED FOR CONTROL VOLUME DISCRETISATIONS.
-            element density {
-              attribute name {"CompressibleReferenceDensity*IsobaricSpecificHeatCapacity"},
-              ## Provide discretisation options for the coefficient density field.
-              ##
-              ## If not provided then the discretisation options will default to those
-              ## under the field that is named (hence it will generally have to be a prognostic
-              ## field itself).
-              element discretisation_options {
-                element spatial_discretisation {
-                  element control_volumes {
-                    spatial_control_volume_options_excluding_none
-                  }
-                },
-                element temporal_discretisation {
-                  ## Implicit/explicit control
-                  ##  =0.  -- explicit
-                  ##  =0.5 -- Crank-Nicolson
-                  ##  =1.  -- implicit
-                  element theta {
-                    element real_value{
-                       attribute rank { "0" },
-                       ( "1.0" )
+            (
+              ## Set the discretisation options for the density weighting
+              ## (actually the CompressibleReferenceDensity*IsobaricSpecificHeatCapacity).
+              element density {
+                attribute name {"CompressibleReferenceDensity"},
+                ## Provide discretisation options for the coefficient density field.
+                ##
+                ## If not provided then the discretisation options will default to those
+                ## under the field that is named (hence it will generally have to be a prognostic
+                ## field itself).
+                element discretisation_options {
+                  element spatial_discretisation {
+                    element control_volumes {
+                      spatial_control_volume_options_excluding_none
+                    }
+                  },
+                  element temporal_discretisation {
+                    ## Implicit/explicit control
+                    ##  =0.  -- explicit
+                    ##  =0.5 -- Crank-Nicolson
+                    ##  =1.  -- implicit
+                    element theta {
+                      element real_value{
+                         attribute rank { "0" },
+                         ( "1.0" )
+                      }
                     }
                   }
-                }
-              }?
-            }
+                }?
+              }|
+              ## Set the discretisation options for the density weighting
+              ## (actually the Density*IsobaricSpecificHeatCapacity).
+              element density {
+                attribute name {"Density"},
+                ## Provide discretisation options for the coefficient density field.
+                ##
+                ## If not provided then the discretisation options will default to those
+                ## under the field that is named (hence it will generally have to be a prognostic
+                ## field itself).
+                element discretisation_options {
+                  element spatial_discretisation {
+                    element control_volumes {
+                      spatial_control_volume_options_excluding_none
+                    }
+                  },
+                  element temporal_discretisation {
+                    ## Implicit/explicit control
+                    ##  =0.  -- explicit
+                    ##  =0.5 -- Crank-Nicolson
+                    ##  =1.  -- implicit
+                    element theta {
+                      real
+                    },
+                    element control_volumes {
+                      ## Only works if a control volume or coupled_cv spatial discretisation is selected.
+                      ## If not active then the theta specified above will be used.
+                      ## Otherwise use variable limited theta on individual faces.
+                      element limit_theta {
+                          empty
+                      }?
+                    }
+                  }
+                }?
+              }
+            )
          }|
          ## Option to solve for electrical potential from
          ## electrokinetic, electrochemical or electrothermal sources 

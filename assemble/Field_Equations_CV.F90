@@ -115,8 +115,8 @@ contains
       ! Density fields associated with tfield's equation (i.e. if its not pure advection)
       type(scalar_field), pointer :: tdensity, oldtdensity
       ! Fields associated with mantle anelastic energy equation:
-      type(scalar_field), pointer :: refdens, heatcap, reftemp
-      type(scalar_field) :: refdens_remap, heatcap_remap, reftemp_remap
+      type(scalar_field), pointer :: mantledens, heatcap, reftemp
+      type(scalar_field) :: mantledens_remap, heatcap_remap, reftemp_remap
       ! Coordinate field(s)
       type(vector_field), pointer :: x, x_old, x_new
       type(vector_field) :: x_tfield
@@ -336,11 +336,6 @@ contains
         include_density = .true.
 
         ! Extract required fields from state:
-        call allocate(refdens_remap, tfield%mesh, "Remap_CompressibleReferenceDensity")
-        refdens=>extract_scalar_field(state, "CompressibleReferenceDensity")
-        call remap_field(refdens,refdens_remap)
-        ewrite_minmax(refdens_remap)
-        
         call allocate(heatcap_remap, tfield%mesh, "Remap_IsobaricSpecificHeatCapacity")
         heatcap=>extract_scalar_field(state, "IsobaricSpecificHeatCapacity")
         call remap_field(heatcap,heatcap_remap)
@@ -351,15 +346,32 @@ contains
         call remap_field(reftemp,reftemp_remap)
         ewrite_minmax(reftemp_remap)
 
+        call get_option(trim(option_path)//'/prognostic/equation[0]/density[0]/name', &
+                        tmpstring)
+
+        call allocate(mantledens_remap, tfield%mesh, "Remap_"//trim(tmpstring))
+        mantledens=>extract_scalar_field(state, trim(tmpstring))
+        call remap_field(mantledens,mantledens_remap)
+        ewrite_minmax(mantledens_remap)
+        
         allocate(tdensity)
-        call allocate(tdensity, tfield%mesh, name="CompressibleReferenceDensity*IsobaricSpecificHeatCapacity")
-        call set(tdensity, refdens_remap)
+        call allocate(tdensity, tfield%mesh, name="MantleAnelasticDensity")
+        call set(tdensity, mantledens_remap)
         call scale(tdensity, heatcap_remap)
        
-        ! Old density not needed, so use a constant field.
-        oldtdensity=>dummyscalar
+        call deallocate(mantledens_remap)
 
-        call deallocate(refdens_remap)
+        call allocate(mantledens_remap, tfield%mesh, "Remap_Old"//trim(tmpstring))
+        mantledens=>extract_scalar_field(state, "Old"//trim(tmpstring))
+        call remap_field(mantledens,mantledens_remap)
+        ewrite_minmax(mantledens_remap)
+        
+        allocate(oldtdensity)
+        call allocate(oldtdensity, tfield%mesh, name="OldMantleAnelasticDensity")
+        call set(oldtdensity, mantledens_remap)
+        call scale(oldtdensity, heatcap_remap)
+       
+        call deallocate(mantledens_remap)
         call deallocate(heatcap_remap)
 
       end select
@@ -876,6 +888,8 @@ contains
       if (equation_type==FIELD_EQUATION_MANTLEANELASTICENERGY) then
          call deallocate(tdensity)
          deallocate(tdensity)
+         call deallocate(oldtdensity)
+         deallocate(oldtdensity)
          call deallocate(reftemp_remap)
       end if
       
@@ -1312,14 +1326,16 @@ contains
 
       case (FIELD_EQUATION_MANTLEANELASTICENERGY)
 
+        tdensity_theta = tdensity_options%theta
+
         ! construct M:
         if(explicit) then
           if(include_mass) then
-            call scale(m_cvmass, tdensity)
+            m_cvmass%val = m_cvmass%val*(tdensity_theta*tdensity%val+(1.0-tdensity_theta)*oldtdensity%val)
           end if
         else
-          if(include_mass) then
-            call mult_diag(M, tdensity)
+          if(include_mass) then 
+            call mult_diag(M, (tdensity_theta*tdensity%val+(1.0-tdensity_theta)*oldtdensity%val))
           end if
           if(include_advection) call addto(M, A_m, dt)
           if(include_absorption) call addto_diag(M, massabsorption, theta*dt)
