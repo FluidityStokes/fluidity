@@ -1996,9 +1996,14 @@ scalar_equation_choice =
                 ## field itself).
                 element discretisation_options {
                   element spatial_discretisation {
-                    element control_volumes {
-                      spatial_control_volume_options_excluding_none
-                    }
+                    (
+                      element continuous_galerkin {
+                        empty
+                      }|
+                      element control_volumes {
+                        spatial_control_volume_options_excluding_none
+                      }
+                    )
                   },
                   element temporal_discretisation {
                     ## Implicit/explicit control
@@ -2025,9 +2030,14 @@ scalar_equation_choice =
                 ## field itself).
                 element discretisation_options {
                   element spatial_discretisation {
-                    element control_volumes {
-                      spatial_control_volume_options_excluding_none
-                    }
+                    (
+                      element continuous_galerkin {
+                        empty
+                      }|
+                      element control_volumes {
+                        spatial_control_volume_options_excluding_none
+                      }
+                    )
                   },
                   element temporal_discretisation {
                     ## Implicit/explicit control

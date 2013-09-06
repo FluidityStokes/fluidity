@@ -2460,9 +2460,14 @@ If not provided then the discretisation options will default to those
 under the field that is named (hence it will generally have to be a prognostic
 field itself).</a:documentation>
                 <element name="spatial_discretisation">
-                  <element name="control_volumes">
-                    <ref name="spatial_control_volume_options_excluding_none"/>
-                  </element>
+                  <choice>
+                    <element name="continuous_galerkin">
+                      <empty/>
+                    </element>
+                    <element name="control_volumes">
+                      <ref name="spatial_control_volume_options_excluding_none"/>
+                    </element>
+                  </choice>
                 </element>
                 <element name="temporal_discretisation">
                   <element name="theta">
@@ -2495,9 +2500,14 @@ If not provided then the discretisation options will default to those
 under the field that is named (hence it will generally have to be a prognostic
 field itself).</a:documentation>
                 <element name="spatial_discretisation">
-                  <element name="control_volumes">
-                    <ref name="spatial_control_volume_options_excluding_none"/>
-                  </element>
+                  <choice>
+                    <element name="continuous_galerkin">
+                      <empty/>
+                    </element>
+                    <element name="control_volumes">
+                      <ref name="spatial_control_volume_options_excluding_none"/>
+                    </element>
+                  </choice>
                 </element>
                 <element name="temporal_discretisation">
                   <element name="theta">
