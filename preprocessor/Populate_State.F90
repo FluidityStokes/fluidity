@@ -3775,11 +3775,12 @@ if (.not.have_option("/material_phase[0]/vector_field::Velocity/prognostic/vecto
 
     integer :: i, nmat, equation_type
     character(len=OPTION_PATH_LEN) :: velocity_path, pressure_path, schur_path
-    character(len=OPTION_PATH_LEN) :: compressible_path, temperature_path
-    character(len=FIELD_NAME_LEN)  :: schur_preconditioner, inner_matrix, pc_type
+    character(len=OPTION_PATH_LEN) :: compressible_path, temperature_path, density_path
+    character(len=FIELD_NAME_LEN)  :: schur_preconditioner, inner_matrix, pc_type, density_name
 
     logical :: exclude_mass, exclude_advection
     logical :: implicit_pressure_buoyancy, exclude_pressure_buoyancy
+    logical :: using_reference_density_continuity
     logical :: have_mantle_anelastic_energy
     real :: theta
 
@@ -3865,6 +3866,7 @@ if (.not.have_option("/material_phase[0]/vector_field::Velocity/prognostic/vecto
        ! Check options for compressible Stokes simulations:
        compressible_path = "/material_phase["//int2str(i)//"]/equation_of_state/compressible"
        temperature_path="/material_phase["//int2str(i)//"]/scalar_field::Temperature" 
+       density_path="/material_phase["//int2str(i)//"]/scalar_field::Density" 
 
        if(have_option(trim(temperature_path))) then
           equation_type = equation_type_index(trim(temperature_path))       
@@ -3890,6 +3892,28 @@ if (.not.have_option("/material_phase[0]/vector_field::Velocity/prognostic/vecto
              ewrite(-1,*) "For Compressible Stokes problems, if you exclude the pressure effect on buoyancy, you cannot"
              ewrite(-1,*) "include it in the pressure projection (implicit pressure buoyancy), as it does not exist."
              FLExit("Cannot exclude pressure buoyancy and subsequently include it in the pressure projection!")
+          end if
+
+          if(have_option(trim(density_path))) then
+             
+             using_reference_density_continuity=have_option(trim(density_path)//&
+               "/prognostic/spatial_discretisation/use_reference_density")
+
+             if(have_mantle_anelastic_energy) then
+                call get_option(trim(temperature_path)//'/prognostic/equation[0]/density[0]/name',density_name)
+                if ( (trim(density_name)=="CompressibleReferenceDensity" .and. (.not.(using_reference_density_continuity)) ) .or. &
+                     (trim(density_name)=="Density" .and. (using_reference_density_continuity) ) ) then
+                   ewrite(-1,*) "For Compressible Stokes problems, the use of CompressibleReferenceDensity/Density"
+                   ewrite(-1,*) "must be consistent for continuity and energy equations."
+                   FLExit("The use of CompressibleReferenceDensity / Density must be consistent for continuity and energy equations!")
+                end if
+             end if
+
+          else
+
+             ewrite(-1,*) "For Compressible Stokes problems, you must have a prognostic density field."
+             FLExit("Cannot run Compressible Stokes without a prognostic density field.")
+
           end if
 
           if(have_mantle_anelastic_energy) then
