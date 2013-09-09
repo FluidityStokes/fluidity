@@ -337,7 +337,7 @@ contains
           end if
 
           ! Get spatially varying density and remap to s_field%mesh if possible and required:
-          call get_option('/material_phase[0]/scalar_field::Temperature/prognostic/equation[0]/density[0]/name', density_name)
+          call get_option(trim(state%option_path)//'/scalar_field::Temperature/prognostic/equation[0]/density[0]/name', density_name)
           density_local => extract_scalar_field(state,trim(density_name))
           call allocate(density_remap, s_field%mesh, 'RemappedDensity')
           call test_remap_validity(density_local,density_remap,stat_rho)
@@ -392,7 +392,7 @@ contains
     type(scalar_field), intent(inout) :: s_field
 
     type(vector_field), pointer :: positions, gravity_direction, velocity
-    type(scalar_field), pointer :: thermal_expansion, reference_density
+    type(scalar_field), pointer :: thermal_expansion, density_local
     type(scalar_field), pointer :: dummyscalar
 
     type(scalar_field) :: lumped_mass
@@ -401,6 +401,7 @@ contains
     integer :: ele
 
     character(len=OPTION_PATH_LEN) eos_option_path
+    character(len=FIELD_NAME_LEN) :: density_name
     logical :: have_linear_eos, have_linearised_mantle_compressible_eos
 
     ewrite(1,*) 'In adiabatic_heating_coefficient_projection'
@@ -432,13 +433,14 @@ contains
        call get_option(trim(eos_option_path)//'/fluids/linear/reference_density', rho0)
        ! As these values are constant for this eos, we need to point reference density and 
 	   ! thermal_expansion to dummy scalars:
-       reference_density => dummyscalar
+       density_local => dummyscalar
        thermal_expansion => dummyscalar
     elseif(have_linearised_mantle_compressible_eos) then
        ! Get spatially varying thermal expansion field:
        thermal_expansion=>extract_scalar_field(state,'IsobaricThermalExpansivity')
        ! Get spatially varying reference density field:
-       reference_density=>extract_scalar_field(state,'CompressibleReferenceDensity')
+       call get_option(trim(state%option_path)//'/scalar_field::Temperature/prognostic/equation[0]/density[0]/name', density_name)
+       density_local => extract_scalar_field(state,trim(density_name))
     else
        FLExit("Selected EOS not yet configured for adiabatic_heating_coefficient_CV algorithm")
     endif
@@ -447,9 +449,9 @@ contains
     call zero(s_field)
     do ele = 1, element_count(s_field)
         if(have_linear_eos) then
-           call integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, reference_density, gravity_magnitude, ele, rho0, gamma)
+           call integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, density_local, gravity_magnitude, ele, rho0, gamma)
         else if(have_linearised_mantle_compressible_eos) then             
-           call integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, reference_density, gravity_magnitude, ele)
+           call integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, density_local, gravity_magnitude, ele)
         end if
     end do
 
@@ -467,10 +469,10 @@ contains
 
   contains
 
-    subroutine integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, reference_density, gravity_magnitude, ele, rho0, gamma)
+    subroutine integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, density_local, gravity_magnitude, ele, rho0, gamma)
       type(scalar_field), intent(inout) :: s_field
       type(vector_field), intent(in), pointer :: positions
-      type(scalar_field), intent(in), pointer :: thermal_expansion, reference_density
+      type(scalar_field), intent(in), pointer :: thermal_expansion, density_local
       type(vector_field), intent(in), pointer :: velocity, gravity_direction
       real, intent(in)    :: gravity_magnitude
       real, optional      :: rho0, gamma
@@ -488,7 +490,7 @@ contains
       positions_quad          = ele_val_at_quad(positions, ele)
       velocity_quad           = ele_val_at_quad(velocity, ele)
       gravity_direction_quad  = ele_val_at_quad(gravity_direction, ele)
-      density_quad            = ele_val_at_quad(reference_density, ele)
+      density_quad            = ele_val_at_quad(density_local, ele)
       gamma_quad              = ele_val_at_quad(thermal_expansion, ele)
 
       ! Calculate inner product of velocity and gravity unit vector at gauss points:
