@@ -430,7 +430,7 @@ contains
 
     type(vector_field), pointer :: positions, gravity_direction, velocity
     type(scalar_field), pointer :: thermal_expansion, density_local
-    type(scalar_field), pointer :: dummyscalar
+    type(scalar_field), pointer :: dummyscalar, reference_temperature_local
 
     type(scalar_field) :: lumped_mass
 
@@ -475,22 +475,47 @@ contains
     elseif(have_linearised_mantle_compressible_eos) then
        ! Get spatially varying thermal expansion field:
        thermal_expansion=>extract_scalar_field(state,'IsobaricThermalExpansivity')
-       ! Get spatially varying reference density field:
-       call get_option(trim(state%option_path)//'/scalar_field::Temperature/prognostic/equation[0]/density[0]/name', density_name)
-       density_local => extract_scalar_field(state,trim(density_name))
+       ! Get CompressibleReferenceDensity field:
+       density_local => extract_scalar_field(state,'CompressibleReferenceDensity')
     else
        FLExit("Selected EOS not yet configured for adiabatic_heating_coefficient_CV algorithm")
     endif
 
     ! Integrate to determine RHS:
     call zero(s_field)
-    do ele = 1, element_count(s_field)
-        if(have_linear_eos) then
-           call integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, density_local, gravity_magnitude, ele, rho0, gamma)
-        else if(have_linearised_mantle_compressible_eos) then             
-           call integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, density_local, gravity_magnitude, ele)
-        end if
-    end do
+
+    if(have_linear_eos) then
+
+       do ele = 1, element_count(s_field)
+          call integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, density_local, gravity_magnitude, ele, rho0=rho0, gamma=gamma)
+       end do
+       
+    else if(have_linearised_mantle_compressible_eos) then             
+       
+       call get_option(trim(state%option_path)//'/scalar_field::Temperature/prognostic/equation[0]/density[0]/name', density_name)
+       
+       if (trim(density_name)=="CompressibleReferenceDensity") then
+          
+          do ele = 1, element_count(s_field)
+             call integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, density_local, gravity_magnitude, ele)
+          end do
+          
+       elseif (trim(density_name)=="Density") then
+          
+          reference_temperature_local=>extract_scalar_field(state,'CompressibleReferenceTemperature')       
+          
+          do ele = 1, element_count(s_field)
+             call integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, density_local, gravity_magnitude, ele, reference_temperature=reference_temperature_local)
+          end do
+          
+       else
+
+          ewrite(-1,*) "Something has gone wrong in the adiabatic heating coefficient algorithm."
+          FLExit("Density has an unknown name!")
+          
+       end if
+
+    end if
 
     ! Compute inverse lumped mass matrix:
     call allocate(lumped_mass, s_field%mesh, name="Lumped_mass")        
@@ -506,12 +531,13 @@ contains
 
   contains
 
-    subroutine integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, density_local, gravity_magnitude, ele, rho0, gamma)
+    subroutine integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, density_local, gravity_magnitude, ele, reference_temperature, rho0, gamma)
       type(scalar_field), intent(inout) :: s_field
       type(vector_field), intent(in), pointer :: positions
       type(scalar_field), intent(in), pointer :: thermal_expansion, density_local
       type(vector_field), intent(in), pointer :: velocity, gravity_direction
       real, intent(in)    :: gravity_magnitude
+      type(scalar_field), optional, intent(in), pointer :: reference_temperature
       real, optional      :: rho0, gamma
       integer, intent(in) :: ele
       
@@ -519,16 +545,17 @@ contains
       integer :: dim, gi
       real, dimension(ele_loc(s_field,ele)) :: ele_val
       real, dimension(positions%dim, ele_ngi(positions, ele)) :: positions_quad, velocity_quad, gravity_direction_quad
-      real, dimension(ele_ngi(positions, ele)) :: detwei, density_quad, gamma_quad, inner_prod
+      real, dimension(ele_ngi(positions, ele)) :: detwei, density_quad, gamma_quad, inner_prod, reference_temperature_quad
 
 
       ! Evaluate key parameters at gauss points:
       call transform_to_physical(positions, ele, detwei = detwei)
-      positions_quad          = ele_val_at_quad(positions, ele)
-      velocity_quad           = ele_val_at_quad(velocity, ele)
-      gravity_direction_quad  = ele_val_at_quad(gravity_direction, ele)
-      density_quad            = ele_val_at_quad(density_local, ele)
-      gamma_quad              = ele_val_at_quad(thermal_expansion, ele)
+      positions_quad              = ele_val_at_quad(positions, ele)
+      velocity_quad               = ele_val_at_quad(velocity, ele)
+      gravity_direction_quad      = ele_val_at_quad(gravity_direction, ele)
+      density_quad                = ele_val_at_quad(density_local, ele)
+      gamma_quad                  = ele_val_at_quad(thermal_expansion, ele)
+      reference_temperature_quad  = ele_val_at_quad(reference_temperature, ele)
 
       ! Calculate inner product of velocity and gravity unit vector at gauss points:
       inner_prod = 0.
@@ -539,9 +566,11 @@ contains
       end do
 
       ! Evaluate nodal values of integral:
-      if(present(rho0) .and. present(gamma)) then
+      if(present(rho0) .and. present(gamma)) then ! Linear EOS
          ele_val = shape_rhs(ele_shape(s_field,ele), -inner_prod*gravity_magnitude*gamma*rho0*detwei)
-      else
+      elseif(present(reference_temperature)) then ! Density Coefficient
+         ele_val = shape_rhs(ele_shape(s_field,ele), (-inner_prod*gravity_magnitude*gamma_quad*density_quad*detwei) * (1.+gamma_quad*reference_temperature_quad))
+      else ! CompressibleReferenceDensity Coefficient
          ele_val = shape_rhs(ele_shape(s_field,ele), -inner_prod*gravity_magnitude*gamma_quad*density_quad*detwei)
       end if
 
