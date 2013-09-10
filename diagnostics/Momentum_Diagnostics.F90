@@ -273,13 +273,15 @@ contains
     logical :: include_surface_adiabat
 
     type(scalar_field), pointer :: thermal_expansion_local, density_local
+    type(scalar_field), pointer :: reference_temperature_local
     type(vector_field), pointer :: velocity, gravity_direction
 
     type(vector_field) :: velocity_remap
     type(scalar_field) :: velocity_component, thermal_expansion_remap
     type(scalar_field) :: density_remap
+    type(scalar_field) :: reference_temperature_remap
     real :: gravity_magnitude, gamma, rho0, T0
-    integer :: node, stat_vel, stat_rho, stat_gamma
+    integer :: node, stat_vel, stat_rho, stat_gamma, stat_reft
 
     character(len=OPTION_PATH_LEN) :: eos_option_path
     character(len=FIELD_NAME_LEN) :: density_name
@@ -351,10 +353,36 @@ contains
              FLExit("Please put the density field on a mesh that can be remapped to the adiabatic_heating_coefficient mesh.")
           end if
 
+          ! Extract reference temperature, if required:
+          if (trim(density_name)=="Density") then
+             reference_temperature_local=>extract_scalar_field(state,'CompressibleReferenceTemperature')       
+             call allocate(reference_temperature_remap, s_field%mesh, 'RemappedCompressibleReferenceTemperature')
+             call test_remap_validity(reference_temperature_local,reference_temperature_remap,stat_reft)
+             if(stat_reft == 0) then
+                ! Remap to s_field%mesh:
+                call remap_field(reference_temperature_local, reference_temperature_remap)
+             else
+                ! Remap is not possible:
+                ewrite(-1,*) "Reference Temperature cannot be remapped to the adiabatic_heating_coefficient mesh,"
+                ewrite(-1,*) "in the adiabatic heating coefficient algorithm."
+                FLExit("Please put the CompressiblReferenceTemperature Field on a mesh that can be remapped to the adiabatic_heating_coefficient mesh.")
+             end if
+          end if
+
           ! Calculate and set adiabatic heating coefficient:
           do node = 1, node_count(s_field)
-             call set(s_field, node, -node_val(thermal_expansion_remap,node) * node_val(density_remap, node) &
-                  * gravity_magnitude * node_val(velocity_component,node))
+             gamma = node_val(thermal_expansion_remap,node)
+             if (trim(density_name)=="CompressibleReferenceDensity") then
+                call set(s_field, node, -gamma * node_val(density_remap, node) &
+                     * gravity_magnitude * node_val(velocity_component,node))
+             elseif (trim(density_name)=="Density") then
+                call set(s_field, node, ( (-gamma * node_val(density_remap, node) &
+                     * gravity_magnitude * node_val(velocity_component,node) ) &
+                     * (1. + gamma*node_val(reference_temperature_remap,node)) ) )
+             else
+                ewrite(-1,*) "Something has gone wrong in the adiabatic heating coefficient algorithm."
+                FLExit("Density has an unknown name!")
+             end if
           end do
 
           call deallocate(thermal_expansion_remap)
