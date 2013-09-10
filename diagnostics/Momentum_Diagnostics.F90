@@ -197,19 +197,19 @@ contains
        val = 0.
        do dim1 = 1, velocity%dim
           do dim2 = 1, velocity%dim
-            if(dim1==dim2) then
-              ! Add divergence of velocity term to diagonal only: 
-              val = val + 2.*node_val(viscosity_component_remap, node)     * & 
-                   & (node_val(strain_rate_tensor,dim1,dim2,node)          - &
-                   & 1./3. * node_val(velocity_divergence, node))**2
-            else
-              val = val + 2.*node_val(viscosity_component_remap, node)     * & 
-                   & node_val(strain_rate_tensor,dim1,dim2,node)**2   
-            end if
+             if(dim1==dim2) then
+                ! Add divergence of velocity term to diagonal only: 
+                val = val + 2.*node_val(viscosity_component_remap, node) * & 
+                     & (node_val(strain_rate_tensor,dim1,dim2,node)      - &
+                     & 1./3. * node_val(velocity_divergence, node))**2
+             else
+                val = val + 2.*node_val(viscosity_component_remap, node) * & 
+                     & node_val(strain_rate_tensor,dim1,dim2,node)**2   
+             end if
           end do
        end do
        call set(s_field, node, val)
-    end do    
+    end do
 
     ewrite_minmax(s_field)
 
@@ -338,23 +338,33 @@ contains
              FLExit("Please put the IsobaricThermalExpansivity Field on a mesh that can be remapped to the adiabatic_heating_coefficient mesh.")
           end if
 
-          ! Get spatially varying density and remap to s_field%mesh if possible and required:
-          call get_option(trim(state%option_path)//'/scalar_field::Temperature/prognostic/equation[0]/density[0]/name', density_name)
-          density_local => extract_scalar_field(state,trim(density_name))
-          call allocate(density_remap, s_field%mesh, 'RemappedDensity')
+          ! Get CompressibleReferenceDensity and remap to s_field%mesh if possible and required:
+          density_local => extract_scalar_field(state,'CompressibleReferenceDensity')
+          call allocate(density_remap, s_field%mesh, 'RemappedCompressibleReferenceDensity')
           call test_remap_validity(density_local,density_remap,stat_rho)
           if(stat_rho == 0) then
              ! Remap to s_field%mesh:
              call remap_field(density_local, density_remap)
           else
              ! Remap is not possible:
-             ewrite(-1,*) "CompressibleReferenceDensity / Density cannot be remapped to the adiabatic_heating_coefficient mesh,"
+             ewrite(-1,*) "CompressibleReferenceDensity cannot be remapped to the adiabatic_heating_coefficient mesh,"
              ewrite(-1,*) "in the adiabatic heating coefficient algorithm."
-             FLExit("Please put the density field on a mesh that can be remapped to the adiabatic_heating_coefficient mesh.")
+             FLExit("Please put the CompressibleReferenceDensity field on a mesh that can be remapped to the adiabatic_heating_coefficient mesh.")
           end if
 
-          ! Extract reference temperature, if required:
-          if (trim(density_name)=="Density") then
+          ! Calculate and set adiabatic heating coefficient:
+          call get_option(trim(state%option_path)//'/scalar_field::Temperature/prognostic/equation[0]/density[0]/name', density_name)
+
+          if (trim(density_name)=="CompressibleReferenceDensity") then
+
+             do node = 1, node_count(s_field)
+                gamma = node_val(thermal_expansion_remap,node)
+                call set(s_field, node, -gamma * node_val(density_remap, node) &
+                     * gravity_magnitude * node_val(velocity_component,node))
+             end do
+
+          elseif (trim(density_name)=="Density") then
+
              reference_temperature_local=>extract_scalar_field(state,'CompressibleReferenceTemperature')       
              call allocate(reference_temperature_remap, s_field%mesh, 'RemappedCompressibleReferenceTemperature')
              call test_remap_validity(reference_temperature_local,reference_temperature_remap,stat_reft)
@@ -367,23 +377,22 @@ contains
                 ewrite(-1,*) "in the adiabatic heating coefficient algorithm."
                 FLExit("Please put the CompressiblReferenceTemperature Field on a mesh that can be remapped to the adiabatic_heating_coefficient mesh.")
              end if
-          end if
 
-          ! Calculate and set adiabatic heating coefficient:
-          do node = 1, node_count(s_field)
-             gamma = node_val(thermal_expansion_remap,node)
-             if (trim(density_name)=="CompressibleReferenceDensity") then
-                call set(s_field, node, -gamma * node_val(density_remap, node) &
-                     * gravity_magnitude * node_val(velocity_component,node))
-             elseif (trim(density_name)=="Density") then
+             do node = 1, node_count(s_field)
+                gamma = node_val(thermal_expansion_remap,node)
                 call set(s_field, node, ( (-gamma * node_val(density_remap, node) &
                      * gravity_magnitude * node_val(velocity_component,node) ) &
                      * (1. + gamma*node_val(reference_temperature_remap,node)) ) )
-             else
-                ewrite(-1,*) "Something has gone wrong in the adiabatic heating coefficient algorithm."
-                FLExit("Density has an unknown name!")
-             end if
-          end do
+             end do
+
+             call deallocate(reference_temperature_remap)
+
+          else
+
+             ewrite(-1,*) "Something has gone wrong in the adiabatic heating coefficient algorithm."
+             FLExit("Density has an unknown name!")
+
+          end if
 
           call deallocate(thermal_expansion_remap)
           call deallocate(density_remap)
