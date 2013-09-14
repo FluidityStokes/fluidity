@@ -547,7 +547,6 @@ contains
       real, dimension(positions%dim, ele_ngi(positions, ele)) :: positions_quad, velocity_quad, gravity_direction_quad
       real, dimension(ele_ngi(positions, ele)) :: detwei, density_quad, gamma_quad, inner_prod, reference_temperature_quad
 
-
       ! Evaluate key parameters at gauss points:
       call transform_to_physical(positions, ele, detwei = detwei)
       positions_quad              = ele_val_at_quad(positions, ele)
@@ -555,7 +554,6 @@ contains
       gravity_direction_quad      = ele_val_at_quad(gravity_direction, ele)
       density_quad                = ele_val_at_quad(density_local, ele)
       gamma_quad                  = ele_val_at_quad(thermal_expansion, ele)
-      reference_temperature_quad  = ele_val_at_quad(reference_temperature, ele)
 
       ! Calculate inner product of velocity and gravity unit vector at gauss points:
       inner_prod = 0.
@@ -569,6 +567,7 @@ contains
       if(present(rho0) .and. present(gamma)) then ! Linear EOS
          ele_val = shape_rhs(ele_shape(s_field,ele), -inner_prod*gravity_magnitude*gamma*rho0*detwei)
       elseif(present(reference_temperature)) then ! Density Coefficient
+         reference_temperature_quad  = ele_val_at_quad(reference_temperature, ele)
          ele_val = shape_rhs(ele_shape(s_field,ele), (-inner_prod*gravity_magnitude*gamma_quad*density_quad*detwei) * (1.+gamma_quad*reference_temperature_quad))
       else ! CompressibleReferenceDensity Coefficient
          ele_val = shape_rhs(ele_shape(s_field,ele), -inner_prod*gravity_magnitude*gamma_quad*density_quad*detwei)
