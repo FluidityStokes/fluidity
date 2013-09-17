@@ -165,6 +165,10 @@ compressible_eos_options =
             ## approximation (ALA) - unless pressure is excluded from the buoyancy in which case
             ## this is truncated (TALA).
             element linearised_mantle {
+            	## Use full field terms rather than perturbations.
+            	element use_full_fields {
+              	  empty
+            	}?,
             	## Exclude pressure terms from the buoyancy.  This is equivalent of a truncated equation of state.
             	element exclude_pressure_buoyancy {
               	  empty

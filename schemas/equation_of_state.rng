@@ -179,6 +179,12 @@ equation (also underneath Density).  In this form this becomes the anelastic liq
 approximation (ALA) - unless pressure is excluded from the buoyancy in which case
 this is truncated (TALA).</a:documentation>
           <optional>
+            <element name="use_full_fields">
+              <a:documentation>Use full field terms rather than perturbations.</a:documentation>
+              <empty/>
+            </element>
+          </optional>
+          <optional>
             <element name="exclude_pressure_buoyancy">
               <a:documentation>Exclude pressure terms from the buoyancy.  This is equivalent of a truncated equation of state.</a:documentation>
               <empty/>

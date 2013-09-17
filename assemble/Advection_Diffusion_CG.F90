@@ -243,7 +243,7 @@ contains
     type(vector_field) :: velocity
     type(vector_field), pointer :: gravity_direction, temp_velocity_ptr, velocity_ptr, grid_velocity
     type(vector_field), pointer :: positions, old_positions, new_positions
-    type(scalar_field), target :: dummydensity
+    type(scalar_field), target :: dummydensity, dummytemperature
     type(scalar_field), pointer :: density, olddensity
     type(scalar_field), pointer :: heatcap, reftemp
     character(len = FIELD_NAME_LEN) :: density_name
@@ -499,6 +499,10 @@ contains
       
     call allocate(dummydensity, t%mesh, "DummyDensity", field_type=FIELD_TYPE_CONSTANT)
     call set(dummydensity, 1.0)
+
+    call allocate(dummytemperature, t%mesh, "DummyTemperature", field_type=FIELD_TYPE_CONSTANT)
+    call set(dummytemperature, 0.0)
+
     ! find out equation type and hence if density is needed or not
     equation_type=equation_type_index(trim(t%option_path))
     select case(equation_type)
@@ -577,7 +581,14 @@ contains
 
       heatcap=>extract_scalar_field(state, "IsobaricSpecificHeatCapacity")
       ewrite_minmax(heatcap)
-      reftemp=>extract_scalar_field(state, "CompressibleReferenceTemperature")
+
+      if(have_option(trim(state%option_path)//'/equation_of_state/compressible/linearised_mantle/use_full_fields')) then         
+         ! Prognostic temperature is already the full temperature field and reference temperature need not be added to diffusive term.
+         reftemp=>dummytemperature
+      else
+         ! Prognostic temperature is the temperature prime field and reference temperature must be added to diffusive term.
+         reftemp=>extract_scalar_field(state, "CompressibleReferenceTemperature")
+      end if
       ewrite_minmax(reftemp)
       
       pressure=>dummydensity
@@ -708,6 +719,7 @@ contains
     call deallocate(velocity)
     call deallocate(nvfrac)
     call deallocate(dummydensity)
+    call deallocate(dummytemperature)
     if (stabilisation_scheme == STABILISATION_SUPG) then
        do i = 1, num_threads
           call deallocate(supg_element(i))

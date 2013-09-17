@@ -739,12 +739,15 @@ contains
     
     !locals
     integer :: stat
-    type(scalar_field), pointer :: pressure_local, temperature_local, density_local, &
-                                   referencedensity_local, bulkmodulus_local, thermalexpansion_local
-    type(scalar_field) :: pressure_remap, density_remap, referencedensity_remap, &
-                          compressibility, dpdrho, thermalexpansion_remap, &
-                          temperatureproduct
-    logical :: implicit_pressure_buoyancy, exclude_pressure_buoyancy
+    type(scalar_field), pointer :: pressure_local, temperature_local, density_local
+    type(scalar_field), pointer :: referencedensity_local, bulkmodulus_local, thermalexpansion_local
+    type(scalar_field), pointer :: referencetemperature_local
+                                   
+    type(scalar_field) :: pressure_remap, density_remap, referencedensity_remap
+    type(scalar_field) :: compressibility, dpdrho, thermalexpansion_remap
+    type(scalar_field) :: referencetemperature_remap, temperatureproduct
+
+    logical :: implicit_pressure_buoyancy, exclude_pressure_buoyancy, use_full_fields
     character(len=OPTION_PATH_LEN) :: linearised_mantle_eos_path
     
     call zero(drhodp)
@@ -752,6 +755,8 @@ contains
     linearised_mantle_eos_path = "/equation_of_state/compressible/linearised_mantle/"
     exclude_pressure_buoyancy = have_option(trim(state%option_path)//&
          trim(linearised_mantle_eos_path)//"/exclude_pressure_buoyancy")
+    use_full_fields = have_option(trim(state%option_path)//&
+         trim(linearised_mantle_eos_path)//"/use_full_fields")
     
     ! Extract relevant parameters from state and remap to drhodp mesh so that all
     ! parameters are on same mesh:    
@@ -769,6 +774,12 @@ contains
        call scale(drhodp, compressibility)
        call deallocate(compressibility)
     end if
+ 
+    if(use_full_fields) then
+       referencetemperature_local=>extract_scalar_field(state,'CompressibleReferenceTemperature')
+       call allocate(referencetemperature_remap, drhodp%mesh, 'RemappedCompressibleReferenceTemperature')
+       call remap_field(referencetemperature_local, referencetemperature_remap)
+    end if
     
     if(present(density).or.present(buoyancy_density).or.present(pressure)) then
        
@@ -779,6 +790,9 @@ contains
        temperature_local => extract_scalar_field(state, "Temperature")
        call allocate(temperatureproduct, drhodp%mesh, "TemperatureProduct")
        call remap_field(temperature_local, temperatureproduct)
+
+       if(use_full_fields) call addto(temperatureproduct,referencetemperature_remap,-1.0)
+
        call scale(temperatureproduct, thermalexpansion_remap)
        call scale(temperatureproduct, referencedensity_remap)
        
@@ -791,13 +805,18 @@ contains
                 call set(density, drhodp)
                 call addto(density, temperatureproduct, -1.0)
              end if
-             
-             if(present(buoyancy_density)) then
+
+             if(present(buoyancy_density)) then             
                 assert(buoyancy_density%mesh==drhodp%mesh)
-                call zero(buoyancy_density)
-                call addto(buoyancy_density, temperatureproduct, -1.0)
+                if(use_full_fields) then
+                   call set(buoyancy_density, drhodp)
+                   call addto(buoyancy_density, temperatureproduct, -1.0)
+                else
+                   call zero(buoyancy_density)
+                   call addto(buoyancy_density, temperatureproduct, -1.0)
+                end if
              end if
-             
+
           else ! ALA Cases
              ! density = reference_density + (referencedensity*compressibility*pressure)
              !         + (referencedensity*thermalexpansion*temperature)
