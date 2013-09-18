@@ -459,16 +459,6 @@
             </constant>
           </type>
         </boundary_conditions>
-        <boundary_conditions name="Insulating">
-          <surface_ids>
-            <integer_value shape="2" rank="1">1 2</integer_value>
-          </surface_ids>
-          <type name="neumann">
-            <constant>
-              <real_value rank="0">0.0</real_value>
-            </constant>
-          </type>
-        </boundary_conditions>
         <tensor_field name="Diffusivity" rank="2">
           <prescribed>
             <value name="WholeMesh">
@@ -544,10 +534,8 @@
         <value name="WholeMesh">
           <python>
             <string_value lines="20" type="code" language="python">def val(X,t):
-
   import math
   from constants import *
- 
   depth = 1.0 - X[1]
   rho_ref = rho_0 * math.exp((depth*Di)/gamma)
   return rho_ref</string_value>

@@ -791,11 +791,14 @@ contains
        call allocate(temperatureproduct, drhodp%mesh, "TemperatureProduct")
        call remap_field(temperature_local, temperatureproduct)
 
-       if(use_full_fields) call addto(temperatureproduct,referencetemperature_remap,-1.0)
+       if(use_full_fields) then 
+          call addto(temperatureproduct,referencetemperature_remap,-1.0)
+          call deallocate(referencetemperature_remap)
+       end if
 
        call scale(temperatureproduct, thermalexpansion_remap)
        call scale(temperatureproduct, referencedensity_remap)
-       
+
        if(present(density).or.present(buoyancy_density)) then
           ! Calculate the density field:          
           if(exclude_pressure_buoyancy) then ! TALA Cases
