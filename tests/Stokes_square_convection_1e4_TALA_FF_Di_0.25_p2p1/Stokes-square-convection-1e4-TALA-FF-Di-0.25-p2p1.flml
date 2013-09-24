@@ -474,7 +474,11 @@
         <scalar_field name="Source" rank="0">
           <diagnostic>
             <mesh name="P2DGMesh"/>
-            <algorithm name="viscous_dissipation" material_phase_support="single "/>
+            <algorithm name="viscous_dissipation_plus_surface_adiabat" material_phase_support="single ">
+              <surface_temperature>
+                <real_value rank="0">0.091</real_value>
+              </surface_temperature>
+            </algorithm>
             <output/>
             <stat/>
             <detectors>
