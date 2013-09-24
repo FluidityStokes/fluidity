@@ -3780,8 +3780,9 @@ if (.not.have_option("/material_phase[0]/vector_field::Velocity/prognostic/vecto
 
     logical :: exclude_mass, exclude_advection
     logical :: implicit_pressure_buoyancy, exclude_pressure_buoyancy
-    logical :: using_reference_density_continuity
+    logical :: using_reference_density_continuity, use_full_fields
     logical :: have_mantle_anelastic_energy
+    logical :: have_temperature_source, have_temperature_absorption, have_vd_plus_sa
     real :: theta
 
     nmat = option_count("/material_phase")
@@ -3887,6 +3888,9 @@ if (.not.have_option("/material_phase[0]/vector_field::Velocity/prognostic/vecto
           
           exclude_pressure_buoyancy=have_option(trim(compressible_path)//&
                "/linearised_mantle/exclude_pressure_buoyancy")
+
+          use_full_fields=have_option(trim(compressible_path)//&
+               "/linearised_mantle/use_full_fields")
          
           if(implicit_pressure_buoyancy .AND. exclude_pressure_buoyancy) then
              ewrite(-1,*) "For Compressible Stokes problems, if you exclude the pressure effect on buoyancy, you cannot"
@@ -3932,6 +3936,19 @@ if (.not.have_option("/material_phase[0]/vector_field::Velocity/prognostic/vecto
           else
              ewrite(-1,*) "For compressible Stokes problems, only the Mantle Anelastic Energy equation type has been configured correctly."
              FLExit("The Mantle Analastic Energy equation type must be used for compressible Stokes problems.")
+          end if
+
+          if(have_mantle_anelastic_energy) then
+             ! Check for valid source and absorption terms:
+             have_temperature_source     = have_option(trim(temperature_path)//'/prognostic/scalar_field::Source')
+             have_temperature_absorption = have_option(trim(temperature_path)//'/prognostic/scalar_field::Absorption')
+             have_vd_plus_sa             = have_option(trim(temperature_path)//'/prognostic/scalar_field::Source/diagnostic/algorithm::viscous_dissipation_plus_surface_adiabat')
+             if(.not.(have_temperature_source) .or. .not.(have_temperature_absorption)) then
+                FLExit("MantleAnalasticEnergy equation requires source (viscous_dissipation) and absorption (adiabatic heating/cooling) fields.")               
+             end if
+             if(use_full_fields.and. .not.(have_vd_plus_sa)) then
+                FLExit("When running with use_full_fields, surface adiabat term needs to be included. Use viscous_dissipation_plus_surface_adiabat source term.")
+             end if
           end if
             
        end if
