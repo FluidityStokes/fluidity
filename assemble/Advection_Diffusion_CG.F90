@@ -500,6 +500,8 @@ contains
     call allocate(dummydensity, t%mesh, "DummyDensity", field_type=FIELD_TYPE_CONSTANT)
     call set(dummydensity, 1.0)
 
+    ! Allocate a dummytemperature field and set to 0.0 for mantleanelasticenergy cases that use
+    ! full field formulation:
     call allocate(dummytemperature, t%mesh, "DummyTemperature", field_type=FIELD_TYPE_CONSTANT)
     call set(dummytemperature, 0.0)
 

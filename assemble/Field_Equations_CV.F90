@@ -261,7 +261,7 @@ contains
       call allocate(dummydensity, tfield%mesh, name="DummyDensity", field_type=FIELD_TYPE_CONSTANT)
       call set(dummydensity, 1.0)
       dummydensity%option_path = " "
-      
+
       ! PhaseVolumeFraction for multiphase flow simulations
       if(option_count("/material_phase/vector_field::Velocity/prognostic") > 1) then
          multiphase = .true.
@@ -341,13 +341,22 @@ contains
         call remap_field(heatcap,heatcap_remap)
         ewrite_minmax(heatcap_remap)
 
-        call allocate(reftemp_remap, tfield%mesh, "Remap_CompressibleReferenceTemperature")
-        reftemp=>extract_scalar_field(state, "CompressibleReferenceTemperature")
-        call remap_field(reftemp,reftemp_remap)
+        if(have_option(trim(state(istate)%option_path)//'/equation_of_state/compressible/linearised_mantle/use_full_fields')) then         
+           ! Prognostic temperature is already the full temperature field and reference 
+           ! temperature need not be added to diffusive term.
+           reftemp => dummyscalar
+           call allocate(reftemp_remap, tfield%mesh, "Remap_CompressibleReferenceTemperature",field_type=FIELD_TYPE_CONSTANT)
+           call zero(reftemp_remap)
+        else
+           ! Prognostic temperature is the temperature prime field and reference temperature must be
+           ! added to diffusive term.
+           call allocate(reftemp_remap, tfield%mesh, "Remap_CompressibleReferenceTemperature")
+           reftemp=>extract_scalar_field(state, "CompressibleReferenceTemperature")
+           call remap_field(reftemp,reftemp_remap)
+        end if
         ewrite_minmax(reftemp_remap)
-
-        call get_option(trim(option_path)//'/prognostic/equation[0]/density[0]/name', &
-                        tmpstring)
+        
+        call get_option(trim(option_path)//'/prognostic/equation[0]/density[0]/name', tmpstring)
 
         call allocate(mantledens_remap, tfield%mesh, "Remap_"//trim(tmpstring))
         mantledens=>extract_scalar_field(state, trim(tmpstring))

@@ -442,7 +442,7 @@ contains
 
     character(len=OPTION_PATH_LEN) eos_option_path
     character(len=FIELD_NAME_LEN) :: density_name
-    logical :: have_linear_eos, have_linearised_mantle_compressible_eos
+    logical :: have_linear_eos, have_linearised_mantle_compressible_eos, use_full_fields
 
     ewrite(1,*) 'In adiabatic_heating_coefficient_projection'
 
@@ -494,17 +494,19 @@ contains
        end do
        
     else if(have_linearised_mantle_compressible_eos) then             
-       
+
+       use_full_fields = (have_option(trim(eos_option_path)//'/compressible/linearised_mantle/use_full_fields'))       
        call get_option(trim(state%option_path)//'/scalar_field::Temperature/prognostic/equation[0]/density[0]/name', density_name)
-       
-       if (trim(density_name)=="CompressibleReferenceDensity") then
+
+       if ( (trim(density_name)=="CompressibleReferenceDensity") .or. & 
+            (trim(density_name)=="Density" .and. use_full_fields) ) then       
           
           do ele = 1, element_count(s_field)
              call integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, density_local, gravity_magnitude, ele)
           end do
-          
-       elseif (trim(density_name)=="Density") then
-          
+
+       elseif (trim(density_name)=="Density" .and. (.not.(use_full_fields) ) ) then          
+
           reference_temperature_local=>extract_scalar_field(state,'CompressibleReferenceTemperature')       
           
           do ele = 1, element_count(s_field)
