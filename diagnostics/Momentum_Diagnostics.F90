@@ -285,7 +285,7 @@ contains
 
     character(len=OPTION_PATH_LEN) :: eos_option_path
     character(len=FIELD_NAME_LEN) :: density_name
-    logical :: have_linear_eos, have_linearised_mantle_compressible_eos
+    logical :: have_linear_eos, have_linearised_mantle_compressible_eos, use_full_fields
 
     ewrite(1,*) 'In adiabatic_heating_coefficient'
 
@@ -324,6 +324,8 @@ contains
 
        elseif(have_linearised_mantle_compressible_eos) then
 
+          use_full_fields = (have_option(trim(eos_option_path)//'/compressible/linearised_mantle/use_full_fields'))
+
           ! Get spatially varying thermal expansion field and remap to s_field%mesh if possible and required:
           thermal_expansion_local=>extract_scalar_field(state,'IsobaricThermalExpansivity')       
           call allocate(thermal_expansion_remap, s_field%mesh, 'RemappedIsobaricThermalExpansivity')
@@ -355,7 +357,8 @@ contains
           ! Calculate and set adiabatic heating coefficient:
           call get_option(trim(state%option_path)//'/scalar_field::Temperature/prognostic/equation[0]/density[0]/name', density_name)
 
-          if (trim(density_name)=="CompressibleReferenceDensity") then
+          if ( (trim(density_name)=="CompressibleReferenceDensity") .or. & 
+               (trim(density_name)=="Density" .and. use_full_fields) ) then
 
              do node = 1, node_count(s_field)
                 gamma = node_val(thermal_expansion_remap,node)
@@ -363,7 +366,7 @@ contains
                      * gravity_magnitude * node_val(velocity_component,node))
              end do
 
-          elseif (trim(density_name)=="Density") then
+          elseif (trim(density_name)=="Density" .and. (.not.(use_full_fields) ) ) then
 
              reference_temperature_local=>extract_scalar_field(state,'CompressibleReferenceTemperature')       
              call allocate(reference_temperature_remap, s_field%mesh, 'RemappedCompressibleReferenceTemperature')
