@@ -250,9 +250,11 @@ module compressible_projection
     type(vector_field), pointer :: positions
     type(scalar_field) :: cv_mass, tempfield
     
-    logical :: compressible_eos, assemble_rhs
+    logical :: assemble_rhs
 
     real :: atmospheric_pressure
+    ! Do we want to use the compressible projection method?
+    logical :: have_compressible_eos
 
     ewrite(1,*) 'Entering assemble_mmat_compressible_projection_cv'
 
@@ -263,10 +265,10 @@ module compressible_projection
     end if
     pressure_option_path=trim(pressure%option_path)
     
-    compressible_eos = .false.
+    have_compressible_eos = .false.
     state_loop: do i = 1, size(state)
-      compressible_eos = have_option("/material_phase::"//trim(state(i)%name)//"/equation_of_state/compressible")
-      if(compressible_eos) then
+      have_compressible_eos = have_option("/material_phase::"//trim(state(i)%name)//"/equation_of_state/compressible")
+      if(have_compressible_eos) then
         exit state_loop
       end if
     end do state_loop
@@ -274,7 +276,7 @@ module compressible_projection
     assemble_rhs = present(rhs)
     if(assemble_rhs) call zero(rhs)
    
-    if (compressible_eos) then
+    if (have_compressible_eos) then
     
       positions=>extract_vector_field(state(1), "Coordinate")
       call allocate(cv_mass, pressure%mesh, "CVMassField")
@@ -760,16 +762,16 @@ module compressible_projection
   
   subroutine compressible_projection_check_options
 
-    integer :: iphase
     character(len=OPTION_PATH_LEN) :: pressure_option_path, density_option_path
-    logical :: compressible_eos
+    integer :: iphase
+    logical:: have_compressible_eos
 
-    do iphase = 0, option_count("/material_phase")-1
-       compressible_eos = have_option("/material_phase["//int2str(iphase)//"]/equation_of_state/compressible")
+    do iphase=0, option_count("/material_phase")-1
+       have_compressible_eos = have_option("/material_phase["//int2str(iphase)//"]/equation_of_state/compressible")
        pressure_option_path = "/material_phase["//int2str(iphase)//"]/scalar_field::Pressure"
-       if(compressible_eos.and. &
+       if(have_compressible_eos.and. &
             have_option(trim(pressure_option_path)//"/prognostic/spatial_discretisation/discontinuous_galerkin")) then
-          FLExit("With a DG pressure you cannot have use_compressible_projection_method")
+          FLExit("With a DG pressure you cannot have use a compressible eos")
        end if
        if(have_option(trim(pressure_option_path)//"/prognostic/spatial_discretisation/compressible/implicit_pressure_buoyancy")) then
           if(have_option(trim(pressure_option_path)//"/prognostic/spatial_discretisation/control_volumes")) then
