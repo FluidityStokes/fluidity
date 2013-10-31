@@ -97,7 +97,7 @@ module populate_state_module
        
   !! A list of relative paths under /material_phase[i]
   !! that are searched for additional fields to be added.
-  character(len=OPTION_PATH_LEN), dimension(8) :: additional_fields_relative=&
+  character(len=OPTION_PATH_LEN), dimension(13) :: additional_fields_relative=&
        (/ &
        "/subgridscale_parameterisations/Mellor_Yamada                                                       ", &
        "/subgridscale_parameterisations/prescribed_diffusivity                                              ", &
@@ -105,8 +105,13 @@ module populate_state_module
        "/subgridscale_parameterisations/k-epsilon                                                           ", &
        "/subgridscale_parameterisations/k-epsilon/debugging_options/source_term_output_fields               ", &
        "/subgridscale_parameterisations/k-epsilon/debugging_options/prescribed_source_terms                 ", &
+       "/vector_field::Velocity/prognostic/spatial_discretisation/continuous_galerkin/les_model/second_order", &
+       "/vector_field::Velocity/prognostic/spatial_discretisation/continuous_galerkin/les_model/fourth_order", &
+       "/vector_field::Velocity/prognostic/spatial_discretisation/continuous_galerkin/les_model/wale        ", &
        "/vector_field::Velocity/prognostic/spatial_discretisation/continuous_galerkin/les_model/dynamic_les ", &
-       "/vector_field::Velocity/prognostic/spatial_discretisation/continuous_galerkin/les_model/second_order" &
+       "/vector_field::Velocity/prognostic/equation::ShallowWater                                           ", &
+       "/vector_field::Velocity/prognostic/equation::ShallowWater/bottom_drag                               ", &
+       "/vector_field::BedShearStress/diagnostic/calculation_method/velocity_gradient                       " &
        /)
 
   !! Relative paths under a field that are searched for grandchildren
@@ -779,7 +784,7 @@ contains
           if (mesh_name=="CoordinateMesh") then
             call allocate(coordinateposition, modelposition%dim, mesh, "Coordinate")
           else
-            call allocate(coordinateposition, modelposition%dim, mesh, trim(mesh_name)//"/Coordinate")
+            call allocate(coordinateposition, modelposition%dim, mesh, trim(mesh_name)//"Coordinate")
           end if
                 
           ! remap the external mesh positions onto the CoordinateMesh... this requires that the space
@@ -1642,7 +1647,6 @@ contains
     type(tensor_field) :: tfield
 
     integer :: i, s, stat
-    real :: Pr
 
     ! Prescribed diffusivity
     do i = 1, size(states)
@@ -1914,12 +1918,12 @@ contains
     adapt_path=trim(path)//"/adaptivity_options"
     if(have_option(trim(adapt_path)//"/absolute_measure")) then
        adapt_path=trim(adapt_path)//"/absolute_measure/scalar_field::InterpolationErrorBound"
-       call allocate_and_insert_scalar_field(adapt_path, state, parent_mesh=mesh_name, &
+       call allocate_and_insert_scalar_field(adapt_path, state, parent_mesh=topology_mesh_name, &
           parent_name=lfield_name, &
           dont_allocate_prognostic_value_spaces=dont_allocate_prognostic_value_spaces)
     else if(have_option(trim(adapt_path)//"/relative_measure")) then
        adapt_path=trim(adapt_path)//"/relative_measure/scalar_field::InterpolationErrorBound"
-       call allocate_and_insert_scalar_field(adapt_path, state, parent_mesh=mesh_name, &
+       call allocate_and_insert_scalar_field(adapt_path, state, parent_mesh=topology_mesh_name, &
           parent_name=lfield_name, &
           dont_allocate_prognostic_value_spaces=dont_allocate_prognostic_value_spaces)
     end if
@@ -2047,11 +2051,11 @@ contains
     adapt_path=trim(path)//"/adaptivity_options"
     if(have_option(trim(adapt_path)//"/absolute_measure")) then
        adapt_path=trim(adapt_path)//"/absolute_measure/vector_field::InterpolationErrorBound"
-       call allocate_and_insert_vector_field(adapt_path, state, mesh_name, lfield_name, &
+       call allocate_and_insert_vector_field(adapt_path, state, topology_mesh_name, lfield_name, &
           dont_allocate_prognostic_value_spaces=dont_allocate_prognostic_value_spaces)
     else if(have_option(trim(adapt_path)//"/relative_measure")) then
        adapt_path=trim(adapt_path)//"/relative_measure/vector_field::InterpolationErrorBound"
-       call allocate_and_insert_vector_field(adapt_path, state, mesh_name, lfield_name, &
+       call allocate_and_insert_vector_field(adapt_path, state, topology_mesh_name, lfield_name, &
           dont_allocate_prognostic_value_spaces=dont_allocate_prognostic_value_spaces)
     end if
 
@@ -2167,11 +2171,11 @@ contains
     adapt_path=trim(path)//"/adaptivity_options"
     if(have_option(trim(adapt_path)//"/absolute_measure")) then
        adapt_path=trim(adapt_path)//"/absolute_measure/tensor_field::InterpolationErrorBound"
-       call allocate_and_insert_tensor_field(adapt_path, state, mesh_name, field_name, &
+       call allocate_and_insert_tensor_field(adapt_path, state, topology_mesh_name, field_name, &
             dont_allocate_prognostic_value_spaces=dont_allocate_prognostic_value_spaces)
     else if(have_option(trim(adapt_path)//"/relative_measure")) then
        adapt_path=trim(adapt_path)//"/relative_measure/tensor_field::InterpolationErrorBound"
-       call allocate_and_insert_tensor_field(adapt_path, state, mesh_name, field_name, &
+       call allocate_and_insert_tensor_field(adapt_path, state, topology_mesh_name, field_name, &
             dont_allocate_prognostic_value_spaces=dont_allocate_prognostic_value_spaces)
     end if
 
@@ -3122,6 +3126,7 @@ contains
     type(vector_field), pointer :: positions
     integer :: ele
     real :: vol
+    type(scalar_field) :: temp_s_field
 
     positions => extract_vector_field(states(1), "Coordinate")
     if (allocated(domain_bbox)) then
@@ -3146,8 +3151,11 @@ contains
 
     !If on-the-sphere, calculate the radius of the sphere.
     if (have_option("/geometry/spherical_earth/")) then
-      surface_radius = maxval(magnitude(positions))
+      temp_s_field = magnitude(positions)
+      surface_radius = maxval(temp_s_field)
       call allmax(surface_radius)
+      ! Need to deallocate the magnitude field create, or we get a leak
+      call deallocate(temp_s_field)
     end if
 
 
@@ -3637,8 +3645,8 @@ contains
        ewrite(0,*) "WARNING: You have a salinity field but it will not affect the density of the fluid."
     end if
 
-   ! Temperature options checks
-   temperature_path="/material_phase[0]/scalar_field::Temperature/prognostic"
+    ! Temperature options checks
+    temperature_path="/material_phase[0]/scalar_field::Temperature/prognostic"
     if(have_option("/material_phase[0]/scalar_field::Temperature")&
          .and.(.not.(have_option("/material_phase[0]/equation_of_state/fluids/linear/temperature_dependency") ))) then
        ewrite(0,*) "WARNING: You have a temperature field but it will not affect the density of the fluid."
@@ -3766,10 +3774,15 @@ if (.not.have_option("/material_phase[0]/vector_field::Velocity/prognostic/vecto
 
     ! Check options for Stokes flow simulations.
 
-    integer :: i, nmat
+    integer :: i, nmat, equation_type
     character(len=OPTION_PATH_LEN) :: velocity_path, pressure_path, schur_path
-    character(len=FIELD_NAME_LEN)  :: schur_preconditioner, inner_matrix, pc_type
+    character(len=OPTION_PATH_LEN) :: compressible_path, temperature_path, density_path
+    character(len=FIELD_NAME_LEN)  :: schur_preconditioner, inner_matrix, pc_type, density_name
+
     logical :: exclude_mass, exclude_advection
+    logical :: implicit_pressure_buoyancy, exclude_pressure_buoyancy
+    logical :: using_reference_density_continuity
+    logical :: have_mantle_anelastic_energy
     real :: theta
 
     nmat = option_count("/material_phase")
@@ -3778,7 +3791,7 @@ if (.not.have_option("/material_phase[0]/vector_field::Velocity/prognostic/vecto
        velocity_path="/material_phase["//int2str(i)//"]/vector_field::Velocity/prognostic"
 
        if (have_option(trim(velocity_path))) then
-         
+
           ! Check that mass and advective terms are excluded:
           exclude_mass = have_option(trim(velocity_path)//&
                "/spatial_discretisation/continuous_galerkin/mass_terms"//&
@@ -3808,7 +3821,7 @@ if (.not.have_option("/material_phase[0]/vector_field::Velocity/prognostic/vecto
        pressure_path="/material_phase["//int2str(i)//"]/scalar_field::Pressure/prognostic"
 
        if (have_option(trim(pressure_path))) then  
-
+          
           schur_path = "/material_phase["//int2str(i)//"]/scalar_field::Pressure/prognostic/"//&
                &"scheme/use_projection_method/full_schur_complement"
 
@@ -3846,12 +3859,85 @@ if (.not.have_option("/material_phase[0]/vector_field::Velocity/prognostic/vecto
                 ewrite(-1,*) "&/full_schur_complement/inner_matrix"
                 FLExit("For Stokes problems, change --> FullMomentumMatrix")
              end if
-
+             
           end if
           
        end if
-       
-    end do
+
+       ! Check options for compressible Stokes simulations:
+       compressible_path = "/material_phase["//int2str(i)//"]/equation_of_state/compressible"
+       temperature_path="/material_phase["//int2str(i)//"]/scalar_field::Temperature" 
+       density_path="/material_phase["//int2str(i)//"]/scalar_field::Density" 
+
+       if(have_option(trim(temperature_path))) then
+          equation_type = equation_type_index(trim(temperature_path))       
+          have_mantle_anelastic_energy = (equation_type == FIELD_EQUATION_MANTLEANELASTICENERGY)
+       else
+          have_mantle_anelastic_energy = .false.
+       end if
+
+       if(have_mantle_anelastic_energy .and. (.not.(have_option(trim(compressible_path))))) then
+          ewrite(-1,*) "Mantle anelastic energy equation type requires a compressible EOS."
+          FLExit("To use Mantle Anelastic Energy equation type, select /equation_of_state/compressible.")
+       end if
+
+       if (have_option(trim(compressible_path))) then
+
+          implicit_pressure_buoyancy=have_option(trim(pressure_path)//&
+               "/spatial_discretisation/compressible/implicit_pressure_buoyancy")
+          
+          exclude_pressure_buoyancy=have_option(trim(compressible_path)//&
+               "/linearised_mantle/exclude_pressure_buoyancy")
+         
+          if(implicit_pressure_buoyancy .AND. exclude_pressure_buoyancy) then
+             ewrite(-1,*) "For Compressible Stokes problems, if you exclude the pressure effect on buoyancy, you cannot"
+             ewrite(-1,*) "include it in the pressure projection (implicit pressure buoyancy), as it does not exist."
+             FLExit("Cannot exclude pressure buoyancy and subsequently include it in the pressure projection!")
+          end if
+
+          if(have_option(trim(density_path))) then
+             
+             using_reference_density_continuity=have_option(trim(density_path)//&
+               "/prognostic/spatial_discretisation/use_reference_density")
+
+             if(have_mantle_anelastic_energy) then
+                call get_option(trim(temperature_path)//'/prognostic/equation[0]/density[0]/name',density_name)
+                if ( (trim(density_name)=="CompressibleReferenceDensity" .and. (.not.(using_reference_density_continuity)) ) .or. &
+                     (trim(density_name)=="Density" .and. (using_reference_density_continuity) ) ) then
+                   ewrite(-1,*) "For Compressible Stokes problems, the use of CompressibleReferenceDensity/Density"
+                   ewrite(-1,*) "must be consistent for continuity and energy equations."
+                   FLExit("The use of CompressibleReferenceDensity / Density must be consistent for continuity and energy equations!")
+                end if
+             end if
+
+          else
+
+             ewrite(-1,*) "For Compressible Stokes problems, you must have a prognostic density field."
+             FLExit("Cannot run Compressible Stokes without a prognostic density field.")
+
+          end if
+
+          if(have_mantle_anelastic_energy) then
+             ! Check all fields required for compressible mantle simulations are present
+             if(.not.(have_option("/material_phase["//int2str(i)//"]/scalar_field::CompressibleReferenceDensity"))) &
+                  FLExit("MantleAnalasticEnergy equation requires CompresibleReferenceDensity Field.")
+             if(.not.(have_option("/material_phase["//int2str(i)//"]/scalar_field::CompressibleReferenceTemperature"))) &
+                  FLExit("MantleAnalasticEnergy equation requires CompresibleReferenceTemperature Field.")
+             if(.not.(have_option("/material_phase["//int2str(i)//"]/scalar_field::IsobaricSpecificHeatCapacity"))) &
+                  FLExit("MantleAnalasticEnergy equation requires IsobaricSpecificHeatCapacity Field.")
+             if(.not.(have_option("/material_phase["//int2str(i)//"]/scalar_field::IsobaricThermalExpansivity"))) &
+                  FLExit("MantleAnalasticEnergy equation requires IsobaricThermalExpansivity Field.")
+             if(.not.(have_option("/material_phase["//int2str(i)//"]/scalar_field::IsothermalBulkModulus")) &
+                  .AND. (.not.(exclude_pressure_buoyancy))) &
+                  FLExit("MantleAnalasticEnergy equation requires IsothermalBulkModulus Field.")               
+          else
+             ewrite(-1,*) "For compressible Stokes problems, only the Mantle Anelastic Energy equation type has been configured correctly."
+             FLExit("The Mantle Analastic Energy equation type must be used for compressible Stokes problems.")
+          end if
+            
+       end if
+
+    end do ! nmat - 1
 
   end subroutine check_stokes_options
 
@@ -3900,14 +3986,13 @@ if (.not.have_option("/material_phase[0]/vector_field::Velocity/prognostic/vecto
     if (have_option(trim(pressure_path))) then
 
        ! Check that compressible projection method is used:
-       compressible_projection = have_option(trim(pressure_path)//&
-            "/scheme/use_compressible_projection_method")
+       compressible_projection = have_option("/material_phase[0]"//&
+            "/equation_of_state/compressible")
 
        if(.not.(compressible_projection)) then
-          FLExit("For foam problems you need to use the compressible projection method.")
+          FLExit("For foam problems you need to use a compressible eos.")
        end if
     end if
-
 
     velocity_path="/material_phase[0]/vector_field::Velocity/prognostic"
     if (have_option(trim(velocity_path))) then

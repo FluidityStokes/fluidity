@@ -59,18 +59,20 @@ scalar_boundary_conditions =
                ## Viscosity value to use within this algorithm. This allows the user to override 
                ## use of the material viscosity used for the rest of the simulation for calculating 
                ## sediment reentrainment. 
-               element viscosity { real }?
+               element viscosity { real }?,
+               # Only for debugging purposes - sets Neumann boundary to zero (diagnostic fields are
+               # still set)
+               element set_to_zero { empty }?
             }|
-            ## [UNDER DEVELOPMENT - DOES NOT WORK YET]
             ## Special type of Dirichlet boundary condition for the k-epsilon
             ## turbulence model. Can be used on TurbulentKineticEnergy (k)
             ## and/or TurbulentDissipation (epsilon) fields.
             ## e.g. use a Dirichlet BC on inlets and k_epsilon on walls.
             element type {
                attribute name { "k_epsilon" },
-               ## Select high/low Reynolds number wall functions for k and epsilon fields.
+               ## Select low Reynolds number wall function for k and epsilon fields.
                element string_value {
-               "low_Re"|"high_Re"
+               "low_Re"
                }
             }|
             ## Flux boundary condition. Currently only works with a control_volume 
@@ -122,7 +124,7 @@ prognostic_scalar_field =
       (
          ## Solver
          element solver {
-            linear_solver_options_asym
+            linear_solver_options_asym_scalar
          }|
          ## Assume this field is being solved explicitly and skip the solver.
          ##
@@ -255,12 +257,16 @@ prognostic_scalar_field =
          attribute rank { "0" },
          (
             element prescribed {
+               mesh_choice?,
                prescribed_scalar_field_no_adapt
             }|
             element diagnostic {
+                mesh_choice?,
                (
                   scalar_python_diagnostic_algorithm |
-                  internal_algorithm
+                  internal_algorithm |
+                  viscous_dissipation_algorithm |
+                  viscous_dissipation_plus_surface_adiabat_algorithm
                ),
                ## Add the source field directly to the 
                ## matrix system right hand side. To be 
@@ -280,12 +286,15 @@ prognostic_scalar_field =
          attribute rank { "0" },
          (
             element prescribed {
+               mesh_choice?,
                prescribed_scalar_field_no_adapt
             }|
             element diagnostic {
+               mesh_choice?,
                (
                   scalar_python_diagnostic_algorithm |
-                  internal_algorithm
+                  internal_algorithm |
+		  adiabatic_heating_coefficient_algorithm
                ),
                diagnostic_scalar_field_no_adapt
             }
@@ -525,19 +534,25 @@ prognostic_velocity_field =
                     }
                   )
                },
-               ## large-eddy simulation models (currently restricted to use in incompressible flow cases, where the discrete velocity is divergence-free and the eddy viscosity tensor is traceless)
+               ## Large-eddy simulation (LES) models. Currently restricted to use in incompressible flow cases, where the discrete velocity is divergence-free and the eddy viscosity tensor is traceless.
                element les_model {
-                  ## similar to the original Smag model
+                  ## Similar to the original Smagorinsky model
                   element second_order {
-                     ## literature symbol: Cs
+                     ## Literature symbol: Cs
                      ##
-                     ## suggested value 0.1
+                     ## Suggested value: 0.1
                      element smagorinsky_coefficient {
                         real
                      },
-                     ## eddy viscosity (turbulent diffusion of velocity).
-                     ## This is an anisotropic symmetric viscosity, added to normal viscosity field, that
-                     ## carries the influence of turbulence onto the velocity field.
+                     ## The 'scalar' length scale is the cube root of the element's volume in 3D. In 2D, it is the square root of the element's area. Using this will result in an isotropic eddy viscosity tensor.
+                     ##
+                     ## The 'tensor' length scale uses the metric from the adaptivity process. Using this will result in an anisotropic eddy viscosity tensor.
+                     element length_scale_type { 'scalar'|'tensor' },
+                     ## Eddy viscosity diagnostic field (turbulent diffusion of velocity).
+                     ## This is a symmetric viscosity, added to normal viscosity field, that
+                     ## carries the influence of turbulence onto the velocity field. It will
+                     ## be anisotropic if the 'tensor' length scale is chosen. Otherwise, it
+                     ## will be isotropic.
                      element tensor_field {
                         attribute rank { "2" },
                         attribute name { "EddyViscosity" },
@@ -545,7 +560,14 @@ prognostic_velocity_field =
                            element diagnostic {
                               internal_algorithm,
                               velocity_mesh_choice,
-                              diagnostic_tensor_field
+                              diagnostic_tensor_field,
+                              element mass_matrix {  
+                              (
+                                    element use_lumped_mass_matrix { element use_submesh { empty }? }
+                                    |
+                                    element use_consistent_mass_matrix { empty }
+                                 )
+                              }
                            }
                         )
                      }?
@@ -576,50 +598,78 @@ prognostic_velocity_field =
                      }
                   }
                |
-                  ## [UNDER DEVELOPMENT] The Germano dynamic method (See Germano 1991, Lilly 1991, Pope)
+                  ## The dynamic LES method (See Lilly 1991, Pope)
                   ## accounts for turbulent flow anisotropy by implementing the Smagorinsky model
                   ## with a spatially varying coefficient. At its heart is the difference between turbulent
-                  ##  stress tensors calculated from the velocity field filtered at 2 filter widths, G_t and G_m.
+                  ##  stress tensors calculated from the velocity field filtered at 2 filter widths,
+                  ## first filter G_f and test filter G_t.
                   ## See the manual for further details.
                   element dynamic_les {
-                     ## Filtering scale factor alpha: the ratio between the filter widths.
-                     ## The test filter G_t = G_m*alpha, where G_m is the filter
-                     ## width associated with the local mesh size. Filtering is achieved by applying
-                     ## the inverse Helmholtz operator: u_filter_2 = (1-alpha*M)^-1 * u_filter_1.
+                     ## Filtering scale factor alpha: the ratio between the mesh size and first filter width G_f.
+                     ## First filtering is achieved by applying the inverse Helmholtz operator:
+                     ## u_f = (1-alpha^2/24*M*L)^-1 * u, where M is the mesh size squared (a tensor) and L is the Laplacian.
+                     ## Lower values will result in less information being filtered out of the velocity.
                      ##
-                     ## default/recommended value: 2.0
+                     ## default value: 2.0
                      element alpha {
                         real
                      },
+                     ## Filtering scale factor gamma: the ratio between the first filter G_f and test filter G_t.
+                     ## Test filtering is achieved by applying the inverse Helmholtz operator:
+                     ## u_t = (1-gamma^2*alpha^2/24*M*L)^-1 * u_f, where M is the mesh size squared (a tensor) and L is the Laplacian.
+                     ## Lower values will result in less information being filtered out of the first filtered velocity.
+                     ##
+                     ## default value: 2.0
+                     element gamma {
+                        real
+                     },
+                     ## The 'scalar' length scale is the cube root of the element's volume in 3D. In 2D, it is the square root of the element's area. Using this will result in an isotropic eddy viscosity tensor.
+                     ##
+                     ## The 'tensor' length scale uses the metric from the adaptivity process. Using this will result in an anisotropic eddy viscosity tensor.
+                     element length_scale_type { 'scalar'|'tensor' },
                      ## Solver options are required for calculation of Helmholtz-smoothed velocity.
                      element solver {
                         linear_solver_options_sym
                      },
-                     ## Use the Lilly modification to the model (see Lilly 1991).
-                     ## 
-                     element enable_lilly {
-                        empty
-                     }?,
-                     ## Allow negative eddy viscosity (backscatter).
-                     ## WARNING: this may result in the simulation blowing up.
-                     ## 
-                     element enable_backscatter {
-                        empty
-                     }?,
-                     ## Filtered velocity (diagnostic). This is the Velocity field filtered
-                     ## with the test filter - see manual.
-                     element vector_field {
-                        attribute rank { "2" },
-                        attribute name { "FilteredVelocity" },
+                     ## Spatially varying Smagorinsky coefficient.
+                     element scalar_field {
+                        attribute name { "SmagorinskyCoefficient" },
+                        attribute rank { "1" },
                         (
                            element diagnostic {
                               internal_algorithm,
                               velocity_mesh_choice,
-                              diagnostic_vector_field
+                              diagnostic_scalar_field
                            }
                         )
                      }?,
-                     ## Filter width tensor (diagnostic). This is the square of the mesh size.
+                     ## First filtered velocity (diagnostic). This is the Velocity field filtered
+                     ## with the first filter - see manual.
+                     element vector_field {
+                        attribute rank { "2" },
+                        attribute name { "FirstFilteredVelocity" },
+                        (
+                           element diagnostic {
+                              internal_algorithm,
+                              velocity_mesh_choice,
+                              diagnostic_tensor_field
+                           }
+                        )
+                     }?,
+                     ## Test filtered velocity (diagnostic). This is the first filtered velocity field filtered
+                     ## again with the test filter - see manual.
+                     element vector_field {
+                        attribute rank { "2" },
+                        attribute name { "TestFilteredVelocity" },
+                        (
+                           element diagnostic {
+                              internal_algorithm,
+                              velocity_mesh_choice,
+                              diagnostic_tensor_field
+                           }
+                        )
+                     }?,
+                     ## First filter width tensor (diagnostic): G_f = meshsize^2*alpha^2.
                      element tensor_field {
                         attribute rank { "2" },
                         attribute name { "FilterWidth" },
@@ -627,31 +677,14 @@ prognostic_velocity_field =
                            element diagnostic {
                               internal_algorithm,
                               velocity_mesh_choice,
-                              diagnostic_tensor_field
-                           }
-                        )
-                     }?,
-                     ## Strain rate S1: the test filter applied to the strain rate of the mesh-filtered velocity.
-                     element tensor_field {
-                        attribute rank { "2" },
-                        attribute name { "StrainRate" },
-                        (
-                           element diagnostic {
-                              internal_algorithm,
-                              velocity_mesh_choice,
-                              diagnostic_tensor_field
-                           }
-                        )
-                     }?,
-                     ## Strain rate S2: the strain rate of the test-filtered velocity.
-                     element tensor_field {
-                        attribute rank { "2" },
-                        attribute name { "FilteredStrainRate" },
-                        (
-                           element diagnostic {
-                              internal_algorithm,
-                              velocity_mesh_choice,
-                              diagnostic_tensor_field
+                              diagnostic_tensor_field,
+                              element mass_matrix {  
+                              (
+                                    element use_lumped_mass_matrix { element use_submesh { empty }? }
+                                    |
+                                    element use_consistent_mass_matrix { empty }
+                                 )
+                              }
                            }
                         )
                      }?,
@@ -665,7 +698,14 @@ prognostic_velocity_field =
                            element diagnostic {
                               internal_algorithm,
                               velocity_mesh_choice,
-                              diagnostic_tensor_field
+                              diagnostic_tensor_field,
+                              element mass_matrix {  
+                              (
+                                    element use_lumped_mass_matrix { element use_submesh { empty }? }
+                                    |
+                                    element use_consistent_mass_matrix { empty }
+                                 )
+                              }
                            }
                         )
                      }?
@@ -710,8 +750,9 @@ prognostic_velocity_field =
                      }|
                      ## Classical scheme from Bassi and Rebay 
                      ## (JCP 131 267-179 1997)
+                     ## Partial stress form is available for inhomogenous isotropic viscosities
                      element bassi_rebay {
-                        empty
+                       empty
                      }|
                      ## Scheme in which upwinding is applied in
                      ## alternating directions. Devised by C.Pain.
@@ -773,6 +814,15 @@ prognostic_velocity_field =
                            }?
                         }?
                      }
+                  ),
+                  (
+                     ## solves the viscosity term in the form:  d/dx_j K du_i/dx_j
+                     element tensor_form { empty }|
+                     ## solves the viscosity term in the form:  d/dx_j k (du_i/dx_j + du_j/dx_j)
+                     ## note that the viscosity, k, must be isoptropic
+                     ##
+                     ## only implemented for the bassi-rebay viscosity scheme
+                     element partial_stress_form { empty }
                   )
                },
                element advection_scheme {
@@ -898,24 +948,34 @@ prognostic_velocity_field =
          },
          ## Implicit/explicit control of pressure gradient temporal
          ##  discretisation, theta_pg
+         ##
          ##  =0.  -- explicit
+         ##
          ##  =0.5 -- Crank-Nicolson
+         ##
          ##  =1.  -- implicit
+         ##
          ##  Specification of this parameter will only affect
          ##  solution procedure when a free-surface is present or 
-         ##  compressible projection is used. If left unspecified
+         ##  compressible projection or equation type Shallow Water is used. 
+         ##  If left unspecified
          ##  the code defaults to theta_pg = theta.
          element theta_pressure_gradient {
             real
          }?,
          ## Implicit/explicit control of velocity-divergence temporal
          ##  discretisation, theta_divergence
+         ##
          ##  =0.  -- explicit
+         ##
          ##  =0.5 -- Crank-Nicolson
+         ##
          ##  =1.  -- implicit
+         ##
          ##  Specification of this parameter will only affect
          ##  solution procedure when a free-surface is present or 
-         ##  compressible projection is used. If left unspecified
+         ##  compressible projection or equation type Shallow Water is used. 
+         ##  If left unspecified
          ##  the code defaults to theta_divergence = theta.
          element theta_divergence {
             real
@@ -992,7 +1052,7 @@ prognostic_velocity_field =
       )?,
       ## Solver
       element solver {
-         linear_solver_options_asym
+         linear_solver_options_asym_vector
       },
       (
          ## Initial condition for WholeMesh
@@ -1156,6 +1216,7 @@ prognostic_velocity_field =
             }?
          }?
       }?,
+
       ## SurfaceTension
       element tensor_field {
          attribute name { "SurfaceTension" },
@@ -1241,14 +1302,6 @@ prognostic_pressure_field =
                element integrate_continuity_by_parts {
                   empty
                }?,
-               ## ** UNDER DEVELOPMENT **
-               ##
-               ## Fix for low reynolds numbers by adding the viscous terms to the inversed lumped mass matrix for the pressure correction.
-               ## 
-               ## ** ONLY WORKS with continuous_galerkin Velocity and lumping the mass matrix and not with lumping on submesh.
-               element low_re_p_correction_fix {
-                  empty
-               }?,
                ## Test the continuity equation with the control volume dual mesh of the finite element pressure mesh.
                ## Only works for incompressible flow. This will make the pressure matrix non symmetric which must be 
                ## considered when selecting the pressure solver options. This will not work with the free surface and 
@@ -1267,7 +1320,15 @@ prognostic_pressure_field =
             element control_volumes {
                empty
             }
-         )
+         ),
+         ## Discretisation options controlling compressible flows
+         element compressible {
+           ## Include buoyancy's dependence on pressure in the lhs of
+           ## the momentum equation and the projection step too.
+           element implicit_pressure_buoyancy {
+             empty
+           }?
+         }?
       },
       (
          ## Reference node (Node at which pressure = 0.) Note that the node number must be less than the total number of nodes.
@@ -1293,18 +1354,16 @@ prognostic_pressure_field =
       }?,
       ## Atmospheric pressure
       ##
-      ## Manual suggests 1.01325E+6
+      ## Manual suggests 1.01325e+5 Pa
       element atmospheric_pressure {
          real
       }?,
       ## scheme
       element scheme {
-         ## Use a poisson pressure equation to calculate a first guess at pressure.
-         ## This does not necessarily satisfy continuity.
-         ##   = 1 -- use a poisson guess at every timestep
-         ##   = 0 -- never use a poisson guess
-         ##   =-1 -- use a poisson guess at the first timestep only
-         ## Manual suggests -1
+         ## Use a poisson pressure equation to calculate a first guess at pressure
+         ## before the first momentum solve (in addition to the usual 
+         ## pressure correction after the momentum solve). Recommended in most
+         ## runs to ensure correct results.
          element poisson_pressure_solution {
             (
                element string_value{
@@ -1316,107 +1375,71 @@ prognostic_pressure_field =
                comment
             )
          },
-         (
-            ## Use the incompressible projection method to determine
-            ## the pressure and satisfy continuity
-            element use_projection_method {
-               ## Assemble and use the full schur complement.
-               ## This allows you to not lump the mass matrix if you're using
-               ## cg and to use the full momentum matrix in the projection if
-               ## you so desire.
-               element full_schur_complement {
-                 ( 
-                   ## Specify the inner matrix (IM) to form the projection schur complement (C^T*IM^{-1}*C). 
-                   ## Use the full mass matrix.
-                   ##
-                   ## Make sure you've not lumped your mass in the velocity spatial_discretisation if you want to be consistent!
-                   element inner_matrix {
-                     attribute name { "FullMassMatrix" },
-                     element solver {
-                       linear_solver_options_sym
-                     }
-                   }|
-                   ## Specify the inner matrix (IM) to form the projection schur complement (C^T*IM^{-1}*C). 
-                   ## Use the full momentum matrix.
-                   ##
-                   ## Doesn't really matter if you've lumped your mass or not but why would you if you're doing a full inner solve anyway?
-                   element inner_matrix {
-                     attribute name { "FullMomentumMatrix" },
-                     element solver {
-                       linear_solver_options_asym
-                     }
-                   }
-                 ),
-                 (
-                   ## Specify the preconditioner matrix to use on the schur complement.
-                   ##
-                   ## For DG, the LumpedSchurComplement is our best approximation to CMC.
-                   element preconditioner_matrix {
-                     attribute name { "LumpedSchurComplement" },
-                     element lump_on_submesh {
-                       empty
-                     }?
-                   }|
-                   ## Specify the preconditioner matrix to use on the schur complement.
-                   ##
-                   ## DiagonalSchurComplement = C_P^T * [(Big_m)_diagonal]^-1 * C
-                   element preconditioner_matrix {
-                     attribute name { "DiagonalSchurComplement" },
-                     empty
-                   }|
-                   ## Specify the preconditioner matrix to use on the schur complement.
-                   ##
-                   ## Pressure Mass Matrix, scaled with the inverse of viscosity. This is
-                   ## shown to be spectrally equivalent to the Schur complement.
-                   ## Note that this currently only works with isoviscous and/or isotropic
-                   ## viscosity tensors.
-                   element preconditioner_matrix {
-                     attribute name { "ScaledPressureMassMatrix" },
-                     empty
-                   }|
-                   ## Specify the preconditioner matrix to use on the schur complement.
-                   element preconditioner_matrix {
-                     attribute name { "NoPreconditionerMatrix" },
-                     empty
-                   }
-                 )
-               }?
-            }|
-            ## Use the compressible projection method to determine the
-            ## pressure and satisfy continuity and the eos.
-            ## This is only currently compatible with control volume
-            ## pressure spatial discretisations and requires a
-            ## multimaterial eos.
-            element use_compressible_projection_method {
-               (
-                  ## Variable (normally a density) used to normalise
-                  ## each materials contribution
-                  ## to the C_P^T matrix.  Leave unselected for no normalisation.
-                  ## Selects the MaterialDensity field.
-                  element normalisation {
-                     attribute name{ "MaterialDensity" },
-                     empty
-                  }|
-                  ## Variable (normally a density) used to normalise
-                  ## each materials contribution
-                  ## to the C_P^T matrix.  Leave unselected for no normalisation.
-                  ## Selects the bulk Density field.
-                  element normalisation {
-                     attribute name{ "Density" },
-                     empty
-                  }|
-                  ## Variable (normally a density) used to normalise
-                  ## each materials contribution
-                  ## to the C_P^T matrix.  Leave unselected for no normalisation.
-                  ## Allows the selection of an arbitrary field.
-                  element normalisation {
-                     attribute name{ string },
-                     empty
+         ## Use the projection method to determine
+         ## the pressure and satisfy continuity
+         element use_projection_method {
+            ## Assemble and use the full schur complement.
+            ## This allows you to not lump the mass matrix if you're using
+            ## cg and to use the full momentum matrix in the projection if
+            ## you so desire.
+            element full_schur_complement {
+              ( 
+                ## Specify the inner matrix (IM) to form the projection schur complement (C^T*IM^{-1}*C). 
+                ## Use the full mass matrix.
+                ##
+                ## Make sure you've not lumped your mass in the velocity spatial_discretisation if you want to be consistent!
+                element inner_matrix {
+                  attribute name { "FullMassMatrix" },
+                  element solver {
+                    linear_solver_options_sym
                   }
-               )?
-
-            }
-         ),
+                }|
+                ## Specify the inner matrix (IM) to form the projection schur complement (C^T*IM^{-1}*C). 
+                ## Use the full momentum matrix.
+                ##
+                ## Doesn't really matter if you've lumped your mass or not but why would you if you're doing a full inner solve anyway?
+                element inner_matrix {
+                  attribute name { "FullMomentumMatrix" },
+                  element solver {
+                    linear_solver_options_asym_vector
+                  }
+                }
+              ),
+              (
+                ## Specify the preconditioner matrix to use on the schur complement.
+                ##
+                ## For DG, the LumpedSchurComplement is our best approximation to CMC.
+                element preconditioner_matrix {
+                  attribute name { "LumpedSchurComplement" },
+                  element lump_on_submesh {
+                    empty
+                  }?
+                }|
+                ## Specify the preconditioner matrix to use on the schur complement.
+                ##
+                ## DiagonalSchurComplement = C_P^T * [(Big_m)_diagonal]^-1 * C
+                element preconditioner_matrix {
+                  attribute name { "DiagonalSchurComplement" },
+                  empty
+                }|
+                ## Specify the preconditioner matrix to use on the schur complement.
+                ##
+                ## Pressure Mass Matrix, scaled with the inverse of viscosity. This is
+                ## shown to be spectrally equivalent to the Schur complement.
+                ## Note that this currently only works with isoviscous and/or isotropic
+                ## viscosity tensors.
+                element preconditioner_matrix {
+                  attribute name { "ScaledPressureMassMatrix" },
+                  empty
+                }|
+                ## Specify the preconditioner matrix to use on the schur complement.
+                element preconditioner_matrix {
+                  attribute name { "NoPreconditionerMatrix" },
+                  empty
+                }
+              )
+            }?
+         },
          ## rediscretise the equations at every timestep and iteration
          ## (this is useful as a debugging tool but shouldn't be necessary for any application runs)
          element update_discretised_equation {
@@ -1644,7 +1667,7 @@ prognostic_hydrostatic_pressure_field =
       ## Solver
       ## Only required for continuous_galerkin spatial_discretisations!
       element solver {
-         linear_solver_options_asym
+         linear_solver_options_asym_scalar
       }?,
       ## Disables checkpointing of this field
       element exclude_from_checkpointing {
@@ -1770,7 +1793,7 @@ prognostic_stream_function_field =
    (
       ## Solver
       element solver {
-         linear_solver_options_asym
+         linear_solver_options_asym_scalar
       },
       ## Disables checkpointing of this field
       element exclude_from_checkpointing {
@@ -1795,7 +1818,7 @@ prognostic_multipath_stream_function_field =
    (
       ## Solver
       element solver {
-         linear_solver_options_asym
+         linear_solver_options_asym_scalar
       },
       ## Boundary conditions
       element boundary_conditions {
@@ -1914,17 +1937,102 @@ scalar_equation_choice =
             attribute name { "ReducedConservationOfMass" },
             equation_coefficients
          }|
-         ## ***UNDER TESTING***
-         ##
          ## Select the equation used to solve for this field.
          ## Internal Energy equation - requires the selection of a Density field.
-         ## ONLY WORKS FOR CONTROL VOLUME DISCRETISATIONS
+         ## ONLY WORKS FOR CG and CV DISCRETISATIONS
          ## Solve the internal energy equation for this field.
          ## Requires pressure and velocity fields to be present.
-         ## Uses a nonconservative time discretisation.
+         ## Uses a non-conservative time discretisation.
          element equation {
             attribute name { "InternalEnergy" },
             equation_coefficients
+         }|
+         ## Select the equation used to solve for this field.
+         ## Anelastic Energy equation for use with compressible mantle simulations.
+         ##
+         ## ONLY WORKS FOR CONTINUOUS GALERKIN AND CONTROL VOLUME DISCRETISATIONS
+         ##
+         ## It depends on the prescribed/diagnostic fields:
+         ##  - CompressibleReferenceDensity
+         ##  - CompressibleReferenceTemperature
+         ##  - IsobaricSpecificHeatCapacity
+         element equation {
+            attribute name { "MantleAnelasticEnergy" },
+            (
+              ## Set the discretisation options for the density weighting
+              ## (actually the CompressibleReferenceDensity*IsobaricSpecificHeatCapacity).
+              element density {
+                attribute name {"CompressibleReferenceDensity"},
+                ## Provide discretisation options for the coefficient density field.
+                ##
+                ## If not provided then the discretisation options will default to those
+                ## under the field that is named (hence it will generally have to be a prognostic
+                ## field itself).
+                element discretisation_options {
+                  element spatial_discretisation {
+                    (
+                      element continuous_galerkin {
+                        empty
+                      }|
+                      element control_volumes {
+                        spatial_control_volume_options_excluding_none
+                      }
+                    )
+                  },
+                  element temporal_discretisation {
+                    ## Implicit/explicit control
+                    ##  =0.  -- explicit
+                    ##  =0.5 -- Crank-Nicolson
+                    ##  =1.  -- implicit
+                    element theta {
+                      element real_value{
+                         attribute rank { "0" },
+                         ( "1.0" )
+                      }
+                    }
+                  }
+                }?
+              }|
+              ## Set the discretisation options for the density weighting
+              ## (actually the Density*IsobaricSpecificHeatCapacity).
+              element density {
+                attribute name {"Density"},
+                ## Provide discretisation options for the coefficient density field.
+                ##
+                ## If not provided then the discretisation options will default to those
+                ## under the field that is named (hence it will generally have to be a prognostic
+                ## field itself).
+                element discretisation_options {
+                  element spatial_discretisation {
+                    (
+                      element continuous_galerkin {
+                        empty
+                      }|
+                      element control_volumes {
+                        spatial_control_volume_options_excluding_none
+                      }
+                    )
+                  },
+                  element temporal_discretisation {
+                    ## Implicit/explicit control
+                    ##  =0.  -- explicit
+                    ##  =0.5 -- Crank-Nicolson
+                    ##  =1.  -- implicit
+                    element theta {
+                      real
+                    },
+                    element control_volumes {
+                      ## Only works if a control volume or coupled_cv spatial discretisation is selected.
+                      ## If not active then the theta specified above will be used.
+                      ## Otherwise use variable limited theta on individual faces.
+                      element limit_theta {
+                          empty
+                      }?
+                    }
+                  }
+                }?
+              }
+            )
          }|
          ## Option to solve for electrical potential from
          ## electrokinetic, electrochemical or electrothermal sources 
@@ -1934,7 +2042,8 @@ scalar_equation_choice =
          ## Equation type for the k-epsilon model fields.
          ## Note: Only works for continuous galerkin or control volume discretisations.
          element equation {
-            attribute name { "KEpsilon" }
+            attribute name { "KEpsilon" },
+            equation_coefficients
          }|
          ## Equation type for the sediment bedload fields.
          ## Note: Only works for P1 discretisations.
@@ -1969,7 +2078,7 @@ equation_coefficients =
         coefficient_discretisation_options?
       }
    )
-
+   
 coefficient_discretisation_options =
   (
     ## Provide discretisation options for the coefficient density field.
@@ -2014,6 +2123,33 @@ velocity_equation_choice =
       ## Boussinesq only works for continuous_galerkin and discontinuous_galerkin.
       element equation {
          attribute name { "Boussinesq" }
+      }|
+      ## Select the equation used to solve for velocity.
+      ##
+      ## Select ShallowWater to solve the non-linear shallow water equations in non-conservative form.
+      ## The Velocity field will be the depth-averaged flow velocity and the Pressure field
+      ## will be the free surface elevation multiplied by the gravitational constant g
+      element equation {
+         attribute name { "ShallowWater" },
+         # Bottom depth (excluding free surface elevation), a positive number
+         element scalar_field {
+            attribute rank { "0" },
+            attribute name { "BottomDepth" },
+            element prescribed {
+               coordinate_mesh_choice,
+               prescribed_scalar_field
+            }
+         },
+         element bottom_drag {
+            element scalar_field {
+               attribute rank { "0" },
+               attribute name { "BottomDragCoefficient" },
+               element prescribed {
+                  coordinate_mesh_choice,
+                  prescribed_scalar_field
+               }
+            }
+         }?
       }|
       ## Select the equation used to solve for velocity.
       ## Drainage only works for continuous_galerkin and discontinuous_galerkin.

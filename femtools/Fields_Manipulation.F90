@@ -59,6 +59,7 @@ implicit none
   public :: set_ele_nodes, normalise, tensor_second_invariant
   public :: remap_to_subdomain, remap_to_full_domain
   public :: get_coordinates_remapped_to_surface, get_remapped_coordinates
+  public :: test_remap_validity
   
   integer, parameter, public :: REMAP_ERR_DISCONTINUOUS_CONTINUOUS = 1, &
                                 REMAP_ERR_HIGHER_LOWER_CONTINUOUS  = 2, &
@@ -85,7 +86,7 @@ implicit none
     module procedure set_scalar_field_node, set_scalar_field, &
                    & set_vector_field_node, set_vector_field, &
                    & set_vector_field_node_dim, set_vector_field_dim, &
-                   & set_tensor_field_node, set_tensor_field, &
+                   & set_tensor_field_node, set_tensor_field, set_tensor_field_dim, &
                    & set_scalar_field_nodes, set_scalar_field_constant_nodes, &
                    & set_tensor_field_node_dim, &
                    & set_vector_field_nodes, &
@@ -126,7 +127,7 @@ implicit none
   end interface
 
   interface remap_field_to_surface
-     module procedure remap_scalar_field_to_surface, remap_vector_field_to_surface
+     module procedure remap_scalar_field_to_surface, remap_vector_field_to_surface, remap_tensor_field_to_surface
   end interface
 
   interface set_to_submesh
@@ -784,7 +785,7 @@ implicit none
   end subroutine real_addto_real
 
   subroutine set_scalar_field_field(out_field, in_field)
-    !!< Set in_field to out_field. This will only work if the fields have
+    !!< Set out_field to in_field. This will only work if the fields have
     !!< the same mesh.
     type(scalar_field), intent(inout) :: out_field
     type(scalar_field), intent(in) :: in_field
@@ -1046,7 +1047,7 @@ implicit none
   end subroutine set_vector_field_arr_dim
 
   subroutine set_vector_field_field(out_field, in_field )
-    !!< Set in_field to out_field. This will only work if the fields have
+    !!< Set out_field to in_field. This will only work if the fields have
     !!< the same mesh.
     type(vector_field), intent(inout) :: out_field
     type(vector_field), intent(in) :: in_field
@@ -1355,6 +1356,22 @@ implicit none
     end do
     
   end subroutine set_tensor_field
+    
+  subroutine set_tensor_field_dim(field, dim1, dim2, val)
+    !!< Sets one component of a tensor with constant value
+    !!< Works for constant and space varying fields.
+    type(tensor_field), intent(inout) :: field
+    real, intent(in) :: val
+    integer, intent(in):: dim1, dim2
+    integer :: i
+
+    assert(field%field_type/=FIELD_TYPE_PYTHON)
+    
+    do i=1,size(field%val, 3)
+      field%val(dim1, dim2, i) = val
+    end do
+    
+  end subroutine set_tensor_field_dim
 
   subroutine set_tensor_field_arr(field, val)
     !!< Set the tensor field at all nodes at once
@@ -1983,7 +2000,7 @@ implicit none
     end if
     
     ! Zero any left-over dimensions
-    do ele=from_field%dim+1,to_field%dim
+    do i=from_field%dim+1,to_field%dim
       to_field%val(i,:)=0.0
     end do
     
@@ -2220,6 +2237,82 @@ implicit none
 
   end subroutine remap_vector_field_to_surface
 
+  subroutine remap_tensor_field_to_surface(from_field, to_field, surface_element_list, stat)
+    !!< Remap the values of from_field onto the surface_field to_field, which is defined
+    !!< on the faces given by surface_element_list.
+    !!< This also deals with remapping between different orders.
+    type(tensor_field), intent(in):: from_field
+    type(tensor_field), intent(inout):: to_field
+    integer, dimension(:), intent(in):: surface_element_list
+    integer, intent(out), optional:: stat
+    
+    real, dimension(ele_loc(to_field,1), face_loc(from_field,1)) :: locweight
+    type(element_type), pointer:: from_shape, to_shape
+    real, dimension(from_field%dim(1), from_field%dim(2), face_loc(from_field,1)) :: from_val
+    integer, dimension(:), pointer :: to_nodes
+    integer toloc, fromloc, ele, face, i, j
+
+    if(present(stat)) stat = 0
+
+    assert(to_field%dim(1)>=from_field%dim(1))
+    assert(to_field%dim(2)>=from_field%dim(2))
+
+    select case(from_field%field_type)
+    case(FIELD_TYPE_NORMAL)
+    
+      call test_remap_validity(from_field, to_field, stat=stat)
+
+      ! the remapping happens from a face of from_field which is at the same
+      ! time an element of to_field
+      from_shape => face_shape(from_field, 1)
+      to_shape => ele_shape(to_field, 1)
+      ! First construct remapping weights.
+      do toloc=1,size(locweight,1)
+         do fromloc=1,size(locweight,2)
+            locweight(toloc,fromloc)=eval_shape(from_shape, fromloc, &
+                 local_coords(toloc, to_shape))
+         end do
+      end do
+    
+      ! Now loop over the surface elements.
+      do ele=1, size(surface_element_list)
+         ! element ele is a face in the mesh of from_field:
+         face=surface_element_list(ele)
+         
+         to_nodes => ele_nodes(to_field, ele)
+
+         from_val = face_val(from_field, face)
+
+         do i=1, to_field%dim(1)
+            do j=1, to_field%dim(2)
+               to_field%val(i,j,to_nodes)=matmul(locweight,from_val(i,j,:))
+            end do
+         end do
+         
+      end do
+      
+    case(FIELD_TYPE_CONSTANT)
+      do i=1, from_field%dim(1)
+         do j=1, from_field%dim(2)
+            to_field%val(i,j,:) = from_field%val(i,j,1)
+         end do
+      end do
+    end select
+
+    ! Zero any left-over dimensions
+    do i=from_field%dim(1)+1, to_field%dim(1)
+       do j=1, to_field%dim(2)
+          to_field%val(i,j,:)=0.0
+       end do
+    end do
+    do j=from_field%dim(2)+1, to_field%dim(2)
+       do i=1, to_field%dim(1)
+          to_field%val(i,j,:)=0.0
+       end do
+    end do
+
+  end subroutine remap_tensor_field_to_surface
+
   function piecewise_constant_mesh(in_mesh, name) result(new_mesh)
     !!< From a given mesh, return a scalar field
     !!< allocated on the mesh that's topologically the same
@@ -2232,7 +2325,7 @@ implicit none
 
     old_shape = in_mesh%shape
 
-    shape = make_element_shape(vertices=old_shape%loc, dim=old_shape%dim, degree=0, quad=old_shape%quadrature)
+    shape = make_element_shape(vertices=old_shape%numbering%vertices, dim=old_shape%dim, degree=0, quad=old_shape%quadrature)
     new_mesh = make_mesh(model=in_mesh, shape=shape, continuity=-1)
     new_mesh%name=name
     call deallocate(shape)
@@ -2272,18 +2365,23 @@ implicit none
 
   end subroutine scalar_scale
 
-  subroutine vector_scale(field, factor)
+  subroutine vector_scale(field, factor, dim)
     !!< Multiply vector field with factor
     type(vector_field), intent(inout) :: field
     real, intent(in) :: factor
+    integer, intent(in), optional :: dim
 
     integer :: i
 
     assert(field%field_type/=FIELD_TYPE_PYTHON)
     
-    do i=1,field%dim
-      field%val(i,:) = field%val(i,:) * factor
-    end do
+    if (present(dim)) then
+      field%val(dim,:) = field%val(dim,:) * factor
+    else
+      do i=1,field%dim
+        field%val(i,:) = field%val(i,:) * factor
+      end do
+    end if
       
   end subroutine vector_scale
 
@@ -2767,7 +2865,7 @@ implicit none
        if (a%mesh==b%mesh) then
           tmp_b=b
        else
-          call allocate(tmp_b, b%dim, a%mesh, name='cross_product_vector_tmp_b')
+          call allocate(tmp_b, b%dim, a%mesh, name='inner_product_vector_tmp_b')
           call remap_field(b, tmp_b)
        end if
        
@@ -2786,6 +2884,10 @@ implicit none
           ! someone could implement in_field type python
           FLAbort("Illegal in_field field type in inner_product()")
        end select
+
+       if( .not. b%mesh==tmp_b%mesh) then
+         call deallocate(tmp_b)
+       end if
        
     case (FIELD_TYPE_CONSTANT)
       

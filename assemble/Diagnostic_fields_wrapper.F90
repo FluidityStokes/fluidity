@@ -470,6 +470,13 @@ contains
          end if
        end if
 
+       s_field => extract_scalar_field(state(i), "CompressibleEOSDensity", stat)
+       if(stat == 0) then
+         if(recalculate(trim(s_field%option_path))) then
+           call compressible_eos(state(i), density=s_field)
+         end if
+       end if
+
        s_field => extract_scalar_field(state(i), "FreeSurface", stat)
        if(stat == 0) then
          if(recalculate(trim(s_field%option_path))) then
@@ -557,7 +564,6 @@ contains
        ! Start of sediment diagnostics.
        if (have_option("/material_phase[0]/sediment")) then
           call calculate_sediment_sinking_velocity(state(i))
-          call calculate_sediment_flux(state(i))
           call calculate_sediment_active_layer_d50(state(i))
           call calculate_sediment_active_layer_sigma(state(i))
           call calculate_sediment_active_layer_volume_fractions(state(i))

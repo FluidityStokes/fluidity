@@ -281,8 +281,9 @@ Field_Equations_CV.o ../include/field_equations_cv.mod: Field_Equations_CV.F90 \
    ../include/diagnostic_variables.mod ../include/divergence_matrix_cv.mod \
    ../include/fdebug.h ../include/fefields.mod ../include/field_options.mod \
    ../include/fields.mod ../include/global_parameters.mod ../include/halos.mod \
-   ../include/parallel_tools.mod ../include/petsc_solve_state_module.mod \
-   ../include/porous_media.mod ../include/sparse_matrices_fields.mod \
+   ../include/multiphase_module.mod ../include/parallel_tools.mod \
+   ../include/petsc_solve_state_module.mod ../include/porous_media.mod \
+   ../include/sparse_matrices_fields.mod \
    ../include/sparsity_patterns_meshes.mod ../include/spud.mod \
    ../include/state_fields_module.mod ../include/state_module.mod \
    ../include/transform_elements.mod
@@ -310,7 +311,7 @@ Foam_Flow.o ../include/foam_flow_module.mod: Foam_Flow.F90 \
    ../include/sparsity_patterns_meshes.mod ../include/spud.mod \
    ../include/state_matrices_module.mod ../include/state_module.mod \
    ../include/transform_elements.mod ../include/vector_tools.mod \
-   ../include/vtk_interfaces.mod ../include/weak_bcs.mod
+   ../include/vtk_interfaces.mod
 
 ../include/free_surface_module.mod: Free_Surface.o
 	@true
@@ -445,14 +446,15 @@ Interpolation_manager.o ../include/interpolation_manager.mod: \
    ../include/state_module.mod ../include/supermesh_construction.mod \
    ../include/tictoc.mod ../include/vtk_interfaces.mod
 
-../include/les_viscosity_module.mod: LES_viscosity.o
+../include/les_module.mod: LES.o
 	@true
 
-LES_viscosity.o ../include/les_viscosity_module.mod: LES_viscosity.F90 \
-   ../include/fdebug.h ../include/fetools.mod ../include/field_options.mod \
-   ../include/fields.mod ../include/global_parameters.mod \
-   ../include/smoothing_module.mod ../include/spud.mod \
-   ../include/state_module.mod ../include/vector_tools.mod
+LES.o ../include/les_module.mod: LES.F90 ../include/fdebug.h \
+   ../include/fetools.mod ../include/field_options.mod ../include/fields.mod \
+   ../include/global_parameters.mod ../include/smoothing_module.mod \
+   ../include/solvers.mod ../include/spud.mod \
+   ../include/state_fields_module.mod ../include/state_module.mod \
+   ../include/vector_tools.mod
 
 ../include/linear_shallow_water.mod: Linear_Shallow_Water.o
 	@true
@@ -526,7 +528,7 @@ Momentum_CG.o ../include/momentum_cg.mod: Momentum_CG.F90 \
    ../include/field_derivatives.mod ../include/field_options.mod \
    ../include/fields.mod ../include/fldebug.mod \
    ../include/global_parameters.mod ../include/halos.mod \
-   ../include/les_viscosity_module.mod ../include/metric_tools.mod \
+   ../include/les_module.mod ../include/metric_tools.mod \
    ../include/multiphase_module.mod ../include/petsc_solve_state_module.mod \
    ../include/physics_from_options.mod ../include/profiler.mod \
    ../include/rotated_boundary_conditions.mod ../include/smoothing_module.mod \
@@ -592,14 +594,14 @@ Momentum_Equation.o ../include/momentum_equation.mod: Momentum_Equation.F90 \
    ../include/petsc_solve_state_module.mod \
    ../include/pressure_dirichlet_bcs_cv.mod ../include/profiler.mod \
    ../include/reduced_model_runtime.mod \
-   ../include/rotated_boundary_conditions.mod ../include/slope_limiters_dg.mod \
+   ../include/rotated_boundary_conditions.mod \
+   ../include/shallow_water_equations.mod ../include/slope_limiters_dg.mod \
    ../include/solvers.mod ../include/sparse_matrices_fields.mod \
    ../include/sparse_tools.mod ../include/sparse_tools_petsc.mod \
    ../include/sparsity_patterns_meshes.mod ../include/spud.mod \
    ../include/state_fields_module.mod ../include/state_matrices_module.mod \
    ../include/state_module.mod ../include/tidal_module.mod \
-   ../include/vertical_balance_pressure.mod ../include/vtk_interfaces.mod \
-   ../include/weak_bcs.mod
+   ../include/vertical_balance_pressure.mod ../include/vtk_interfaces.mod
 
 ../include/multimaterial_module.mod: Multimaterials.o
 	@true
@@ -725,6 +727,14 @@ Saturation_Distribution_Search_HookeJeeves.o \
    ../include/global_parameters.mod ../include/momentum_equation.mod \
    ../include/spontaneous_potentials.mod ../include/spud.mod \
    ../include/state_module.mod ../include/write_state_module.mod
+
+../include/shallow_water_equations.mod: Shallow_Water_Equations.o
+	@true
+
+Shallow_Water_Equations.o ../include/shallow_water_equations.mod: \
+   Shallow_Water_Equations.F90 ../include/boundary_conditions.mod \
+   ../include/fdebug.h ../include/fields.mod ../include/global_parameters.mod \
+   ../include/spud.mod ../include/state_module.mod
 
 ../include/slope_limiters_dg.mod: Slope_limiters_DG.o
 	@true

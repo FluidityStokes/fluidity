@@ -67,7 +67,7 @@ module divergence_matrix_cg
                                              test_mesh, field, option_path, &
                                              div_mass, grad_mass, &
                                              div_mass_lumped,&
-                                             grad_mass_lumped, get_ct) 
+                                             grad_mass_lumped, get_ct)
 
       ! inputs/outputs
       ! bucket full of fields
@@ -300,48 +300,64 @@ module divergence_matrix_cg
         assert(surface_element_count(test_mesh)==surface_element_count(field))
         allocate(field_bc_type(field%dim, surface_element_count(field)))
         call get_entire_boundary_condition(field, (/ &
-          "weakdirichlet ", &
-          "no_normal_flow", &
-          "internal      ", &
-          "free_surface  "/), field_bc, field_bc_type)
+          "weakdirichlet          ", &
+          "no_normal_flow         ", &
+          "internal               ", &
+          "free_surface           ", &
+          "prescribed_normal_flow "/), field_bc, field_bc_type)
 
         do sele = 1, surface_element_count(test_mesh)
 
           if(any(field_bc_type(:,sele)==2)&
                .or.any(field_bc_type(:,sele)==3)&
                .or.any(field_bc_type(:,sele)==4)) cycle
-          
+
           test_shape=>face_shape(test_mesh, sele)
           field_shape=>face_shape(field, sele)
 
           test_nodes_bdy=face_global_nodes(test_mesh, sele)
           field_nodes_bdy=face_global_nodes(field, sele)
 
-          call transform_facet_to_physical(coordinate, sele, &
-              &                          detwei_f=detwei_bdy,&
-              &                          normal=normal_bdy) 
+          if (field_bc_type(1,sele)==5 .and. present(ct_rhs)) then
 
-          if(multiphase) then
-            ele_mat_bdy = shape_shape_vector(test_shape, field_shape, detwei_bdy*face_val_at_quad(nvfrac, ele), normal_bdy)
-          else
-            ele_mat_bdy = shape_shape_vector(test_shape, field_shape, detwei_bdy, normal_bdy)
-          end if
-
-          do dim = 1, field%dim
-            if((field_bc_type(dim, sele)==1).and.present(ct_rhs)) then
-              call addto(ct_rhs, test_nodes_bdy, &
-                          -matmul(ele_mat_bdy(dim,:,:), &
-                          ele_val(field_bc, dim, sele)))
-            else
-               if (l_get_ct) then
-                  call addto(ct_m, 1, dim, test_nodes_bdy, field_nodes_bdy, &
-                       ele_mat_bdy(dim,:,:))
-               end if
+            ! prescribed_normal_flow
+            call transform_facet_to_physical(coordinate, sele, &
+                &                          detwei_f=detwei_bdy)
+            if(multiphase) then
+              detwei_bdy = detwei_bdy*face_val_at_quad(nvfrac, sele)
             end if
-          end do
 
+            call addto(ct_rhs, test_nodes_bdy, -shape_rhs(test_shape, detwei_bdy*ele_val_at_quad(field_bc, sele, 1)))
+
+          else
+
+            ! Dirichlet or no boundary condition
+
+            call transform_facet_to_physical(coordinate, sele, &
+                &                          detwei_f=detwei_bdy,&
+                &                          normal=normal_bdy)
+
+            if(multiphase) then
+              ele_mat_bdy = shape_shape_vector(test_shape, field_shape, detwei_bdy*face_val_at_quad(nvfrac, ele), normal_bdy)
+            else
+              ele_mat_bdy = shape_shape_vector(test_shape, field_shape, detwei_bdy, normal_bdy)
+            end if
+
+            do dim = 1, field%dim
+              if((field_bc_type(dim, sele)==1).and.present(ct_rhs)) then
+                call addto(ct_rhs, test_nodes_bdy, &
+                            -matmul(ele_mat_bdy(dim,:,:), &
+                            ele_val(field_bc, dim, sele)))
+              else
+                 if (l_get_ct) then
+                    call addto(ct_m, 1, dim, test_nodes_bdy, field_nodes_bdy, &
+                         ele_mat_bdy(dim,:,:))
+                 end if
+              end if
+            end do
+          end if
         end do
-
+        
         call deallocate(field_bc)
         deallocate(field_bc_type)
         deallocate(detwei_bdy, normal_bdy)
@@ -437,6 +453,8 @@ module divergence_matrix_cg
 
       ! integrate by parts
       logical :: integrate_by_parts
+      ! use the reference density
+      logical :: use_reference_density
 
       integer, dimension(:,:), allocatable :: field_bc_type
       type(vector_field) :: field_bc
@@ -444,7 +462,8 @@ module divergence_matrix_cg
       integer, dimension(:), allocatable :: density_bc_type
       type(scalar_field) :: density_bc
       
-      integer :: i, stat
+      character(len=OPTION_PATH_LEN) :: density_option_path
+      integer :: i, stat, icomp
 
       !! Multiphase variables
       ! Volume fraction fields
@@ -462,30 +481,46 @@ module divergence_matrix_cg
       ewrite(2,*) 'In assemble_1mat_compressible_divergence_matrix_cg'
 
       coordinate=> extract_vector_field(state(istate), "Coordinate")
-      
-      density => extract_scalar_field(state(istate), "Density")
-      olddensity => extract_scalar_field(state(istate), "OldDensity")
-      
+
       if(have_option(trim(state(istate)%option_path)//"/equation_of_state/compressible")) then
          is_compressible_phase = .true.
+         density => extract_scalar_field(state(istate), "Density")
+         icomp = istate
       else
          is_compressible_phase = .false.
 
          ! Find the compressible phase and extract it's density to form rho_c * div(vfrac_i*u_i), where _c and _i represent
          ! the compressible and incompressible phases respectively.
+         icomp = 0
          do i = 1, size(state)
             if(have_option(trim(state(i)%option_path)//"/equation_of_state/compressible")) then
-               density => extract_scalar_field(state(i), "Density")
-               olddensity => extract_scalar_field(state(i), "OldDensity")
+              density => extract_scalar_field(state(i), "Density")
+              icomp = i
             end if
          end do
+         if (icomp==0) icomp=istate
       end if
 
+      density_option_path = density%option_path
+
+      use_reference_density=have_option(trim(complete_field_path(density_option_path, stat=stat))//&
+          &"/spatial_discretisation/use_reference_density")
+
+      if(use_reference_density) then
+        density => extract_scalar_field(state(icomp), "CompressibleReferenceDensity")
+        olddensity => extract_scalar_field(state(icomp), "OldCompressibleReferenceDensity", stat=stat)
+        if(stat/=0) then
+          olddensity => density
+        end if
+      else
+        olddensity => extract_scalar_field(state(icomp), "OldDensity")
+      end if
+      
       pressure => extract_scalar_field(state(istate), "Pressure")
       
       velocity=>extract_vector_field(state(istate), "Velocity")
       nonlinearvelocity=>extract_vector_field(state(istate), "NonlinearVelocity") ! maybe this should be updated after the velocity solve?
-      
+
       ! Get the non-linear PhaseVolumeFraction field if multiphase
       if(multiphase) then
          vfrac => extract_scalar_field(state(istate), "PhaseVolumeFraction")
@@ -497,28 +532,28 @@ module divergence_matrix_cg
          nullify(vfrac)
       end if
 
-      integrate_by_parts=have_option(trim(complete_field_path(density%option_path, stat=stat))//&
+      integrate_by_parts=have_option(trim(complete_field_path(density_option_path, stat=stat))//&
           &"/spatial_discretisation/continuous_galerkin/advection_terms/integrate_advection_by_parts")&
           .or. have_option(trim(complete_field_path(velocity%option_path, stat=stat))//&
           &"/spatial_discretisation/discontinuous_galerkin")
 
       ewrite(2,*) "Compressible divergence is integrated by parts: ", integrate_by_parts
 
-      if(have_option(trim(density%option_path) // "/prognostic/spatial_discretisation/&
+      if(have_option(trim(density_option_path) // "/prognostic/spatial_discretisation/&
                       &continuous_galerkin/stabilisation/streamline_upwind")) then
         ewrite(2, *) "Streamline upwind stabilisation"
         FLExit("SU stabilisation broken with continuity at the moment.")
         stabilisation_scheme = STABILISATION_STREAMLINE_UPWIND
-        call get_upwind_options(trim(density%option_path) // & 
+        call get_upwind_options(trim(density_option_path) // & 
                                 "/prognostic/spatial_discretisation/continuous_galerkin/&
                                 &stabilisation/streamline_upwind", &
                                 & nu_bar_scheme, nu_bar_scale)
-      else if(have_option(trim(density%option_path) // &
+      else if(have_option(trim(density_option_path) // &
                           "/prognostic/spatial_discretisation/continuous_galerkin/&
                           &stabilisation/streamline_upwind_petrov_galerkin")) then
         ewrite(2, *) "SUPG stabilisation"
         stabilisation_scheme = STABILISATION_SUPG
-        call get_upwind_options(trim(density%option_path) // & 
+        call get_upwind_options(trim(density_option_path) // & 
                                 "/prognostic/spatial_discretisation/continuous_galerkin/&
                                 &stabilisation/streamline_upwind_petrov_galerkin", &
                                 & nu_bar_scheme, nu_bar_scale)
@@ -527,8 +562,8 @@ module divergence_matrix_cg
         stabilisation_scheme = STABILISATION_NONE
       end if
 
-      call get_option(trim(complete_field_path(density%option_path, stat=stat))//&
-                         &"/temporal_discretisation/theta", theta)
+      call get_option(trim(complete_field_path(density_option_path, stat=stat))//&
+                     &"/temporal_discretisation/theta", theta)
       call get_option("/timestepping/timestep", dt)
       
       test_mesh => pressure%mesh
@@ -629,7 +664,7 @@ module divergence_matrix_cg
                ! If the field and nvfrac meshes are different, then we need to
                ! compute the derivatives of the nvfrac shape functions.
                if(.not.(nvfrac%mesh == field%mesh)) then
-                  nvfrac_shape => ele_shape(nvfrac%mesh, ele)
+                  nvfrac_shape => ele_shape(nvfrac, ele)
                   call transform_to_physical(coordinate, ele, nvfrac_shape, dshape=dnvfrac_t)
                else
                   dnvfrac_t = dfield_t

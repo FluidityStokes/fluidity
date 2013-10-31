@@ -1222,6 +1222,20 @@ start =
                         prescribed_scalar_field
                      }
                   }?,
+                  ## VLES Filter function (diagnostic).
+                  ## Run a VLES by switching this option on.
+                  ## If so then filtering is applied to the eddy viscosity.
+                  element scalar_field {
+                     attribute rank { "0" },
+                     attribute name { "VLESFilter" },
+                     (
+                        element diagnostic {
+                           internal_algorithm,
+                           velocity_mesh_choice,
+                           diagnostic_scalar_field
+                        }
+                     )
+                  }?,
                   ## Eddy-viscosity coefficient: nu_T = density * C_mu * k**2 / epsilon.
                   ## Recommended value (default): 0.09.
                   element C_mu {real},
@@ -1273,7 +1287,7 @@ start =
                         |
                         element use_consistent_mass_matrix { 
                            element solver {
-                              linear_solver_options_asym
+                              linear_solver_options_asym_scalar
                            }
                         }                     
                      )
@@ -2027,6 +2041,10 @@ prognostic_density_field =
                   ## Lump the mass matrix
                   element lump_mass_matrix {
                      empty
+                  }?,
+                  ## Exclude the mass terms from the continuity equation
+                  element exclude_mass_terms {
+                     empty
                   }?
                },
                comment
@@ -2035,6 +2053,13 @@ prognostic_density_field =
             discontinuous_galerkin_options|
             ## Use a control volume discretisation.
             element control_volumes {
+              ## Discretisation options for the mass terms.
+              element mass_terms {
+                 ## Exclude the mass terms from the continuity equation
+                 element exclude_mass_terms {
+                    empty
+                 }?
+              }?,
               spatial_control_volume_options
             }
          ),
@@ -2044,7 +2069,15 @@ prognostic_density_field =
          ##  0. < TBETA < 1.
          element conservative_advection {
            real
-         }
+         },
+         ## Rather than assmeble the continuity equation using
+         ## the main density field, instead extract the CompressibleReferenceDensity
+         ## field and assemble it using that.
+         ##
+         ## Note that this normally only makes sense with exclude_mass_terms switched on!
+         element use_reference_density {
+           empty
+         }?
       },
       element temporal_discretisation {
          ## Implicit/explicit control (TTHETA)
@@ -2059,7 +2092,7 @@ prognostic_density_field =
       (
          ## Solver
          element solver {
-            linear_solver_options_asym
+            linear_solver_options_asym_scalar
          }|
          ## Assume this field is being solved explicitly and skip the solver.
          ##
@@ -2425,16 +2458,10 @@ diagnostic_vector_field_bed_shear_stress =
             element drag_coefficient {
                real
             }|
-            ## velocity_gradient - nu * grad(u)
+            ## nu * (grad(u) + grad(u).T)
             ## This uses the velocity gradient at the boundaries to calculate the 
-            ## bed shear stress. Valid for non parameterised velocity boundaries
-            element velocity_gradient {  
-               empty
-            }|
-            ## This diagnostic can only be used in conjunction with a near-wall treatment
-            ## velocity boundary condition. It is calculated at the same time as that boundary condition.
-            ## The shear stress depends upon parameters set for the near-wall treatment algorithm.
-            element wall_treatment {  
+            ## bed shear stress. Valid for non parameterised velocity boundaries.
+            element velocity_gradient {    
                empty
             }
          }
@@ -2821,26 +2848,12 @@ velocity_boundary_conditions =
             attribute name { "no_normal_flow" },
             empty
          }|
-
-         ## Implements a penalty function for the near wall region.
-         ## Using this option coarse meshes can
-         ## be used in the near wall region.
-         ##
-         ## Should be used in combination with a no_normal_flow condition. 
-         ##
-         ## See Bazilevs et al. 2007
-         element type{
-            attribute name { "near_wall_treatment" },
-            element tolerance {real},
-            ## if not set then Cb=2*h, where h is the element size
-            element Cb {real}?
-         }|
-         ## Log law of the wall
-         ##
-         ## Should be used in combination with a no_normal_flow condition. 
-         element type{
-            attribute name { "log_law_of_wall" },
-            element surface_roughness {real}
+         ## Implements a prescribed normal flow. Works for DG only. This
+         ## implements a weakly imposed bounadry condition normal to the surface.
+         ## Note: Positive points out of the domain, negative into the domain.
+         element type {
+            attribute name { "prescribed_normal_flow" },
+               input_choice_real_bc_component
          }|
          ## Flux boundary condition. 
          ##
@@ -3334,7 +3347,7 @@ scalar_field_choice =
             ## Field type
             (
                element prognostic {
-                  velocity_mesh_choice,
+                  velocity_mesh_choice,   
                   prognostic_scalar_field
                }|
                element prescribed {
@@ -3435,12 +3448,15 @@ scalar_field_choice =
             attribute rank { "0" },
             attribute name { "FreeSurface" },
             (
-               ## Free Surface
-               ## NOTE: the diagnostic FreeSurface field only works in combination
-               ## with the free_surface boundary condition applied to the Velocity
+               ## Free Surface elevation, to be used in combination with:
+               ##
+               ## * a free_surface boundary condition applied to the Velocity
                ## field, without the no_normal_stress_option.
                ## It gives you a full dimensional field (constant over the vertical)
                ## of the free surface elevation.
+               ##
+               ## * equation type ShallowWater for Velocity. It simply divides 
+               ## Pressure by g, the gravitational constant.
                element diagnostic {
                   internal_algorithm,
                   ## Must be on the same mesh as Pressure
@@ -4000,6 +4016,110 @@ scalar_field_choice =
                element prescribed {
                   velocity_mesh_choice,
                   prescribed_scalar_field
+               }|
+               element aliased {
+                  generic_aliased_field
+               }
+            )
+         }|
+         ## This field gives the reference density for the 
+         ## linearised_mantle compressible equation of state.
+         ## It is also used in the continuity equation if
+         ## use_reference_density is selected underneath a 
+         ## prognostic (compressible) density.
+         element scalar_field {
+            attribute rank { "0" },
+            attribute name { "CompressibleReferenceDensity" },
+            (
+               element prescribed {
+                  pressure_mesh_choice,
+                  prescribed_scalar_field
+               }|
+               element diagnostic {
+                  scalar_python_diagnostic_algorithm,
+                  pressure_mesh_choice,
+                  diagnostic_scalar_field
+               }|
+               element aliased {
+                  generic_aliased_field
+               }
+            )
+         }|
+         ## This field gives the reference Temperature for the 
+         ## MantleAnelasticEnergy equation.
+         element scalar_field {
+            attribute rank { "0" },
+            attribute name { "CompressibleReferenceTemperature" },
+            (
+               element prescribed {
+                  pressure_mesh_choice,
+                  prescribed_scalar_field
+               }|
+               element diagnostic {
+                  scalar_python_diagnostic_algorithm,
+                  pressure_mesh_choice,
+                  diagnostic_scalar_field
+               }|
+               element aliased {
+                  generic_aliased_field
+               }
+            )
+         }|
+         ## This field gives the isothermal bulk modulus (note this
+         ## is the inverse of the isothermal compressibility) for the 
+         ## linearised_mantle compressible equation of state.
+         element scalar_field {
+            attribute rank { "0" },
+            attribute name { "IsothermalBulkModulus" },
+            (
+               element prescribed {
+                  pressure_mesh_choice,
+                  prescribed_scalar_field
+               }|
+               element diagnostic {
+                  scalar_python_diagnostic_algorithm,
+                  pressure_mesh_choice,
+                  diagnostic_scalar_field
+               }|
+               element aliased {
+                  generic_aliased_field
+               }
+            )
+         }|
+         ## This field gives the isobaric thermal expansivitity for the 
+         ## linearised_mantle compressible equation of state.
+         element scalar_field {
+            attribute rank { "0" },
+            attribute name { "IsobaricThermalExpansivity" },
+            (
+               element prescribed {
+                  pressure_mesh_choice,
+                  prescribed_scalar_field
+               }|
+               element diagnostic {
+                  scalar_python_diagnostic_algorithm,
+                  pressure_mesh_choice,
+                  diagnostic_scalar_field
+               }|
+               element aliased {
+                  generic_aliased_field
+               }
+            )
+         }|
+         ## This field gives the isobaric specific heat capacity for the 
+         ## MantleAnelasticEnergy equation.
+         element scalar_field {
+            attribute rank { "0" },
+            attribute name { "IsobaricSpecificHeatCapacity" },
+            (
+               element prescribed {
+                  pressure_mesh_choice,
+                  prescribed_scalar_field
+               }|
+               element diagnostic {
+                  scalar_python_diagnostic_algorithm,
+                  pressure_mesh_choice,
+                  diagnostic_scalar_field
                }|
                element aliased {
                   generic_aliased_field
@@ -4568,6 +4688,22 @@ scalar_field_choice =
                element diagnostic {
                   internal_algorithm,
                   velocity_mesh_choice,
+                  diagnostic_scalar_field
+               }|
+               element aliased {
+                  generic_aliased_field
+               }
+            )
+         }|
+         ## Calculates the density based on the compressible
+         ## EOS selected.
+         element scalar_field {
+            attribute rank { "0" },
+            attribute name { "CompressibleEOSDensity" },
+            (
+               element diagnostic {
+                  internal_algorithm,
+                  coordinate_mesh_choice,
                   diagnostic_scalar_field
                }|
                element aliased {
@@ -5560,9 +5696,8 @@ vector_field_choice =
             )
          }|
          
-         ## Bed Shear Stress = density*drag_coeff*|u|*u
-         ##
-         ## at the moment this assumes the density and drag coefficients are constants.
+         ## Bed Shear Stress
+         ## 
          ## This diagnostic vector field is only calculated over surface elements/nodes, 
          ## interior nodes will have zero value.
          element vector_field {
@@ -5573,6 +5708,10 @@ vector_field_choice =
                    internal_algorithm,
                    velocity_mesh_choice,
                    diagnostic_vector_field_bed_shear_stress
+                }|
+                element prescribed {
+                   velocity_mesh_choice,
+                   prescribed_vector_field_no_adapt
                 }|
                 element aliased {
                    generic_aliased_field
@@ -5740,6 +5879,11 @@ tensor_field_choice =
                element prescribed {
                   mesh_choice,
                   prescribed_tensor_field
+               }|
+               element diagnostic {
+                  mesh_choice,
+                  tensor_python_diagnostic_algorithm,
+                  diagnostic_tensor_field
                }|
                element aliased {
                   generic_aliased_field
@@ -6699,7 +6843,64 @@ forcing =
         element tidal_forcing {
                ## M2
                element M2 {
-                 empty
+                 ## Ancient frequencies:
+                 ##
+                 ## Ma     Frequency
+                 ##
+                 ## 0        1.405e-4
+                 ##
+                 ## 10      1.408e-4
+                 ##
+                 ## 50      1.416e-4
+                 ##
+                 ## 100    1.423e-4
+                 ##
+                 ## 200    1.428e-4
+                 ##
+                 ## 300    1.431e-4
+                 ##
+                 ## 350    1.434e-4
+                 ##
+                 ## 400    1.436e-4
+                 ##
+                 ## 450    1.441e-4
+                 ##
+                 ## 500    1.451e-4
+                 ##
+                 ## 570    1.469e-4
+                 ##
+                 ## From Poliakow,2005
+                 element frequency {
+                    real
+                  }?,
+                 ## Ma     Amplitude
+                 ##
+                 ## 0        0.2423
+                 ##
+                 ## 10      0.2428
+                 ##
+                 ## 50      0.2446
+                 ##
+                 ## 100    0.2460
+                 ##
+                 ## 200    0.2471
+                 ##
+                 ## 300    0.2477
+                 ##
+                 ## 350    0.2485
+                 ##
+                 ## 400    0.2489
+                 ##
+                 ## 450    0.2499
+                 ##
+                 ## 500    0.2521
+                 ##
+                 ## 570    0.2560
+                 ##
+                 ## From Poliakow,2005
+                 element amplitude {
+                    real
+                 }?
                }?,
                ## S2
                element S2 {
@@ -6746,11 +6947,24 @@ forcing =
                   empty
                }?,
                ## Sets a user defined Love number. If not active a value of 1.0 is used.
+               ## Recommended value is 0.693
                element love_number {
                   element value {
                      real
                   }
-               }?
+               }?,
+               ## Self attraction and loading term (SAL). This is a simple implementation
+               ## that uses a constant beta value
+               element sal {
+                element beta {
+                    real
+                }
+              }?,
+              ## Add the CHI term to the harmonics. You probably only want to do this is you're simulating a specific time
+              element chi {
+                empty
+              }?
+
         }?
     }
   )
@@ -6854,7 +7068,7 @@ prognostic_photosynthetic_radiation =
       (
          ## Solver
          element solver {
-            linear_solver_options_asym
+            linear_solver_options_asym_scalar
          }
       ),
       # Alas, no initial_condition either, so we'd better not checkpoint it...

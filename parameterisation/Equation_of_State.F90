@@ -291,10 +291,10 @@ contains
     
   end subroutine mcD_J_W_F2002
   
-  subroutine compressible_eos(state, density, pressure, drhodp)
+  subroutine compressible_eos(state, density, pressure, drhodp, buoyancy_density)
 
-    type(state_type), intent(inout) :: state
-    type(scalar_field), intent(inout), optional :: density, pressure, drhodp
+    type(state_type), intent(in) :: state
+    type(scalar_field), intent(inout), optional :: density, pressure, drhodp, buoyancy_density
 
     character(len=OPTION_PATH_LEN) :: eos_path
     type(scalar_field) :: drhodp_local
@@ -310,9 +310,11 @@ contains
         assert(drhodp%mesh==pressure%mesh)
       end if
     else if (present(density)) then
-      call allocate(drhodp_local, density%mesh, 'Localdrhop')
+      call allocate(drhodp_local, density%mesh, 'Localdrhodp')
     else if (present(pressure)) then
-      call allocate(drhodp_local, pressure%mesh, 'Localdrhop')
+      call allocate(drhodp_local, pressure%mesh, 'Localdrhodp')
+    else if (present(buoyancy_density)) then
+      call allocate(drhodp_local, buoyancy_density%mesh, 'Localdrhodp')
     else
       FLAbort("No point in being in here if you don't want anything out.")
     end if
@@ -329,8 +331,8 @@ contains
         
         ! standard stiffened gas eos
         
-        call compressible_eos_stiffened_gas(state, eos_path, drhodp_local, &
-            density=density, pressure=pressure)
+        call compressible_eos_stiffened_gas(state, drhodp_local, &
+            density=density, pressure=pressure, buoyancy_density=buoyancy_density)
       
       else if(have_option(trim(eos_path)//'/compressible/giraldo')) then
         
@@ -338,16 +340,21 @@ contains
         ! Giraldo et. al., J. Comp. Phys., vol. 227 (2008), 3849-3877. 
         ! density= P_0/(R*T)*(P/P_0)^((R+c_v)/c_p)
         
-        call compressible_eos_giraldo(state, eos_path, drhodp_local, &
-            density=density, pressure=pressure)
+        call compressible_eos_giraldo(state, drhodp_local, &
+            density=density, pressure=pressure, buoyancy_density=buoyancy_density)
 
 
       elseif(have_option(trim(eos_path)//'/compressible/foam')) then
         
         ! eos used in foam modelling
         
-        call compressible_eos_foam(state, eos_path, drhodp_local, &
-            density=density, pressure=pressure)
+        call compressible_eos_foam(state, drhodp_local, &
+            density=density, pressure=pressure, buoyancy_density=buoyancy_density)
+
+      elseif(have_option(trim(eos_path)//'/compressible/linearised_mantle')) then
+
+        call compressible_eos_linearised_mantle(state, drhodp_local, &
+            density=density, pressure=pressure, buoyancy_density=buoyancy_density)
 
       end if
       
@@ -374,13 +381,12 @@ contains
 
   end subroutine compressible_eos
     
-  subroutine compressible_eos_stiffened_gas(state, eos_path, drhodp, &
-    density, pressure)
+  subroutine compressible_eos_stiffened_gas(state, drhodp, &
+    density, pressure, buoyancy_density)
     ! Standard stiffened gas equation
-    type(state_type), intent(inout) :: state
-    character(len=*), intent(in):: eos_path
+    type(state_type), intent(in) :: state
     type(scalar_field), intent(inout) :: drhodp
-    type(scalar_field), intent(inout), optional :: density, pressure
+    type(scalar_field), intent(inout), optional :: density, pressure, buoyancy_density
     
     !locals
     integer :: stat, gstat, cstat
@@ -388,18 +394,18 @@ contains
     real :: reference_density, ratio_specific_heats
     real :: bulk_sound_speed_squared, atmospheric_pressure
     type(scalar_field) :: energy_remap, pressure_remap, density_remap
-    logical :: incompressible
+    logical :: incompressible, implicit_pressure_buoyancy
     
-    call get_option(trim(eos_path)//'/compressible/stiffened_gas/reference_density', &
+    call get_option(trim(state%option_path)//'/equation_of_state/compressible/stiffened_gas/reference_density', &
                         reference_density, default=0.0)
         
-    call get_option(trim(eos_path)//'/compressible/stiffened_gas/ratio_specific_heats', &
+    call get_option(trim(state%option_path)//'/equation_of_state/compressible/stiffened_gas/ratio_specific_heats', &
                     ratio_specific_heats, stat=gstat)
     if(gstat/=0) then
       ratio_specific_heats=1.0
     end if
     
-    call get_option(trim(eos_path)//'/compressible/stiffened_gas/bulk_sound_speed_squared', &
+    call get_option(trim(state%option_path)//'/equation_of_state/compressible/stiffened_gas/bulk_sound_speed_squared', &
                     bulk_sound_speed_squared, stat=cstat)
     if(cstat/=0) then
       bulk_sound_speed_squared=0.0
@@ -409,7 +415,7 @@ contains
     if(incompressible) then
       ewrite(0,*) "Selected compressible eos but not specified a bulk_sound_speed_squared or a ratio_specific_heats."
     end if
-    
+
     call zero(drhodp)
     
     if(.not.incompressible) then
@@ -427,17 +433,17 @@ contains
       call invert(drhodp)
     end if
 
-    if(present(density)) then
+    if(present(density).or.present(buoyancy_density)) then
       ! calculate the density
       ! density may equal density in state depending on how this
       ! subroutine is called
       if(incompressible) then
         ! density = reference_density
-        call set(density, reference_density)
+        if(present(density)) call set(density, reference_density)
+        if(present(buoyancy_density)) call set(buoyancy_density, reference_density)
       else
         pressure_local=>extract_scalar_field(state,'Pressure',stat=stat)
         if (stat==0) then
-          assert(density%mesh==drhodp%mesh)
         
           ! density = drhodp*(pressure_local + atmospheric_pressure
           !                  + bulk_sound_speed_squared*reference_density)
@@ -446,11 +452,28 @@ contains
           
           call allocate(pressure_remap, drhodp%mesh, "RemappedPressure")
           call remap_field(pressure_local, pressure_remap)
-          
-          call set(density, reference_density*bulk_sound_speed_squared + atmospheric_pressure)
-          call addto(density, pressure_remap)
-          call scale(density, drhodp)
-          
+        
+          if(present(density)) then  
+            assert(density%mesh==drhodp%mesh)
+            call set(density, reference_density*bulk_sound_speed_squared + atmospheric_pressure)
+            call addto(density, pressure_remap)
+            call scale(density, drhodp)
+          end if
+          if(present(buoyancy_density)) then
+            assert(buoyancy_density%mesh==drhodp%mesh)
+
+            implicit_pressure_buoyancy = have_option(trim(pressure_local%option_path)//'/prognostic'//&
+                                                          '/spatial_discretisation/compressible/implicit_pressure_buoyancy')
+            
+            if(implicit_pressure_buoyancy) then
+              call zero(buoyancy_density)
+            else
+              call set(buoyancy_density, reference_density*bulk_sound_speed_squared + atmospheric_pressure)
+              call addto(buoyancy_density, pressure_remap)
+              call scale(buoyancy_density, drhodp)
+            end if          
+          end if
+
           call deallocate(pressure_remap)
         else
           FLExit('No Pressure in material_phase::'//trim(state%name))
@@ -489,15 +512,14 @@ contains
 
   end subroutine compressible_eos_stiffened_gas
   
-  subroutine compressible_eos_giraldo(state, eos_path, drhodp, &
-    density, pressure)
+  subroutine compressible_eos_giraldo(state, drhodp, &
+    density, pressure, buoyancy_density)
     ! Eq. of state commonly used in atmospheric applications. See
     ! Giraldo et. al., J. Comp. Phys., vol. 227 (2008), 3849-3877. 
     ! density= P_0/(R*T)*(P/P_0)^((R+c_v)/c_p)
-    type(state_type), intent(inout) :: state
-    character(len=*), intent(in):: eos_path
+    type(state_type), intent(in) :: state
     type(scalar_field), intent(inout) :: drhodp
-    type(scalar_field), intent(inout), optional :: density, pressure
+    type(scalar_field), intent(inout), optional :: density, pressure, buoyancy_density
       
     ! locals
     integer :: stat, gstat, cstat, pstat, tstat
@@ -506,19 +528,19 @@ contains
     real :: drhodp_node, power
     real :: R
     type(scalar_field) :: pressure_remap, density_remap, temperature_remap
-    logical :: incompressible
+    logical :: incompressible, implicit_pressure_buoyancy
     integer :: node
     
-    call get_option(trim(eos_path)//'/compressible/giraldo/reference_pressure', &
+    call get_option(trim(state%option_path)//'/equation_of_state/compressible/giraldo/reference_pressure', &
                     p_0, default=1.0e5)
     
-    call get_option(trim(eos_path)//'/compressible/giraldo/C_P', &
+    call get_option(trim(state%option_path)//'/equation_of_state/compressible/giraldo/C_P', &
                     c_p, stat=gstat)
     if(gstat/=0) then
       c_p=1.0
     end if
     
-    call get_option(trim(eos_path)//'/compressible/giraldo/C_V', &
+    call get_option(trim(state%option_path)//'/equation_of_state/compressible/giraldo/C_V', &
                     c_v, stat=cstat)
     if(cstat/=0) then
       c_v=1.0
@@ -555,18 +577,36 @@ contains
       endif
     end if
 
-    if(present(density)) then
+    if(present(density).or.present(buoyancy_density)) then
       ! calculate the density
       ! density may equal density in state depending on how this
       ! subroutine is called
       if(incompressible) then
         ! density = reference_density
-        call set(density, reference_density)
+        if(present(density)) call set(density, reference_density)
+        if(present(buoyancy_density)) call set(density, reference_density)
       else
-        assert(density%mesh==drhodp%mesh)
-        call set(density, pressure_remap)
-        call scale(density, drhodp)
-        call scale(density, 1.0/(1.0+power))
+
+        if(present(density)) then
+          assert(density%mesh==drhodp%mesh)
+          call set(density, pressure_remap)
+          call scale(density, drhodp)
+          call scale(density, 1.0/(1.0+power))
+        end if
+        if(present(buoyancy_density)) then
+          assert(buoyancy_density%mesh==drhodp%mesh)
+          implicit_pressure_buoyancy = have_option(trim(pressure_local%option_path)//'/prognostic'//&
+                                                        '/spatial_discretisation/compressible/implicit_pressure_buoyancy')
+          
+          if(implicit_pressure_buoyancy) then
+            FLAbort("implicit_pressure_buoyancy broken with giraldo eos")
+            call zero(buoyancy_density)
+          else
+            call set(buoyancy_density, pressure_remap)
+            call scale(buoyancy_density, drhodp)
+            call scale(buoyancy_density, 1.0/(1.0+power))
+          end if
+        end if
           
         call deallocate(pressure_remap)
       end if
@@ -602,21 +642,21 @@ contains
 
   end subroutine compressible_eos_giraldo
 
-  subroutine compressible_eos_foam(state, eos_path, drhodp, &
-    density, pressure)
+  subroutine compressible_eos_foam(state, drhodp, &
+    density, pressure, buoyancy_density)
     ! Foam EoS Used with compressible simulations of liquid drainage in foams.
     ! It describes the liquid content in the foam as the product of the  Plateau 
     ! border cross sectional area and the local Plateau  border length per unit volume (lambda).
-    type(state_type), intent(inout) :: state
-    character(len=*), intent(in):: eos_path
+    type(state_type), intent(in) :: state
     type(scalar_field), intent(inout) :: drhodp
-    type(scalar_field), intent(inout), optional :: density, pressure
+    type(scalar_field), intent(inout), optional :: density, pressure, buoyancy_density
 
     ! locals
     integer :: pstat, dstat
     type(scalar_field), pointer :: pressure_local, density_local, drainagelambda_local
     real :: atmospheric_pressure
     type(scalar_field) :: pressure_remap, density_remap, drainagelambda_remap
+    logical :: implicit_pressure_buoyancy
 
     call zero(drhodp)
 
@@ -631,9 +671,8 @@ contains
 
     call deallocate(drainagelambda_remap)
 
-    if(present(density)) then
+    if(present(density).or.present(buoyancy_density)) then
       if (pstat==0) then
-        assert(density%mesh==drhodp%mesh)
 
         call get_option(trim(pressure_local%option_path)//'/prognostic/atmospheric_pressure', &
                         atmospheric_pressure, default=0.0)
@@ -641,9 +680,26 @@ contains
         call allocate(pressure_remap, drhodp%mesh, "RemappedPressure")
         call remap_field(pressure_local, pressure_remap)
 
-        call set(density, atmospheric_pressure)
-        call addto(density, pressure_remap)
-        call scale(density, drhodp)
+        if(present(density)) then
+          assert(density%mesh==drhodp%mesh)
+          call set(density, atmospheric_pressure)
+          call addto(density, pressure_remap)
+          call scale(density, drhodp)
+        end if
+        if(present(buoyancy_density)) then
+          assert(buoyancy_density%mesh==drhodp%mesh)
+          implicit_pressure_buoyancy = have_option(trim(pressure_local%option_path)//'/prognostic'//&
+                                                        '/spatial_discretisation/compressible/implicit_pressure_buoyancy')
+          
+          if(implicit_pressure_buoyancy) then
+            FLAbort("implicit_pressure_buoyancy may be broken with foam eos")
+            call zero(buoyancy_density)
+          else
+            call set(buoyancy_density, atmospheric_pressure)
+            call addto(buoyancy_density, pressure_remap)
+            call scale(buoyancy_density, drhodp)
+          end if
+        end if
 
         call deallocate(pressure_remap)
       else
@@ -674,6 +730,143 @@ contains
         
   end subroutine compressible_eos_foam
         
+  subroutine compressible_eos_linearised_mantle(state, drhodp, &
+    density, pressure, buoyancy_density)
+    ! Linearised mantle equation of state
+    type(state_type), intent(in) :: state
+    type(scalar_field), intent(inout) :: drhodp
+    type(scalar_field), intent(inout), optional :: density, pressure, buoyancy_density
+    
+    !locals
+    integer :: stat
+    type(scalar_field), pointer :: pressure_local, temperature_local, density_local, &
+                                   referencedensity_local, bulkmodulus_local, thermalexpansion_local
+    type(scalar_field) :: pressure_remap, density_remap, referencedensity_remap, &
+                          compressibility, dpdrho, thermalexpansion_remap, &
+                          temperatureproduct
+    logical :: implicit_pressure_buoyancy, exclude_pressure_buoyancy
+    character(len=OPTION_PATH_LEN) :: linearised_mantle_eos_path
+    
+    call zero(drhodp)
+
+    linearised_mantle_eos_path = "/equation_of_state/compressible/linearised_mantle/"
+    exclude_pressure_buoyancy = have_option(trim(state%option_path)//&
+         trim(linearised_mantle_eos_path)//"/exclude_pressure_buoyancy")
+    
+    ! Extract relevant parameters from state and remap to drhodp mesh so that all
+    ! parameters are on same mesh:    
+    referencedensity_local=>extract_scalar_field(state, 'CompressibleReferenceDensity')
+    call allocate(referencedensity_remap, drhodp%mesh, 'RemappedCompressibleReferenceDensity')
+    call remap_field(referencedensity_local, referencedensity_remap)
+    call set(drhodp, referencedensity_remap)
+    
+    if(.not.(exclude_pressure_buoyancy)) then
+       bulkmodulus_local=>extract_scalar_field(state,'IsothermalBulkModulus')
+       call allocate(compressibility, drhodp%mesh, 'RemappedIsothermalBulkModulus')
+       call remap_field(bulkmodulus_local, compressibility)
+       ! Compressibility = 1. / bulkmodulus, therefore invert bulk_modulus here:
+       call invert(compressibility)      
+       call scale(drhodp, compressibility)
+       call deallocate(compressibility)
+    end if
+    
+    if(present(density).or.present(buoyancy_density).or.present(pressure)) then
+       
+       thermalexpansion_local=>extract_scalar_field(state,'IsobaricThermalExpansivity')
+       call allocate(thermalexpansion_remap, drhodp%mesh, 'RemappedIsobaricThermalExpansivity')
+       call remap_field(thermalexpansion_local, thermalexpansion_remap)
+       
+       temperature_local => extract_scalar_field(state, "Temperature")
+       call allocate(temperatureproduct, drhodp%mesh, "TemperatureProduct")
+       call remap_field(temperature_local, temperatureproduct)
+       call scale(temperatureproduct, thermalexpansion_remap)
+       call scale(temperatureproduct, referencedensity_remap)
+       
+       if(present(density).or.present(buoyancy_density)) then
+          ! Calculate the density field:          
+          if(exclude_pressure_buoyancy) then ! TALA Cases
+             ! density = reference_density + (referencedensity*thermalexpansion*temperature)
+             if(present(density)) then
+                assert(density%mesh==drhodp%mesh)
+                call set(density, drhodp)
+                call addto(density, temperatureproduct, -1.0)
+             end if
+             
+             if(present(buoyancy_density)) then
+                assert(buoyancy_density%mesh==drhodp%mesh)
+                call zero(buoyancy_density)
+                call addto(buoyancy_density, temperatureproduct, -1.0)
+             end if
+             
+          else ! ALA Cases
+             ! density = reference_density + (referencedensity*compressibility*pressure)
+             !         + (referencedensity*thermalexpansion*temperature)
+             pressure_local=>extract_scalar_field(state,'Pressure',stat=stat)
+             if (stat==0) then
+                call allocate(pressure_remap, drhodp%mesh, "RemappedPressure")
+                call remap_field(pressure_local, pressure_remap)
+                if(present(density)) then
+                   assert(density%mesh==drhodp%mesh)
+                   call set(density, drhodp)
+                   call scale(density, pressure_remap)
+                   call addto(density, temperatureproduct, -1.0)
+                   call addto(density, referencedensity_remap)
+                end if
+                
+                if(present(buoyancy_density)) then
+                   assert(buoyancy_density%mesh==drhodp%mesh)
+                   implicit_pressure_buoyancy = have_option(trim(pressure_local%option_path)//'/prognostic'//&
+                        '/spatial_discretisation/compressible/implicit_pressure_buoyancy')
+                   if(implicit_pressure_buoyancy) then
+                      call zero(buoyancy_density)
+                   else 
+                      call set(buoyancy_density, drhodp)
+                      call scale(buoyancy_density, pressure_remap)
+                   end if
+                   call addto(buoyancy_density, temperatureproduct, -1.0)
+                end if
+                call deallocate(pressure_remap)
+             else
+                FLExit('No Pressure in material_phase::'//trim(state%name))
+             end if
+             
+          end if
+          
+       end if
+       
+       if(present(pressure)) then
+          ! Calculate the pressure using the eos and the calculated (probably prognostic) density:
+          density_local=>extract_scalar_field(state,'Density',stat=stat)
+          if (stat==0) then
+             assert(pressure%mesh==drhodp%mesh)
+             ! pressure = density - referencedensity - temperature*thermalexpansion*referencedensity/drhodp
+             call allocate(density_remap, drhodp%mesh, "RemappedDensity")
+             call remap_field(density_local, density_remap)
+             
+             call set(pressure, density_remap)
+             call addto(pressure, referencedensity_remap, -1.0)
+             call addto(pressure, temperatureproduct)
+             
+             call allocate(dpdrho, drhodp%mesh, "dpdrho")
+             call invert(drhodp, dpdrho)
+             call scale(pressure, dpdrho) 
+             
+             call deallocate(dpdrho)
+             call deallocate(density_remap)
+          else
+             FLExit('No Density in material_phase::'//trim(state%name))
+          end if
+       end if
+
+       call deallocate(thermalexpansion_remap)
+       call deallocate(temperatureproduct)
+
+    end if
+
+    call deallocate(referencedensity_remap)
+
+  end subroutine compressible_eos_linearised_mantle
+
   subroutine compressible_material_eos(state,materialdensity,&
                                     materialpressure,materialdrhodp)
 

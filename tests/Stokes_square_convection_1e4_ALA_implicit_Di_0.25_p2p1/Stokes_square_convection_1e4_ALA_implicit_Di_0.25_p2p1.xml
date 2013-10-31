@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE testproblem SYSTEM "regressiontest.dtd">
+<testproblem>
+  <name>Stokes-square-convection-1e4-ALA-implicit-Di-0.25-p2p1</name>
+  <owner userid="rhodrid"/>
+
+  <tags>flml</tags>
+
+  <problem_definition length="medium" nprocs="1">
+    <command_line>fluidity -v2 -l Stokes-square-convection-1e4-ALA-implicit-Di-0.25-p2p1.flml</command_line>
+  </problem_definition>
+
+<variables>  
+
+<variable name="T_int" language="python">
+from fluidity_tools import stat_parser as stat
+T_int = stat("stokes-1e4-p2p1-ALA-implicit-Di-0.25.stat")["Fluid"]["Temperature"]["integral"][-1]
+</variable>
+
+<variable name="T_ref_int" language="python">
+from fluidity_tools import stat_parser as stat
+T_ref_int = stat("stokes-1e4-p2p1-ALA-implicit-Di-0.25.stat")["Fluid"]["CompressibleReferenceTemperature"]["integral"][-1]
+</variable>
+
+<variable name="nu_top" language="python">
+from fluidity_tools import stat_parser as stat
+nu_top = abs(stat("stokes-1e4-p2p1-ALA-implicit-Di-0.25.stat")["Fluid"]["FullTemperature"]["surface_integral%TopH"][-1])
+</variable>
+
+<variable name="rms_vel" language="python">
+from fluidity_tools import stat_parser as stat
+rms_vel= stat("stokes-1e4-p2p1-ALA-implicit-Di-0.25.stat")["Fluid"]["Velocity%magnitude"]["l2norm"][-1]
+</variable>
+
+<variable name="adiabatic_absorption" language="python">
+from fluidity_tools import stat_parser as stat
+adiabatic_absorption= stat("stokes-1e4-p2p1-ALA-implicit-Di-0.25.stat")["Fluid"]["Adiabatic_Absorption"]["integral"][-1]
+</variable>
+
+<variable name="viscous_dissipation" language="python">
+from fluidity_tools import stat_parser as stat
+viscous_dissipation= stat("stokes-1e4-p2p1-ALA-implicit-Di-0.25.stat")["Fluid"]["TemperatureSource"]["integral"][-1]
+</variable>
+
+</variables>
+
+<pass_tests>
+
+<test name="Temperature integral Validity:" language="python">
+Full_T_int = T_int + T_ref_int
+assert(abs(Full_T_int-0.515) &lt; 0.001)
+</test>
+
+<test name="Surface Nusselt Number Validity:" language="python">
+assert(abs(nu_top-4.41) &lt; 0.02)
+</test>
+
+<test name="RMS Velocity Validity:" language="python">
+assert(abs(rms_vel-40.0) &lt; 0.05)
+</test>
+
+<test name="Adiabatic_Absorption Validity:" language="python">
+assert(abs(adiabatic_absorption-0.85) &lt; 0.005)
+</test>
+
+<test name="Viscous_Dissipation Validity:" language="python">
+assert(abs(viscous_dissipation-0.85) &lt; 0.005)
+</test>
+
+</pass_tests>                                                                                                                                                                                                
+
+<warn_tests>
+</warn_tests>
+
+</testproblem>
+
+
+
+
+
