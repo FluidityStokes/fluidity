@@ -1150,6 +1150,20 @@ take the value g.</a:documentation>
       </optional>
     </element>
   </define>
+  <define name="angular_momentum_3d">
+    <element name="algorithm">
+      <a:documentation>Compute the angular momentum in 3D.</a:documentation>
+      <attribute name="name">
+        <value>angular_momentum_3d</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single</value>
+      </attribute>
+      <attribute name="depends">
+        <value>Velocity</value>
+      </attribute>
+    </element>
+  </define>
   <define name="bulk_viscosity_algorithm">
     <element name="algorithm">
       <a:documentation>The average (or bulk) viscosity formed from the MaterialViscosity for
@@ -2125,6 +2139,9 @@ This field needs to be interpolated between adapts.</a:documentation>
   </define>
   <define name="vector_diagnostic_algorithms" combine="choice">
     <ref name="geostrophic_velocity_algorithm"/>
+  </define>
+  <define name="vector_diagnostic_algorithms" combine="choice">
+    <ref name="angular_momentum_3d"/>
   </define>
   <define name="vector_diagnostic_algorithms" combine="choice">
     <ref name="finite_element_divergence_transpose_algorithm"/>

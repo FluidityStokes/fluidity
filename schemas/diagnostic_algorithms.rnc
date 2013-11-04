@@ -856,6 +856,15 @@ geostrophic_velocity_algorithm =
          }?
       }
    )
+angular_momentum_3d =
+   (
+      ## Compute the angular momentum in 3D.
+      element algorithm {
+         attribute name { "angular_momentum_3d" },
+         attribute material_phase_support { "single" },
+         attribute depends { "Velocity" }
+      }
+   )
 bulk_viscosity_algorithm =
    (
        ## The average (or bulk) viscosity formed from the MaterialViscosity for
@@ -1522,6 +1531,7 @@ vector_diagnostic_algorithms |= helmholtz_smoothed_vector_algorithm
 vector_diagnostic_algorithms |= helmholtz_anisotropic_smoothed_vector_algorithm
 vector_diagnostic_algorithms |= grad_algorithm
 vector_diagnostic_algorithms |= geostrophic_velocity_algorithm
+vector_diagnostic_algorithms |= angular_momentum_3d
 vector_diagnostic_algorithms |= finite_element_divergence_transpose_algorithm
 vector_diagnostic_algorithms |= eigenvalues_symmetric_algorithm
 vector_diagnostic_algorithms |= curl_algorithm

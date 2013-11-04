@@ -39,7 +39,7 @@
       use momentum_dg
       use assemble_cmc
       use field_priority_lists
-      use momentum_diagnostic_fields, only: calculate_momentum_diagnostics, quantify_angular_momentum_2d
+      use momentum_diagnostic_fields, only: calculate_momentum_diagnostics
       use field_options
       use compressible_projection
       use boundary_conditions
