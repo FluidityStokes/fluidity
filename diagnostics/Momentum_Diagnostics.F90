@@ -44,7 +44,7 @@ module momentum_diagnostics
   use spud
   use state_fields_module
   use state_module
-  use Momentum_Diagnostic_Fields, only: quantify_rotational_velocity
+  use Momentum_Diagnostic_Fields, only: quantify_angular_momentum_2d
   use sediment, only : get_n_sediment_fields, get_sediment_item
   
   implicit none
@@ -55,7 +55,7 @@ module momentum_diagnostics
             calculate_buoyancy, calculate_coriolis, calculate_tensor_second_invariant, &
             calculate_imposed_material_velocity_source, calculate_imposed_material_velocity_absorption, &
             calculate_scalar_potential, calculate_projection_scalar_potential, &
-            calculate_geostrophic_velocity, calculate_rotational_velocity
+            calculate_geostrophic_velocity, calculate_angular_momentum_2d
 
 contains
 
@@ -481,16 +481,16 @@ contains
   
   end subroutine calculate_geostrophic_velocity
 
-  subroutine calculate_rotational_velocity(state, v_field)
+  subroutine calculate_angular_momentum_2d(state, s_field)
     type(state_type), intent(inout) :: state
-    type(vector_field), intent(inout) :: v_field
+    type(scalar_field), intent(inout) :: s_field
     
-    ewrite(1,*) 'In calculate_rotational_velocity diagnostic'         
+    ewrite(1,*) 'In calculate_angular_momentum_2d diagnostic'         
 
-    call quantify_rotational_velocity(state, v_field)
+    call quantify_angular_momentum_2d(state, s_field)
 
-    ewrite_minmax(v_field)
+    ewrite_minmax(s_field)
 
-  end subroutine calculate_rotational_velocity
+  end subroutine calculate_angular_momentum_2d
 
 end module momentum_diagnostics

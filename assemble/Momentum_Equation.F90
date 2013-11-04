@@ -39,7 +39,7 @@
       use momentum_dg
       use assemble_cmc
       use field_priority_lists
-      use momentum_diagnostic_fields, only: calculate_momentum_diagnostics, quantify_rotational_velocity
+      use momentum_diagnostic_fields, only: calculate_momentum_diagnostics, quantify_angular_momentum_2d
       use field_options
       use compressible_projection
       use boundary_conditions
@@ -272,7 +272,7 @@
          logical :: have_fp_drag
          ! Are we removing the mean rotational velocity?
          logical :: remove_rigid_rotation
-         type(vector_field) :: u_rot
+         type(scalar_field) :: u_rot
 
          ewrite(1,*) 'Entering solve_momentum'
 
@@ -1232,19 +1232,19 @@
 
             end if
 
-            ! Remove rigid rotation from velocity field, if desired:
-            remove_rigid_rotation = have_option(trim(u%option_path)//"/prognostic/remove_rigid_rotation")
-            if(remove_rigid_rotation) then
-               ! Allocate and calculate rotational velocity field:
-               call allocate(u_rot, u%dim, u%mesh, 'RotationalVelocity')
-               call quantify_rotational_velocity(state(istate), u_rot)
-               ewrite_minmax(u_rot)
-               ! Remove rotational velocity component from full velocity:
-               ewrite_minmax(u)
-               call addto(u, u_rot, scale=-1.)   
-               ewrite_minmax(u)
-               call deallocate(u_rot)
-            end if
+!            ! Remove rigid rotation from velocity field, if desired:
+!            remove_rigid_rotation = have_option(trim(u%option_path)//"/prognostic/remove_rigid_rotation")
+!            if(remove_rigid_rotation) then
+!               ! Allocate and calculate rotational velocity field:
+!               call allocate(u_rot, u%dim, u%mesh, 'RotationalVelocity')
+!               call quantify_angular_momentum_2d(state(istate), u_rot)
+!               ewrite_minmax(u_rot)
+!               ! Remove rotational velocity component from full velocity:
+!               ewrite_minmax(u)
+!               call addto(u, u_rot, scale=-1.)   
+!               ewrite_minmax(u)
+!               call deallocate(u_rot)
+!            end if
 
          end do finalisation_loop
          call profiler_toc("finalisation_loop")
