@@ -1256,9 +1256,8 @@
          deallocate(lump_mass)
          deallocate(sphere_absorption)
 
-         ewrite_minmax(u)
-
       end subroutine solve_momentum
+
 
       subroutine get_velocity_options(state, istate, u)
          !!< Gets some velocity options from the options tree
@@ -1329,6 +1328,7 @@
          reassemble_all_cmc_m = reassemble_all_cmc_m .or. shallow_water_projection
 
       end subroutine get_velocity_options
+
 
       subroutine get_pressure_options(p)
          !!< Gets some pressure options from the options tree
@@ -1452,7 +1452,8 @@
          if(full_schur) then
             if(assemble_schur_auxiliary_matrix) then
                call petsc_solve_full_projection(p_theta, ctp_m(prognostic_p_istate)%ptr, inner_m(prognostic_p_istate)%ptr, ct_m(prognostic_p_istate)%ptr, poisson_rhs, &
-                  full_projection_preconditioner, state(prognostic_p_istate), u%mesh, auxiliary_matrix=schur_auxiliary_matrix)
+                  full_projection_preconditioner, state(prognostic_p_istate), u%mesh, &
+                  auxiliary_matrix=schur_auxiliary_matrix)
             else
                call petsc_solve_full_projection(p_theta, ctp_m(prognostic_p_istate)%ptr, inner_m(prognostic_p_istate)%ptr, ct_m(prognostic_p_istate)%ptr, poisson_rhs, &
                   full_projection_preconditioner, state(prognostic_p_istate), u%mesh)
@@ -1934,7 +1935,7 @@
       subroutine remove_angular_momentum_from_velocity(state,u)
         ! Remove rotational component from velocity field:
         type(state_type), intent(inout) :: state
-        type(vector_field), intent(inout), pointer :: u
+        type(vector_field), pointer :: u
 
         type(vector_field) :: theta_hat_r, positions
         integer :: node, ele
@@ -1943,7 +1944,6 @@
 
         ! Extract positions from state:
         positions=get_nodal_coordinate_field(state,u%mesh)
-
         call allocate(theta_hat_r, u%dim, u%mesh, 'theta_hat_r')
 
         ! Calculate theta_hat_r:
@@ -1980,14 +1980,15 @@
 
       contains
 
-        subroutine quantify_scalar_constant_ele(ele, positions, velocity, ele_top, ele_bot)
+        subroutine quantify_scalar_constant_ele(ele, positions, u, ele_top, ele_bot)
 
           integer, intent(in) :: ele
-          type(vector_field), intent(in) :: positions, velocity
+          type(vector_field), intent(in) :: positions
+          type(vector_field), pointer :: u
           real, intent(inout) :: ele_top, ele_bot
           
-          real, dimension(velocity%dim, ele_ngi(velocity, ele)) :: u_quad, positions_quad
-          real, dimension(ele_ngi(velocity, ele)) :: detwei, omega_quad
+          real, dimension(u%dim, ele_ngi(u, ele)) :: u_quad, positions_quad
+          real, dimension(ele_ngi(u, ele)) :: detwei, omega_quad
           integer :: dim, gi
           
           ele_top = 0.
@@ -1996,17 +1997,17 @@
           call transform_to_physical(positions, ele, detwei = detwei)
           
           ! Derive quantities at Gauss integration points:
-          u_quad         = ele_val_at_quad(velocity, ele)
+          u_quad         = ele_val_at_quad(u, ele)
           positions_quad = ele_val_at_quad(positions, ele)
           ! Calculate omega at gauss points:
-          do gi = 1, ele_ngi(velocity, ele)
+          do gi = 1, ele_ngi(u, ele)
              omega_quad(gi) = -positions_quad(2,gi)*u_quad(1,gi) + positions_quad(1,gi)*u_quad(2,gi)
              ele_top = ele_top + omega_quad(gi)*detwei(gi)
           end do
           ! Elemental r^2:
-          do dim = 1, velocity%dim
-             do gi = 1, ele_ngi(velocity, ele)
-                ele_bot = ele_bot + (positions_quad(dim,gi) * positions_quad(dim,gi)) *detwei(gi)
+          do dim = 1, u%dim
+             do gi = 1, ele_ngi(u, ele)
+                ele_bot = ele_bot + (positions_quad(dim,gi) * positions_quad(dim,gi))*detwei(gi)
              end do
           end do
           

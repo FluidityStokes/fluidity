@@ -30,7 +30,6 @@ module momentum_diagnostic_fields
   use FLDebug
   use equation_of_state
   use fields
-  use field_options
   use state_module
   use spud
   use state_module
