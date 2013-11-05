@@ -1232,7 +1232,7 @@
 
             end if
 
-!            ! Remove rigid rotation from velocity field, if desired:
+            ! Remove rigid rotation from velocity field, if desired:
 !            remove_rigid_rotation = have_option(trim(u%option_path)//"/prognostic/remove_rigid_rotation")
 !            if(remove_rigid_rotation) then
 !               ! Allocate and calculate rotational velocity field:

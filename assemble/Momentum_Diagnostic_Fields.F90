@@ -48,7 +48,7 @@ module momentum_diagnostic_fields
   end interface
 
   private
-  public :: calculate_momentum_diagnostics, calculate_densities, quantify_angular_momentum_2d, quantify_angular_momentum_3d
+  public :: calculate_momentum_diagnostics, calculate_densities
 
 contains
 
@@ -492,60 +492,5 @@ contains
     end do
 
   end subroutine momentum_diagnostics_fields_check_options
-
-  subroutine quantify_angular_momentum_2d(state, angular_momentum)
-    type(state_type), intent(inout) :: state
-    type(scalar_field), intent(inout) :: angular_momentum
-    
-    type(vector_field), pointer :: velocity
-    type(vector_field) :: positions_local
-
-    integer :: node
-    real, dimension(2) :: nodal_coordinates, nodal_velocity
-
-    ewrite(1,*) 'In quantify_angular_momentum_2d'         
-
-    ! Extract velocity from state:
-    velocity => extract_vector_field(state, "Velocity")
-    assert(velocity%mesh == angular_momentum%mesh)
- 
-    ! Extract coordinates from state:
-    positions_local=get_nodal_coordinate_field(state,velocity%mesh)
-
-    do node = 1, node_count(angular_momentum)
-       nodal_coordinates = node_val(positions_local,node) 
-       nodal_velocity = node_val(velocity,node)
-       call set(angular_momentum, node, -nodal_coordinates(2)*nodal_velocity(1)+nodal_coordinates(1)*nodal_velocity(2))
-    end do
-
-    call deallocate(positions_local)
-
-  end subroutine quantify_angular_momentum_2d
-
-  subroutine quantify_angular_momentum_3d(state, angular_momentum)
-    type(state_type), intent(inout) :: state
-    type(vector_field), intent(inout) :: angular_momentum
-    
-    type(vector_field), pointer :: velocity
-    type(vector_field) :: positions_local
-
-    integer :: node
-    real, dimension(3) :: nodal_coordinates, nodal_velocity
-
-    ewrite(1,*) 'In quantify_angular_momentum_3d'         
-
-    ! Extract velocity from state:
-    velocity => extract_vector_field(state, "Velocity")
-    assert(velocity%mesh == angular_momentum%mesh)
- 
-    ! Extract coordinates from state:
-    positions_local=get_nodal_coordinate_field(state,velocity%mesh)
-
-    ! Calculate cross product of positions and velocity:
-    call cross_prod(angular_momentum,positions_local,velocity)
-
-    call deallocate(positions_local)
-
-  end subroutine quantify_angular_momentum_3d
 
 end module momentum_diagnostic_fields

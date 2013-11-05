@@ -44,7 +44,6 @@ module momentum_diagnostics
   use spud
   use state_fields_module
   use state_module
-  use Momentum_Diagnostic_Fields, only: quantify_angular_momentum_2d, quantify_angular_momentum_3d 
   use sediment, only : get_n_sediment_fields, get_sediment_item
   
   implicit none
@@ -484,10 +483,29 @@ contains
   subroutine calculate_angular_momentum_2d(state, s_field)
     type(state_type), intent(inout) :: state
     type(scalar_field), intent(inout) :: s_field
+
+    type(vector_field), pointer :: velocity
+    type(vector_field) :: positions
+    integer :: node
+    real, dimension(2) :: nodal_coordinates, nodal_velocity
     
     ewrite(1,*) 'In calculate_angular_momentum_2d diagnostic'         
 
-    call quantify_angular_momentum_2d(state, s_field)
+    ! Extract velocity field from state:
+    velocity => extract_vector_field(state, "Velocity")
+    assert(velocity%mesh == s_field%mesh)
+ 
+    ! Extract coordinates from state:
+    positions=get_nodal_coordinate_field(state,velocity%mesh)
+
+    ! Loop over nodes and calculate angular momentum:
+    do node = 1, node_count(s_field)
+       nodal_coordinates = node_val(positions,node) 
+       nodal_velocity = node_val(velocity,node)
+       call set(s_field, node, -nodal_coordinates(2)*nodal_velocity(1)+nodal_coordinates(1)*nodal_velocity(2))
+    end do
+
+    call deallocate(positions)
 
     ewrite_minmax(s_field)
 
@@ -496,10 +514,25 @@ contains
   subroutine calculate_angular_momentum_3d(state, v_field)
     type(state_type), intent(inout) :: state
     type(vector_field), intent(inout) :: v_field
+
+    type(vector_field), pointer :: velocity
+    type(vector_field) :: positions
+    integer :: node
+    real, dimension(3) :: nodal_coordinates, nodal_velocity
     
     ewrite(1,*) 'In calculate_angular_momentum_3d diagnostic'         
 
-    call quantify_angular_momentum_3d(state, v_field)
+    ! Extract velocity field from state:
+    velocity => extract_vector_field(state, "Velocity")
+    assert(velocity%mesh == v_field%mesh)
+ 
+    ! Extract coordinates from state:
+    positions=get_nodal_coordinate_field(state,velocity%mesh)
+
+    ! Calculate cross product of positions and velocity to quantify angular momentum:
+    call cross_prod(v_field,positions,velocity)
+
+    call deallocate(positions)
 
     ewrite_minmax(v_field)
 
