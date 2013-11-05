@@ -1047,8 +1047,9 @@ prognostic_velocity_field =
       element solver {
          linear_solver_options_asym_vector
       },
-      ## Remove rotational component after solve
-      element remove_rigid_rotation {
+      ## Remove rotational component of velocity field after solve. This, for example, is
+      ## required in spherical shell cases with free-slip boundary conditions on both domains.
+      element remove_angular_momentum {
          empty
       }?,
       (

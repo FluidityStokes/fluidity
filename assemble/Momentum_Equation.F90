@@ -270,9 +270,6 @@
          integer :: submaterials_istate
          ! Do we have fluid-particle drag between phases?
          logical :: have_fp_drag
-         ! Are we removing the mean rotational velocity?
-         logical :: remove_rigid_rotation
-         type(scalar_field) :: u_rot
 
          ewrite(1,*) 'Entering solve_momentum'
 
@@ -1232,20 +1229,6 @@
 
             end if
 
-            ! Remove rigid rotation from velocity field, if desired:
-!            remove_rigid_rotation = have_option(trim(u%option_path)//"/prognostic/remove_rigid_rotation")
-!            if(remove_rigid_rotation) then
-!               ! Allocate and calculate rotational velocity field:
-!               call allocate(u_rot, u%dim, u%mesh, 'RotationalVelocity')
-!               call quantify_angular_momentum_2d(state(istate), u_rot)
-!               ewrite_minmax(u_rot)
-!               ! Remove rotational velocity component from full velocity:
-!               ewrite_minmax(u)
-!               call addto(u, u_rot, scale=-1.)   
-!               ewrite_minmax(u)
-!               call deallocate(u_rot)
-!            end if
-
          end do finalisation_loop
          call profiler_toc("finalisation_loop")
 
@@ -1346,7 +1329,6 @@
          reassemble_all_cmc_m = reassemble_all_cmc_m .or. shallow_water_projection
 
       end subroutine get_velocity_options
-
 
       subroutine get_pressure_options(p)
          !!< Gets some pressure options from the options tree
@@ -1897,8 +1879,10 @@
          integer :: d
          type(scalar_field) :: u_cpt
 
-         ewrite(1,*) 'Entering finalise_state'
+         ! Are we removing the rotational velocity component?
+         logical :: remove_angular_momentum
 
+         ewrite(1,*) 'Entering finalise_state'
 
          call profiler_tic(u, "assembly")
          if (have_rotated_bcs(u)) then
@@ -1939,7 +1923,97 @@
             call deallocate(subcycle_m(istate))
          end if
 
+         ! Remove rigid rotation from velocity field, if desired:
+         remove_angular_momentum = have_option(trim(u%option_path)//"/prognostic/remove_angular_momentum")
+         if(remove_angular_momentum) then
+            call remove_angular_momentum_from_velocity(state(istate),u)
+         end if
+
       end subroutine finalise_state
+
+      subroutine remove_angular_momentum_from_velocity(state,u)
+        ! Remove rotational component from velocity field:
+        type(state_type), intent(inout) :: state
+        type(vector_field), intent(inout), pointer :: u
+
+        type(vector_field) :: theta_hat_r, positions
+        integer :: node, ele
+        real :: integral_top, integral_bot, alpha, ele_top, ele_bot
+        real, dimension(u%dim) :: nodal_coordinates
+
+        ! Extract positions from state:
+        positions=get_nodal_coordinate_field(state,u%mesh)
+
+        call allocate(theta_hat_r, u%dim, u%mesh, 'theta_hat_r')
+
+        ! Calculate theta_hat_r:
+        do node = 1, node_count(u)
+           nodal_coordinates = node_val(positions,node) 
+           call set(theta_hat_r, 1, node, -nodal_coordinates(2))
+           call set(theta_hat_r, 2, node, nodal_coordinates(1))
+        end do
+
+        ! Calculate integrals:
+        integral_top = 0.
+        integral_bot = 0.
+        do ele = 1, element_count(u)
+           if(element_owned(u, ele)) then
+              call quantify_scalar_constant_ele(ele, positions, u, ele_top, ele_bot) 
+              integral_top = integral_top + ele_top
+              integral_bot = integral_bot + ele_bot
+           end if
+        end do
+
+        ! Sum integrals over all processors:
+        call allsum(integral_top)
+        call allsum(integral_bot)
+        
+        ! Derive scalar constant:
+        alpha = integral_top / integral_bot
+
+        ! Scale:
+        call addto(u,theta_hat_r,scale=-alpha)
+
+        ! Clean up:
+        call deallocate(positions)
+        call deallocate(theta_hat_r)
+
+      contains
+
+        subroutine quantify_scalar_constant_ele(ele, positions, velocity, ele_top, ele_bot)
+
+          integer, intent(in) :: ele
+          type(vector_field), intent(in) :: positions, velocity
+          real, intent(inout) :: ele_top, ele_bot
+          
+          real, dimension(velocity%dim, ele_ngi(velocity, ele)) :: u_quad, positions_quad
+          real, dimension(ele_ngi(velocity, ele)) :: detwei, omega_quad
+          integer :: dim, gi
+          
+          ele_top = 0.
+          ele_bot = 0.
+          
+          call transform_to_physical(positions, ele, detwei = detwei)
+          
+          ! Derive quantities at Gauss integration points:
+          u_quad         = ele_val_at_quad(velocity, ele)
+          positions_quad = ele_val_at_quad(positions, ele)
+          ! Calculate omega at gauss points:
+          do gi = 1, ele_ngi(velocity, ele)
+             omega_quad(gi) = -positions_quad(2,gi)*u_quad(1,gi) + positions_quad(1,gi)*u_quad(2,gi)
+             ele_top = ele_top + omega_quad(gi)*detwei(gi)
+          end do
+          ! Elemental r^2:
+          do dim = 1, velocity%dim
+             do gi = 1, ele_ngi(velocity, ele)
+                ele_bot = ele_bot + (positions_quad(dim,gi) * positions_quad(dim,gi)) *detwei(gi)
+             end do
+          end do
+          
+        end subroutine quantify_scalar_constant_ele
+
+      end subroutine remove_angular_momentum_from_velocity
+
 
       subroutine momentum_equation_check_options
 

@@ -1264,8 +1264,9 @@ case unless using stress form viscosity and/or coriolis).</a:documentation>
       <ref name="linear_solver_options_asym_vector"/>
     </element>
     <optional>
-      <element name="remove_rigid_rotation">
-        <a:documentation>Remove rotational component after solve</a:documentation>
+      <element name="remove_angular_momentum">
+        <a:documentation>Remove rotational component of velocity field after solve. This, for example, is
+required in spherical shell cases with free-slip boundary conditions on both domains.</a:documentation>
         <empty/>
       </element>
     </optional>
