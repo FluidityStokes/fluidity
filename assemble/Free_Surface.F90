@@ -3089,13 +3089,13 @@ contains
       end if
 
       compressible_eos = have_option(trim(phase_path)//'/equation_of_state/compressible')
-      if (compressible_eos .and. .not. have_option(trim(density_path)// &
+      if (have_free_surface .and. compressible_eos .and. .not. have_option(trim(density_path)// &
          '/spatial_discretisation/continuous_galerkin')) then
          ewrite(-1,*) "With compressible and the free_surface boundary condition"
          FLExit("you have to use a continuous_galerkin discretisation for Density")
       end if
       
-      if (compressible_eos .and. .not. have_option(trim(density_path)// &
+      if (have_free_surface .and. compressible_eos .and. .not. have_option(trim(density_path)// &
          '/spatial_discretisation/continuous_galerkin/advection_terms/integrate_advection_by_parts')) then
          ewrite(-1,*) "With compressible and the free_surface boundary condition"
          FLExit("you have to use the integrate_advection_by_parts option under Density")
