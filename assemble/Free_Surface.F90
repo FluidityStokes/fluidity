@@ -2036,6 +2036,9 @@ contains
       end if
     end do
 
+    call deallocate(density_bc)
+    deallocate(density_bc_type)
+
   contains
 
     subroutine add_boundary_integral_sele(sele)
@@ -2145,6 +2148,9 @@ contains
         end if
      end if
    end do
+
+   call deallocate(density_bc)
+   deallocate(density_bc_type)
 
   contains
 
