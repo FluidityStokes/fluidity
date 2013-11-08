@@ -1942,6 +1942,8 @@
         real :: integral_top, integral_bot, alpha, ele_top, ele_bot
         real, dimension(u%dim) :: nodal_coordinates
 
+        ewrite(1,*) 'Removing angular momentum from velocity field'
+
         ! Extract positions from state:
         positions=get_nodal_coordinate_field(state,u%mesh)
         call allocate(theta_hat_r, u%dim, u%mesh, 'theta_hat_r')
@@ -1970,6 +1972,7 @@
         
         ! Derive scalar constant:
         alpha = integral_top / integral_bot
+        ewrite(2,*) 'ALPHA CHECK',alpha
 
         ! Scale:
         call addto(u,theta_hat_r,scale=-alpha)
