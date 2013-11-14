@@ -421,14 +421,6 @@
                end if
                reassemble_ct_m = reassemble_ct_m .or. reassemble_all_ct_m
                
-               ! For the CG pressure with CV tested continuity case 
-               ! get the CV tested pressure gradient matrix (i.e. the divergence matrix)
-               ! if required with a different unique name. Note there is no need
-               ! to again decide reassemble_ct_m as ctp_m for this case is assembled when ct_m is.
-               if (.not. (compressible_eos .or. shallow_water_projection) .and. cg_pressure_cv_test_continuity) then
-                  ctp_m(istate)%ptr => get_velocity_divergence_matrix(state(istate), ct_m_name = "CVTestedVelocityDivergenceMatrix")
-               end if
-
                ! Get the pressure poisson matrix (i.e. the CMC/projection matrix)
                if (implicit_prognostic_fs) then
                  cmc_m => get_extended_pressure_poisson_matrix(state(istate), ct_m(istate)%ptr, p_mesh, get_cmc=reassemble_cmc_m)
@@ -587,13 +579,10 @@
                                        diagonal=diagonal_big_m, name="BIG_m")
             end if
 
-            ! Initialise the big_m, ct_m and ctp_m matrices
+            ! Initialise the big_m and ct_m matrices
             call zero(big_m(istate))
             if(reassemble_ct_m) then
                call zero(ct_m(istate)%ptr)         
-               if (.not.(compressible_eos .or. shallow_water_projection) .and. cg_pressure_cv_test_continuity) then
-                  call zero(ctp_m(istate)%ptr)
-               end if
             end if
 
             ! Allocate the momentum RHS
@@ -639,7 +628,7 @@
                   call subtract_geostrophic_pressure_gradient(mom_rhs(istate), state(istate))
                end if
             else
-               ! This call will form the ct_rhs, which for compressible_eos
+               ! This call will form the ct_rhs, which for compressible_eos, shallow_water_projection
                ! or cg_pressure_cv_test_continuity is formed for a second time later below.
                call construct_momentum_cg(u, p, density, x, &
                      big_m(istate), mom_rhs(istate), ct_m(istate)%ptr, &
@@ -696,7 +685,7 @@
 
             ! Assemble divergence matrix C^T.
             ! At the moment cg does its own ct assembly. We might change this in the future.
-            ! This call will form the ct_rhs, which for compressible_eos
+            ! This call will form the ct_rhs, which for compressible_eos, shallow_water_projection
             ! or cg_pressure_cv_test_continuity is formed for a second time later below.
             if(dg(istate) .and. .not. cv_pressure) then
                call assemble_divergence_matrix_cg(ct_m(istate)%ptr, state(istate), ct_rhs=ct_rhs(istate), &
@@ -760,7 +749,7 @@
                   call allocate(ctp_m(istate)%ptr, ct_m(istate)%ptr%sparsity, (/1, u%dim/), name="CTP_m")
                   ! NOTE that this is not optimal in that the ct_rhs
                   ! was formed already above. The call here will overwrite those values.
-                  if(cv_pressure) then
+                  if(cv_pressure.or.cg_pressure_cv_test_continuity) then
                      call assemble_compressible_divergence_matrix_cv(ctp_m(istate)%ptr, state, ct_rhs(istate))
                   else
                      call assemble_compressible_divergence_matrix_cg(ctp_m(istate)%ptr, state, istate, ct_rhs(istate))
@@ -775,6 +764,12 @@
                else                  
                   ! Incompressible scenario
                   if (cg_pressure_cv_test_continuity) then
+                     ! For the CG pressure with CV tested continuity case 
+                     ! get the CV tested pressure gradient matrix (i.e. the divergence matrix)
+                     ! if required with a different unique name. Note there is no need
+                     ! to again decide reassemble_ct_m as ctp_m for this case is assembled when ct_m is.
+                      ctp_m(istate)%ptr => get_velocity_divergence_matrix(state(istate), ct_m_name = "CVTestedVelocityDivergenceMatrix")
+
                      ! Form the CV tested divergence matrix and ct_rhs.
                      ! This will only reassemble ctp_m when ct_m 
                      ! also requires reassemble. NOTE that this is not optimal in that the ct_rhs
