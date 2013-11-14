@@ -120,11 +120,31 @@ module compressible_projection
 
     real :: atmospheric_pressure, theta
     
-    logical :: assemble_rhs, exclude_mass
+    logical :: assemble_rhs, exclude_mass, have_absorption, have_source
 
     ewrite(1,*) 'Entering assemble_1mat_compressible_projection_cv'
     
     assemble_rhs = present(rhs)
+
+    if(.not.cmcget.or..not.assemble_rhs) return
+
+    density=>extract_scalar_field(state,'Density')
+    olddensity=>extract_scalar_field(state,'OldDensity')
+
+    exclude_mass = have_option(trim(density%option_path)//&
+                                "/prognostic/spatial_discretisation/control_volumes/mass_terms/exclude_mass_terms")
+
+    absorption => extract_scalar_field(state, "DensityAbsorption", stat=stat)
+    have_absorption = stat==0
+
+    source => extract_scalar_field(state, "DensitySource", stat=stat)
+    have_source = stat==0
+
+    if(.not.have_absorption.and..not.have_source.and.exclude_mass) return
+
+    ewrite_minmax(density)
+    ewrite_minmax(olddensity)
+
     if(assemble_rhs) call zero(rhs)
 
     pressure=>extract_scalar_field(state, "Pressure")
@@ -144,14 +164,6 @@ module compressible_projection
     call zero(drhodp)
 
     call compressible_eos(state, pressure=eospressure, drhodp=drhodp)
-
-    density=>extract_scalar_field(state,'Density')
-    ewrite_minmax(density)
-    olddensity=>extract_scalar_field(state,'OldDensity')
-    ewrite_minmax(olddensity)
-
-    exclude_mass = have_option(trim(density%option_path)//&
-                                "/prognostic/spatial_discretisation/control_volumes/mass_terms/exclude_mass_terms")
 
     call get_option(trim(density%option_path)//"/prognostic/temporal_discretisation/theta", theta)
 
@@ -182,15 +194,13 @@ module compressible_projection
         call scale(rhs, (1./dt))
       end if
       
-      source => extract_scalar_field(state, "DensitySource", stat=stat)
-      if(stat==0) then
+      if(have_source) then
         call addto(rhs, source)
       end if
       
     end if
     
-    absorption => extract_scalar_field(state, "DensityAbsorption", stat=stat)
-    if(stat==0) then
+    if(have_absorption) then
       if(assemble_rhs) then
         call allocate(absrhs, absorption%mesh, "AbsorptionRHS")
         
@@ -511,7 +521,7 @@ module compressible_projection
     call zero(eospressure)
     call zero(drhodp)
 
-    ! this needs to be changed to be evaluated at the quadrature points!
+    ! FIXME: this needs to be changed to be evaluated at the quadrature points!
     call compressible_eos(state, pressure=eospressure, drhodp=drhodp)
 
     ewrite_minmax(density)
@@ -763,32 +773,69 @@ module compressible_projection
   subroutine compressible_projection_check_options
 
     character(len=OPTION_PATH_LEN) :: pressure_option_path, density_option_path
+    character(len=FIELD_NAME_LEN) :: pressure_mesh, density_mesh
     integer :: iphase
-    logical:: have_compressible_eos
+    logical:: have_compressible_eos, cv_pressure, cg_pressure_cv_test_continuity, &
+              use_reference_density, exclude_mass, have_absorption, have_source, cv_density
 
     do iphase=0, option_count("/material_phase")-1
        have_compressible_eos = have_option("/material_phase["//int2str(iphase)//"]/equation_of_state/compressible")
+
        pressure_option_path = "/material_phase["//int2str(iphase)//"]/scalar_field::Pressure"
-       if(have_compressible_eos.and. &
-            have_option(trim(pressure_option_path)//"/prognostic/spatial_discretisation/discontinuous_galerkin")) then
-          FLExit("With a DG pressure you cannot have use a compressible eos")
-       end if
-       if(have_option(trim(pressure_option_path)//"/prognostic/spatial_discretisation/compressible/implicit_pressure_buoyancy")) then
-          if(have_option(trim(pressure_option_path)//"/prognostic/spatial_discretisation/control_volumes")) then
-             FLExit("Compressible option implicit_pressure_buoyancy does not work with control volume Pressure discretisations.")
-          end if
-       end if
+       cv_pressure = have_option(trim(pressure_option_path)//"/prognostic/spatial_discretisation/control_volumes")
+       cg_pressure_cv_test_continuity = have_option(trim(pressure_option_path)//&
+                 &"/prognostic/spatial_discretisation/continuous_galerkin&
+                 &/test_continuity_with_cv_dual")
+       call get_option(trim(pressure_option_path)//"/prognostic/mesh/name", pressure_mesh)
+
        density_option_path = "/material_phase["//int2str(iphase)//"]/scalar_field::Density"
-       if(have_option(trim(density_option_path)//"/prognostic/spatial_discretisation/use_reference_density")) then
-          if(.not.have_option(trim(density_option_path)// &
-               "/prognostic/spatial_discretisation/continuous_galerkin/mass_terms/exclude_mass_terms").and. &
-               .not.have_option(trim(density_option_path)// &
-               "/prognostic/spatial_discretisation/control_volumes/mass_terms/exclude_mass_terms")) then
+       use_reference_density = have_option(trim(density_option_path)//&
+                 &"/prognostic/spatial_discretisation/use_reference_density")
+       exclude_mass = have_option(trim(density_option_path)// &
+               "/prognostic/spatial_discretisation/continuous_galerkin/mass_terms/exclude_mass_terms").or. &
+                      have_option(trim(density_option_path)// &
+               "/prognostic/spatial_discretisation/control_volumes/mass_terms/exclude_mass_terms")
+       have_absorption = have_option(trim(density_option_path)//"/prognostic/scalar_field::Absorption")
+       have_source = have_option(trim(density_option_path)//"/prognostic/scalar_field::Source")
+       cv_density = have_option(trim(density_option_path)//&
+                 &"/prognostic/spatial_discretisation/control_volumes")
+       call get_option(trim(density_option_path)//"/prognostic/mesh/name", density_mesh)
+
+       if(have_compressible_eos) then
+         if(have_option(trim(pressure_option_path)//"/prognostic/spatial_discretisation/discontinuous_galerkin")) then
+           FLExit("With a DG pressure you cannot have use a compressible eos")
+         end if
+         if(cv_pressure) then
+           if(have_option(trim(pressure_option_path)//"/prognostic/spatial_discretisation/compressible/implicit_pressure_buoyancy")) then
+               FLExit("Compressible option implicit_pressure_buoyancy does not work with control volume Pressure discretisations.")
+           end if
+           if (cv_density.and.(trim(pressure_mesh)/=trim(density_mesh))) then
+             ewrite(-1,*) "When testing continuity with cv dual and using a cv density, "
+             FLExit("the density mesh must be the same as the pressure mesh.")
+           end if
+         end if
+       end if
+
+       if(use_reference_density) then
+          if(.not.exclude_mass) then
              FLExit("Using reference density in the continuity equation only really makes sense with exclude_mass_terms.")
           end if
-          if(have_option(trim(density_option_path)//"/prognostic/scalar_field::Absorption")) then
+          if(have_absorption) then
              FLExit("Using reference density in the continuity equation doesn't make sense with absorption.")
           end if
+       end if
+
+       if(cg_pressure_cv_test_continuity.and.have_compressible_eos) then
+         if(cv_density) then
+           if(trim(pressure_mesh)/=trim(density_mesh)) then
+             ewrite(-1,*) "When testing continuity with cv dual and using a cv density, "
+             FLExit("the density mesh must be the same as the pressure mesh.")
+           end if
+         else if((.not.exclude_mass).or.have_absorption.or.have_source) then
+           ewrite(-1,*) "Testing continuity with a cv dual while not using a cv density "
+           ewrite(-1,*) "only works without density mass, absorption and source terms."
+           FLExit("Change density discretisation to cv.")
+         end if
        end if
     end do
  

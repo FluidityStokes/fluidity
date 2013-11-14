@@ -499,9 +499,9 @@ contains
       real :: dens_theta_val
       real :: dens_face_val
       real :: olddens_face_val
-      real, dimension(:), allocatable :: dens_ele, olddens_ele
-      real, dimension(:), allocatable :: dens_ele_bdy, olddens_ele_bdy
-      real, dimension(:), allocatable :: ghost_dens_ele_bdy, ghost_olddens_ele_bdy
+      real, dimension(:), allocatable :: dens_f, olddens_f
+      real, dimension(:), allocatable :: dens_bdy_f, olddens_bdy_f
+      real, dimension(:), allocatable :: ghost_dens_bdy_f, ghost_olddens_bdy_f
 
       logical, dimension(:), allocatable :: notvisited
 
@@ -534,12 +534,12 @@ contains
 
       real :: udotn, income
       logical :: inflow
-      real :: dt
+      real :: dt, theta_dens
 
       type(cv_options_type) :: dens_options
       character(len=OPTION_PATH_LEN) :: dens_option_path
-      ! use the reference density
-      logical :: use_reference_density
+      ! use the reference density and a cv discretisation
+      logical :: use_reference_density, cv_density
 
       integer, dimension(:,:), allocatable :: velocity_bc_type
       real, dimension(:,:), allocatable :: velocity_bc_val
@@ -560,10 +560,29 @@ contains
 
       x=>extract_vector_field(state, "Coordinate")
       
-      call get_option("/timestepping/timestep", dt)
+      p=>extract_scalar_field(state, "Pressure")
+
+      x_p = get_coordinate_field(state, p%mesh)
+        
       call get_option("/geometry/quadrature/controlvolume_surface_degree", &
                      quaddegree, default=1)
+
+      cvfaces=find_cv_faces(vertices=ele_vertices(p%mesh, 1), &
+                            dimension=mesh_dim(p%mesh), &
+                            polydegree=p%mesh%shape%degree, &
+                            quaddegree=quaddegree)
+
+      x_cvshape=make_cv_element_shape(cvfaces, x%mesh%shape)
+
+      u=>extract_vector_field(state, "NonlinearVelocity") ! maybe this should be updated after the velocity solve?
+      ug=>extract_vector_field(state, "GridVelocity")
       
+      u_cvshape=make_cv_element_shape(cvfaces, u%mesh%shape)
+
+      call allocate(relu, u%dim, u%mesh, "RelativeVelocity")
+      call set(relu, u)
+      call addto(relu, ug, -1.0)
+        
       dens=>extract_scalar_field(state, "Density")
       dens_option_path = dens%option_path
 
@@ -580,51 +599,49 @@ contains
         olddens => extract_scalar_field(state, "OldDensity")
       end if
       
-      u=>extract_vector_field(state, "NonlinearVelocity") ! maybe this should be updated after the velocity solve?
-      ug=>extract_vector_field(state, "GridVelocity")
-      
-      call allocate(relu, u%dim, u%mesh, "RelativeVelocity")
-      call set(relu, u)
-      call addto(relu, ug, -1.0)
-      
-      p=>extract_scalar_field(state, "Pressure")
-
-      x_p = get_coordinate_field(state, p%mesh)
-      
-
-      cvfaces=find_cv_faces(vertices=ele_vertices(dens%mesh, 1), &
-                            dimension=mesh_dim(dens%mesh), &
-                            polydegree=dens%mesh%shape%degree, &
-                            quaddegree=quaddegree)
-
-      x_cvshape=make_cv_element_shape(cvfaces, x%mesh%shape)
       dens_cvshape=make_cv_element_shape(cvfaces, dens%mesh%shape)
-      u_cvshape=make_cv_element_shape(cvfaces, u%mesh%shape)
 
-      mesh_sparsity=>get_csr_sparsity_firstorder(state, dens%mesh, dens%mesh)
-      call allocate(dens_upwind, mesh_sparsity, name="DensityUpwindValues")
-      call allocate(olddens_upwind, mesh_sparsity, name="OldDensityUpwindValues")
+      cv_density = have_option(trim(dens_option_path)//&
+             &"/prognostic/spatial_discretisation/control_volumes")
+      if(cv_density) then
+        call get_option("/timestepping/timestep", dt)
+        
+        mesh_sparsity=>get_csr_sparsity_firstorder(state, dens%mesh, dens%mesh)
+        call allocate(dens_upwind, mesh_sparsity, name="DensityUpwindValues")
+        call allocate(olddens_upwind, mesh_sparsity, name="OldDensityUpwindValues")
 
-      ! get all the relevent options for density
-      ! handily wrapped in a new type...
-      dens_options = get_cv_options(dens_option_path, dens%mesh%shape%numbering%family, mesh_dim(dens))
+        ! get all the relevent options for density
+        ! handily wrapped in a new type...
+        dens_options = get_cv_options(dens_option_path, dens%mesh%shape%numbering%family, mesh_dim(dens))
+        theta_dens = dens_options%theta
 
-      if(need_upwind_values(dens_options)) then
+        if(need_upwind_values(dens_options)) then
 
-        call find_upwind_values(state, x_p, dens, dens_upwind, &
-                                olddens, olddens_upwind)
+          call find_upwind_values(state, x_p, dens, dens_upwind, &
+                                  olddens, olddens_upwind)
 
+        else
+
+          call zero(dens_upwind)
+          call zero(olddens_upwind)
+
+        end if
+
+        ! find courant number (if needed)
+        option_path_array(1) = trim(dens_option_path)  ! temporary hack for compiler failure
+        call cv_disc_get_cfl_no(option_path_array, &
+                        state, dens%mesh, cfl_no)
+
+        allocate(cfl_ele(ele_loc(p,1)), &
+                 u_f(u%dim, u_cvshape%ngi), &
+                 dens_f(ele_loc(p,1)), &
+                 olddens_f(ele_loc(p,1)))
       else
+        call get_option(trim(dens_option_path)//"/prognostic/temporal_discretisation/theta", theta_dens)
 
-        call zero(dens_upwind)
-        call zero(olddens_upwind)
-
+        allocate(dens_f(dens_cvshape%ngi), &
+                 olddens_f(dens_cvshape%ngi))
       end if
-
-      ! find courant number (if needed)
-      option_path_array(1) = trim(dens_option_path)  ! temporary hack for compiler failure
-      call cv_disc_get_cfl_no(option_path_array, &
-                      state, dens%mesh, cfl_no)
 
       ! Clear memory of arrays being designed
       call zero(CTP_m)
@@ -632,30 +649,30 @@ contains
 
       allocate(x_ele(x%dim,ele_loc(x,1)), &
                x_f(x%dim, x_cvshape%ngi), &
-               u_f(u%dim, u_cvshape%ngi), &
                detwei(x_cvshape%ngi), &
                normal(x%dim, x_cvshape%ngi), &
                normgi(x%dim))
-      allocate(cfl_ele(ele_loc(p,1)), &
-               dens_ele(ele_loc(p,1)), &
-               olddens_ele(ele_loc(p,1)))
       allocate(notvisited(x_cvshape%ngi))
       allocate(ctp_mat_local(x%dim, p%mesh%shape%loc, u_cvshape%loc))
 
       element_loop: do ele=1, element_count(p)
         x_ele=ele_val(x, ele)
         x_f=ele_val_at_quad(x, ele, x_cvshape)
-        u_f=ele_val_at_quad(relu, ele, u_cvshape)
         p_nodes=>ele_nodes(p, ele)
         u_nodes=>ele_nodes(u, ele)
         x_nodes=>ele_nodes(x_p, ele)
 
         call transform_cvsurf_to_physical(x_ele, x_cvshape, &
                                           detwei, normal, cvfaces)
-        cfl_ele = ele_val(cfl_no, ele)
-
-        dens_ele = ele_val(dens, ele)
-        olddens_ele = ele_val(olddens, ele)
+        if (cv_density) then
+          u_f=ele_val_at_quad(relu, ele, u_cvshape)
+          cfl_ele = ele_val(cfl_no, ele)
+          dens_f = ele_val(dens, ele)
+          olddens_f = ele_val(olddens, ele)
+        else
+          dens_f = ele_val_at_quad(dens, ele, dens_cvshape)
+          olddens_f = ele_val_at_quad(olddens, ele, dens_cvshape)
+        end if
 
         notvisited=.true.
 
@@ -677,26 +694,32 @@ contains
 
                   normgi=orientate_cvsurf_normgi(node_val(x_p, x_nodes(iloc)),x_f(:,ggi),normal(:,ggi))
 
-                  udotn=dot_product(u_f(:,ggi), normgi(:))
+                  if (cv_density) then
+                    udotn=dot_product(u_f(:,ggi), normgi(:))
 
-                  inflow = (udotn<=0.0)
+                    inflow = (udotn<=0.0)
 
-                  income = merge(1.0,0.0,inflow)
+                    income = merge(1.0,0.0,inflow)
 
-                  call evaluate_face_val(dens_face_val, olddens_face_val, &
-                                         iloc, oloc, ggi, x_nodes, &
-                                         dens_cvshape,&
-                                         dens_ele, olddens_ele, &
-                                         dens_upwind, olddens_upwind, &
-                                         inflow, cfl_ele, &
-                                         dens_options)
+                    call evaluate_face_val(dens_face_val, olddens_face_val, &
+                                           iloc, oloc, ggi, x_nodes, &
+                                           dens_cvshape,&
+                                           dens_f, olddens_f, &
+                                           dens_upwind, olddens_upwind, &
+                                           inflow, cfl_ele, &
+                                           dens_options)
 
-                  dens_theta_val=theta_val(iloc, oloc, &
-                                           dens_face_val, &
-                                           olddens_face_val, &
-                                           dens_options%theta, dt, udotn, &
-                                           x_ele, dens_options%limit_theta, &
-                                           dens_ele, olddens_ele)
+                    dens_theta_val=theta_val(iloc, oloc, &
+                                             dens_face_val, &
+                                             olddens_face_val, &
+                                             dens_options%theta, dt, udotn, &
+                                             x_ele, dens_options%limit_theta, &
+                                             dens_f, olddens_f)
+                  else
+
+                    dens_theta_val = theta_dens*dens_f(ggi) + (1.-theta_dens)*olddens_f(ggi)
+
+                  end if
 
 
                   nodal_loop_j: do jloc = 1, u_cvshape%loc
@@ -732,19 +755,27 @@ contains
       u_cvbdyshape=make_cvbdy_element_shape(cvfaces, u%mesh%faces%shape)
       dens_cvbdyshape=make_cvbdy_element_shape(cvfaces, dens%mesh%faces%shape)
 
+      if (cv_density) then
+        allocate(dens_bdy_f(face_loc(dens,1)), &
+                 olddens_bdy_f(face_loc(dens,1)), &
+                 ghost_dens_bdy_f(face_loc(dens,1)), &
+                 ghost_olddens_bdy_f(face_loc(dens,1)))
+      else
+        allocate(dens_bdy_f(dens_cvbdyshape%ngi), &
+                 olddens_bdy_f(dens_cvbdyshape%ngi), &
+                 ghost_dens_bdy_f(dens_cvbdyshape%ngi), &
+                 ghost_olddens_bdy_f(dens_cvbdyshape%ngi))
+      end if
+
       allocate(x_ele_bdy(x%dim,face_loc(x,1)), &
                detwei_bdy(x_cvbdyshape%ngi), &
                normal_bdy(x%dim, x_cvbdyshape%ngi), &
-               u_bdy_f(u%dim, u_cvbdyshape%ngi), &
-               dens_ele_bdy(face_loc(dens,1)), &
-               olddens_ele_bdy(face_loc(dens,1)), &
-               ghost_dens_ele_bdy(face_loc(dens,1)), &
-               ghost_olddens_ele_bdy(face_loc(dens,1)))
+               u_bdy_f(u%dim, u_cvbdyshape%ngi))
       allocate(dens_bc_type(surface_element_count(dens)), &
                u_nodes_bdy(face_loc(u,1)), &
                p_nodes_bdy(face_loc(p,1)), &
                velocity_bc_type(u%dim, surface_element_count(u)), &
-               velocity_bc_val(u%dim, u%mesh%faces%shape%loc))
+               velocity_bc_val(u%dim, u_cvbdyshape%ngi))
       allocate(ctp_mat_local_bdy(x%dim, p%mesh%faces%shape%loc, u_cvbdyshape%loc), &
                ct_rhs_local(p%mesh%faces%shape%loc))
 
@@ -754,12 +785,13 @@ contains
 
       call get_entire_boundary_condition(u, (/"weakdirichlet ", &
                                               "no_normal_flow", &
-                                              "internal      "/), &
+                                              "internal      ", &
+                                              "free_surface  "/), &
                                              velocity_bc, velocity_bc_type)
 
       surface_element_loop: do sele = 1, surface_element_count(p)
 
-        if(any(velocity_bc_type(:,sele)==2).or.any(velocity_bc_type(:,sele)==3)) cycle
+        if(any(velocity_bc_type(:,sele)==2).or.any(velocity_bc_type(:,sele)==3).or.any(velocity_bc_type(:,sele)==4)) cycle
 
         ele = face_ele(x, sele)
         x_ele = ele_val(x, ele)
@@ -773,25 +805,42 @@ contains
         u_bdy_f=face_val_at_quad(relu, sele, u_cvbdyshape)
 
         if(any(velocity_bc_type(:, sele)==1)) then
-          velocity_bc_val = ele_val(velocity_bc, sele)
+          velocity_bc_val = ele_val_at_quad(velocity_bc, sele, u_cvbdyshape)
         else
           velocity_bc_val = 0.0
         end if
 
-        if(dens_bc_type(sele)==1) then
-          ghost_dens_ele_bdy=ele_val(dens_bc, sele)
-        else
-          ghost_dens_ele_bdy=face_val(dens, sele)
-        end if
+        if (cv_density) then 
+          if(dens_bc_type(sele)==1) then
+            ghost_dens_bdy_f=ele_val(dens_bc, sele)
+          else
+            ghost_dens_bdy_f=face_val(dens, sele)
+          end if
 
-        if(dens_bc_type(sele)==1) then
-          ghost_olddens_ele_bdy=ele_val(dens_bc, sele) ! not considering time varying bcs yet - unused
-        else
-          ghost_olddens_ele_bdy=face_val(olddens, sele) ! - unused
-        end if
+          if(dens_bc_type(sele)==1) then
+            ghost_olddens_bdy_f=ele_val(dens_bc, sele)
+          else
+            ghost_olddens_bdy_f=face_val(olddens, sele)
+          end if
 
-        dens_ele_bdy=face_val(dens, sele)
-        olddens_ele_bdy=face_val(olddens, sele)
+          dens_bdy_f=face_val(dens, sele)
+          olddens_bdy_f=face_val(olddens, sele)
+        else
+          if(dens_bc_type(sele)==1) then
+            ghost_dens_bdy_f=ele_val_at_quad(dens_bc, sele, dens_cvbdyshape)
+          else
+            ghost_dens_bdy_f=face_val_at_quad(dens, sele, dens_cvbdyshape)
+          end if
+
+          if(dens_bc_type(sele)==1) then
+            ghost_olddens_bdy_f=ele_val_at_quad(dens_bc, sele, dens_cvbdyshape)
+          else
+            ghost_olddens_bdy_f=face_val_at_quad(olddens, sele, dens_cvbdyshape)
+          end if
+
+          dens_bdy_f=face_val_at_quad(dens, sele, dens_cvbdyshape)
+          olddens_bdy_f=face_val_at_quad(olddens, sele, dens_cvbdyshape)
+        end if
 
         ctp_mat_local_bdy = 0.0
         ct_rhs_local = 0.0
@@ -814,7 +863,14 @@ contains
                   income=1.0
                 end if
 
-                face_value = (income*ghost_dens_ele_bdy(iloc) + (1.-income)*dens_ele_bdy(iloc))
+                if (cv_density) then
+                  face_value = (income*(theta_dens*ghost_dens_bdy_f(iloc) + (1.-theta_dens)*ghost_olddens_bdy_f(iloc)) &
+                               + (1.-income)*(theta_dens*dens_bdy_f(iloc) + (1.-theta_dens)*olddens_bdy_f(iloc))) 
+         
+                else
+                  face_value = (income*(theta_dens*ghost_dens_bdy_f(ggi) + (1.-theta_dens)*ghost_olddens_bdy_f(ggi)) &
+                               + (1.-income)*(theta_dens*dens_bdy_f(ggi) + (1.-theta_dens)*olddens_bdy_f(ggi)))
+                end if
 
                 surface_nodal_loop_j: do jloc = 1, u_cvbdyshape%loc
 
@@ -823,7 +879,7 @@ contains
                     if((present(ct_rhs)).and.(velocity_bc_type(dim, sele)==1)) then
                     
                       ct_rhs_local(iloc) = ct_rhs_local(iloc) + &
-                                  face_value*u_cvbdyshape%n(jloc,ggi)*detwei_bdy(ggi)*normal_bdy(dim,ggi)*velocity_bc_val(dim,jloc)
+                                  face_value*u_cvbdyshape%n(jloc,ggi)*detwei_bdy(ggi)*normal_bdy(dim,ggi)*velocity_bc_val(dim,ggi)
                     
                     else
 
@@ -868,24 +924,30 @@ contains
       call deallocate(dens_cvbdyshape)
       deallocate(x_ele_bdy, detwei_bdy, normal_bdy, u_bdy_f)
       deallocate(u_nodes_bdy, p_nodes_bdy)
-      deallocate(dens_ele_bdy, olddens_ele_bdy)
-      deallocate(ghost_dens_ele_bdy, ghost_olddens_ele_bdy)
+      deallocate(dens_bdy_f, olddens_bdy_f)
+      deallocate(ghost_dens_bdy_f, ghost_olddens_bdy_f)
       call deallocate(dens_bc)
       deallocate(dens_bc_type)
       deallocate(ctp_mat_local_bdy)
+      deallocate(velocity_bc_val)
 
       call deallocate(x_cvshape)
       call deallocate(u_cvshape)
       call deallocate(dens_cvshape)
       call deallocate(cvfaces)
       call deallocate(relu)
-      deallocate(x_ele, x_f, detwei, normal, normgi, u_f)
-      deallocate(cfl_ele, dens_ele, olddens_ele)
+      deallocate(x_ele, x_f, detwei, normal, normgi)
+      if (cv_density) then
+        deallocate(cfl_ele, u_f)
+      end if
+      deallocate(dens_f, olddens_f)
       deallocate(notvisited)
 
-      call deallocate(dens_upwind)
-      call deallocate(olddens_upwind)
-      call deallocate(cfl_no)
+      if(cv_density) then
+        call deallocate(dens_upwind)
+        call deallocate(olddens_upwind)
+        call deallocate(cfl_no)
+      end if
       call deallocate(x_p)
 
     end subroutine assemble_1mat_compressible_divergence_matrix_cv

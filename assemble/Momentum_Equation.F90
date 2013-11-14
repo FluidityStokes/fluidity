@@ -868,7 +868,7 @@
                                           theta_divergence, assemble_cmc=.true., rhs=ct_rhs(istate))
                      end if
                      if(compressible_eos) then
-                       if(cv_pressure) then
+                       if(cv_pressure.or.cg_pressure_cv_test_continuity) then
                          call assemble_compressible_projection_cv(state, schur_auxiliary_matrix, dt, theta_pg, &
                                                                   theta_divergence, assemble_schur_auxiliary_matrix)
                        else
@@ -1708,7 +1708,7 @@
                assert(istate==1)
                call assemble_shallow_water_projection(state(1), cmc_m, compress_projec_rhs, dt, &
                                                       theta_pg, theta_divergence, reassemble_cmc_m)
-            else if(cv_pressure) then
+            else if(cv_pressure.or.cg_pressure_cv_test_continuity) then
                call assemble_compressible_projection_cv(state, cmc_m, dt, &
                                                       theta_pg, theta_divergence, reassemble_cmc_m, rhs=compress_projec_rhs)
             else
