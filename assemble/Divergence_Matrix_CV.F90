@@ -604,6 +604,10 @@ contains
       cv_density = have_option(trim(dens_option_path)//&
              &"/prognostic/spatial_discretisation/control_volumes")
       if(cv_density) then
+        if(.not.mesh_compatible(dens%mesh, p%mesh)) then
+          FLExit("Density and Pressure meshes must be compatible for CV compressible projection.")
+        end if
+
         call get_option("/timestepping/timestep", dt)
         
         mesh_sparsity=>get_csr_sparsity_firstorder(state, dens%mesh, dens%mesh)
@@ -1156,6 +1160,10 @@ contains
 
       do i = 1, size(state)
         matdens=>extract_scalar_field(state(i), "MaterialDensity", stat=dstat)
+
+        if(.not.mesh_compatible(matdens%mesh, p%mesh)) then
+          FLExit("MaterialDensity and Pressure meshes must be compatible for CV compressible projection.")
+        end if
 
         if(dstat==0) then
           oldmatdens=>extract_scalar_field(state(i), "OldMaterialDensity")

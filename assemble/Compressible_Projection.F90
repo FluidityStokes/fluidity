@@ -128,6 +128,8 @@ module compressible_projection
 
     if(.not.cmcget.or..not.assemble_rhs) return
 
+    if(assemble_rhs) call zero(rhs)
+
     density=>extract_scalar_field(state,'Density')
     olddensity=>extract_scalar_field(state,'OldDensity')
 
@@ -145,9 +147,12 @@ module compressible_projection
     ewrite_minmax(density)
     ewrite_minmax(olddensity)
 
-    if(assemble_rhs) call zero(rhs)
-
     pressure=>extract_scalar_field(state, "Pressure")
+
+    if(.not.mesh_compatible(density%mesh, pressure%mesh)) then
+      FLExit("Density and Pressure meshes must be compatible for CV compressible projection.")
+    end if
+
     call get_option(trim(pressure%option_path)//'/prognostic/atmospheric_pressure', &
                     atmospheric_pressure, default=0.0)
     
@@ -325,6 +330,11 @@ module compressible_projection
           oldvolumefraction=>extract_scalar_field(state(i),'OldMaterialVolumeFraction')
           materialdensity=>extract_scalar_field(state(i),'MaterialDensity')
           oldmaterialdensity=>extract_scalar_field(state(i),'OldMaterialDensity')
+
+          if(.not.mesh_compatible(materialdensity%mesh, pressure%mesh)) then
+            FLExit("MaterialDensity and Pressure meshes must be compatible for CV compressible projection.")
+          end if
+
 
           density%val = density%val &
                             + materialdensity%val*volumefraction%val
@@ -773,70 +783,73 @@ module compressible_projection
   subroutine compressible_projection_check_options
 
     character(len=OPTION_PATH_LEN) :: pressure_option_path, density_option_path
-    character(len=FIELD_NAME_LEN) :: pressure_mesh, density_mesh
     integer :: iphase
     logical:: have_compressible_eos, cv_pressure, cg_pressure_cv_test_continuity, &
               use_reference_density, exclude_mass, have_absorption, have_source, cv_density
 
     do iphase=0, option_count("/material_phase")-1
-       have_compressible_eos = have_option("/material_phase["//int2str(iphase)//"]/equation_of_state/compressible")
-
        pressure_option_path = "/material_phase["//int2str(iphase)//"]/scalar_field::Pressure"
-       cv_pressure = have_option(trim(pressure_option_path)//"/prognostic/spatial_discretisation/control_volumes")
-       cg_pressure_cv_test_continuity = have_option(trim(pressure_option_path)//&
-                 &"/prognostic/spatial_discretisation/continuous_galerkin&
-                 &/test_continuity_with_cv_dual")
-       call get_option(trim(pressure_option_path)//"/prognostic/mesh/name", pressure_mesh)
+       if(have_option(trim(pressure_option_path)//"/prognostic")) then
 
-       density_option_path = "/material_phase["//int2str(iphase)//"]/scalar_field::Density"
-       use_reference_density = have_option(trim(density_option_path)//&
-                 &"/prognostic/spatial_discretisation/use_reference_density")
-       exclude_mass = have_option(trim(density_option_path)// &
-               "/prognostic/spatial_discretisation/continuous_galerkin/mass_terms/exclude_mass_terms").or. &
-                      have_option(trim(density_option_path)// &
-               "/prognostic/spatial_discretisation/control_volumes/mass_terms/exclude_mass_terms")
-       have_absorption = have_option(trim(density_option_path)//"/prognostic/scalar_field::Absorption")
-       have_source = have_option(trim(density_option_path)//"/prognostic/scalar_field::Source")
-       cv_density = have_option(trim(density_option_path)//&
-                 &"/prognostic/spatial_discretisation/control_volumes")
-       call get_option(trim(density_option_path)//"/prognostic/mesh/name", density_mesh)
+         have_compressible_eos = have_option("/material_phase["//int2str(iphase)//"]/equation_of_state/compressible")
 
-       if(have_compressible_eos) then
-         if(have_option(trim(pressure_option_path)//"/prognostic/spatial_discretisation/discontinuous_galerkin")) then
-           FLExit("With a DG pressure you cannot have use a compressible eos")
-         end if
-         if(cv_pressure) then
-           if(have_option(trim(pressure_option_path)//"/prognostic/spatial_discretisation/compressible/implicit_pressure_buoyancy")) then
-               FLExit("Compressible option implicit_pressure_buoyancy does not work with control volume Pressure discretisations.")
+         if(have_compressible_eos) then
+
+           density_option_path = "/material_phase["//int2str(iphase)//"]/scalar_field::Density"
+
+           if (.not.have_option(trim(density_option_path)//"/prognostic")) then
+             density_option_path = "/material_phase["//int2str(iphase)//"]/scalar_field::MaterialDensity"
+             if (.not.have_option(trim(density_option_path)//"/prognostic")) then
+               FLExit("With a compressible projection you need a prognostic Density or MaterialDensity.")
+             end if
            end if
-           if (cv_density.and.(trim(pressure_mesh)/=trim(density_mesh))) then
-             ewrite(-1,*) "When testing continuity with cv dual and using a cv density, "
-             FLExit("the density mesh must be the same as the pressure mesh.")
+
+           cv_pressure = have_option(trim(pressure_option_path)//"/prognostic/spatial_discretisation/control_volumes")
+           cg_pressure_cv_test_continuity = have_option(trim(pressure_option_path)//&
+                     &"/prognostic/spatial_discretisation/continuous_galerkin&
+                     &/test_continuity_with_cv_dual")
+
+           use_reference_density = have_option(trim(density_option_path)//&
+                     &"/prognostic/spatial_discretisation/use_reference_density")
+           exclude_mass = have_option(trim(density_option_path)// &
+                   "/prognostic/spatial_discretisation/continuous_galerkin/mass_terms/exclude_mass_terms").or. &
+                          have_option(trim(density_option_path)// &
+                   "/prognostic/spatial_discretisation/control_volumes/mass_terms/exclude_mass_terms")
+           have_absorption = have_option(trim(density_option_path)//"/prognostic/scalar_field::Absorption")
+           have_source = have_option(trim(density_option_path)//"/prognostic/scalar_field::Source")
+           cv_density = have_option(trim(density_option_path)//&
+                     &"/prognostic/spatial_discretisation/control_volumes")
+
+           if(have_option(trim(pressure_option_path)//"/prognostic/spatial_discretisation/discontinuous_galerkin")) then
+             FLExit("With a prognostic DG pressure you cannot have use a compressible projection.")
            end if
+
+           if(cv_pressure) then
+             if(have_option(trim(pressure_option_path)//"/prognostic/spatial_discretisation/compressible/implicit_pressure_buoyancy")) then
+                 FLExit("Compressible option implicit_pressure_buoyancy does not work with control volume Pressure discretisations.")
+             end if
+           end if
+
+           if(cg_pressure_cv_test_continuity) then
+             if((.not.cv_density).and.((.not.exclude_mass).or.have_absorption.or.have_source)) then
+               ewrite(-1,*) "Testing continuity with a cv dual while not using a cv density "
+               ewrite(-1,*) "only works without density mass, absorption and source terms."
+               FLExit("Change density discretisation to cv.")
+             end if
+           end if
+
+           if(use_reference_density) then
+              if(.not.exclude_mass) then
+                 FLExit("Using reference density in the continuity equation only really makes sense with exclude_mass_terms.")
+              end if
+              if(have_absorption) then
+                 FLExit("Using reference density in the continuity equation doesn't make sense with absorption.")
+              end if
+           end if
+
          end if
        end if
 
-       if(use_reference_density) then
-          if(.not.exclude_mass) then
-             FLExit("Using reference density in the continuity equation only really makes sense with exclude_mass_terms.")
-          end if
-          if(have_absorption) then
-             FLExit("Using reference density in the continuity equation doesn't make sense with absorption.")
-          end if
-       end if
-
-       if(cg_pressure_cv_test_continuity.and.have_compressible_eos) then
-         if(cv_density) then
-           if(trim(pressure_mesh)/=trim(density_mesh)) then
-             ewrite(-1,*) "When testing continuity with cv dual and using a cv density, "
-             FLExit("the density mesh must be the same as the pressure mesh.")
-           end if
-         else if((.not.exclude_mass).or.have_absorption.or.have_source) then
-           ewrite(-1,*) "Testing continuity with a cv dual while not using a cv density "
-           ewrite(-1,*) "only works without density mass, absorption and source terms."
-           FLExit("Change density discretisation to cv.")
-         end if
-       end if
     end do
  
   end subroutine compressible_projection_check_options
