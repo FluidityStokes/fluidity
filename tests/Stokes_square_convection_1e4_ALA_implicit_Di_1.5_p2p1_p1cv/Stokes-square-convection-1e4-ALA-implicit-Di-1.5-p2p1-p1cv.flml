@@ -359,7 +359,7 @@
       <prognostic>
         <mesh name="CoordinateMesh"/>
         <equation name="MantleAnelasticEnergy">
-          <density name="CompressibleReferenceDensity*IsobaricSpecificHeatCapacity">
+          <density name="CompressibleReferenceDensity">
             <discretisation_options>
               <spatial_discretisation>
                 <control_volumes>

@@ -197,19 +197,19 @@ contains
        val = 0.
        do dim1 = 1, velocity%dim
           do dim2 = 1, velocity%dim
-            if(dim1==dim2) then
-              ! Add divergence of velocity term to diagonal only: 
-              val = val + 2.*node_val(viscosity_component_remap, node)     * & 
-                   & (node_val(strain_rate_tensor,dim1,dim2,node)          - &
-                   & 1./3. * node_val(velocity_divergence, node))**2
-            else
-              val = val + 2.*node_val(viscosity_component_remap, node)     * & 
-                   & node_val(strain_rate_tensor,dim1,dim2,node)**2   
-            end if
+             if(dim1==dim2) then
+                ! Add divergence of velocity term to diagonal only: 
+                val = val + 2.*node_val(viscosity_component_remap, node) * & 
+                     & (node_val(strain_rate_tensor,dim1,dim2,node)      - &
+                     & 1./3. * node_val(velocity_divergence, node))**2
+             else
+                val = val + 2.*node_val(viscosity_component_remap, node) * & 
+                     & node_val(strain_rate_tensor,dim1,dim2,node)**2   
+             end if
           end do
        end do
        call set(s_field, node, val)
-    end do    
+    end do
 
     ewrite_minmax(s_field)
 
@@ -272,16 +272,19 @@ contains
     type(scalar_field), intent(inout) :: s_field
     logical :: include_surface_adiabat
 
-    type(scalar_field), pointer :: thermal_expansion_local, reference_density_local
+    type(scalar_field), pointer :: thermal_expansion_local, density_local
+    type(scalar_field), pointer :: reference_temperature_local
     type(vector_field), pointer :: velocity, gravity_direction
 
     type(vector_field) :: velocity_remap
     type(scalar_field) :: velocity_component, thermal_expansion_remap
-    type(scalar_field) :: reference_density_remap
+    type(scalar_field) :: density_remap
+    type(scalar_field) :: reference_temperature_remap
     real :: gravity_magnitude, gamma, rho0, T0
-    integer :: node, stat_vel, stat_rho, stat_gamma
+    integer :: node, stat_vel, stat_rho, stat_gamma, stat_reft
 
-    character(len=OPTION_PATH_LEN) eos_option_path
+    character(len=OPTION_PATH_LEN) :: eos_option_path
+    character(len=FIELD_NAME_LEN) :: density_name
     logical :: have_linear_eos, have_linearised_mantle_compressible_eos
     logical :: have_mantle_lookup_eos
 
@@ -314,7 +317,7 @@ contains
 
           ! Get value for thermal expansion coefficient (constant)
           call get_option(trim(eos_option_path)//'/fluids/linear/temperature_dependency/thermal_expansion_coefficient', gamma)
-          ! Get value for reference density (constant)
+          ! Get value for density:
           call get_option(trim(eos_option_path)//'/fluids/linear/reference_density', rho0)
           ! Calculate and set adiabatic heating coefficient:
           do node = 1, node_count(s_field)
@@ -337,28 +340,64 @@ contains
              FLExit("Please put the IsobaricThermalExpansivity Field on a mesh that can be remapped to the adiabatic_heating_coefficient mesh.")
           end if
 
-          ! Get spatially varying compressible reference density and remap to s_field%mesh if possible and required:
-          reference_density_local=>extract_scalar_field(state,'CompressibleReferenceDensity')
-          call allocate(reference_density_remap, s_field%mesh, 'RemappedCompressibleReferenceDensity')
-          call test_remap_validity(reference_density_local,reference_density_remap,stat_rho)
+          ! Get CompressibleReferenceDensity and remap to s_field%mesh if possible and required:
+          density_local => extract_scalar_field(state,'CompressibleReferenceDensity')
+          call allocate(density_remap, s_field%mesh, 'RemappedCompressibleReferenceDensity')
+          call test_remap_validity(density_local,density_remap,stat_rho)
           if(stat_rho == 0) then
              ! Remap to s_field%mesh:
-             call remap_field(reference_density_local, reference_density_remap)
+             call remap_field(density_local, density_remap)
           else
              ! Remap is not possible:
              ewrite(-1,*) "CompressibleReferenceDensity cannot be remapped to the adiabatic_heating_coefficient mesh,"
              ewrite(-1,*) "in the adiabatic heating coefficient algorithm."
-             FLExit("Please put the CompressibleReferenceDensity Field on a mesh that can be remapped to the adiabatic_heating_coefficient mesh.")
+             FLExit("Please put the CompressibleReferenceDensity field on a mesh that can be remapped to the adiabatic_heating_coefficient mesh.")
           end if
 
           ! Calculate and set adiabatic heating coefficient:
-          do node = 1, node_count(s_field)
-             call set(s_field, node, -node_val(thermal_expansion_remap,node) * node_val(reference_density_remap, node) &
-                  * gravity_magnitude * node_val(velocity_component,node))
-          end do
+          call get_option(trim(state%option_path)//'/scalar_field::Temperature/prognostic/equation[0]/density[0]/name', density_name)
+
+          if (trim(density_name)=="CompressibleReferenceDensity") then
+
+             do node = 1, node_count(s_field)
+                gamma = node_val(thermal_expansion_remap,node)
+                call set(s_field, node, -gamma * node_val(density_remap, node) &
+                     * gravity_magnitude * node_val(velocity_component,node))
+             end do
+
+          elseif (trim(density_name)=="Density") then
+
+             reference_temperature_local=>extract_scalar_field(state,'CompressibleReferenceTemperature')       
+             call allocate(reference_temperature_remap, s_field%mesh, 'RemappedCompressibleReferenceTemperature')
+             call test_remap_validity(reference_temperature_local,reference_temperature_remap,stat_reft)
+             if(stat_reft == 0) then
+                ! Remap to s_field%mesh:
+                call remap_field(reference_temperature_local, reference_temperature_remap)
+             else
+                ! Remap is not possible:
+                ewrite(-1,*) "Reference Temperature cannot be remapped to the adiabatic_heating_coefficient mesh,"
+                ewrite(-1,*) "in the adiabatic heating coefficient algorithm."
+                FLExit("Please put the CompressiblReferenceTemperature Field on a mesh that can be remapped to the adiabatic_heating_coefficient mesh.")
+             end if
+
+             do node = 1, node_count(s_field)
+                gamma = node_val(thermal_expansion_remap,node)
+                call set(s_field, node, ( (-gamma * node_val(density_remap, node) &
+                     * gravity_magnitude * node_val(velocity_component,node) ) &
+                     * (1. + gamma*node_val(reference_temperature_remap,node)) ) )
+             end do
+
+             call deallocate(reference_temperature_remap)
+
+          else
+
+             ewrite(-1,*) "Something has gone wrong in the adiabatic heating coefficient algorithm."
+             FLExit("Density has an unknown name!")
+
+          end if
 
           call deallocate(thermal_expansion_remap)
-          call deallocate(reference_density_remap)
+          call deallocate(density_remap)
 
        else
 
@@ -392,8 +431,8 @@ contains
     type(scalar_field), intent(inout) :: s_field
 
     type(vector_field), pointer :: positions, gravity_direction, velocity
-    type(scalar_field), pointer :: thermal_expansion, reference_density
-    type(scalar_field), pointer :: dummyscalar
+    type(scalar_field), pointer :: thermal_expansion, density_local
+    type(scalar_field), pointer :: dummyscalar, reference_temperature_local
 
     type(scalar_field) :: lumped_mass
 
@@ -401,6 +440,7 @@ contains
     integer :: ele
 
     character(len=OPTION_PATH_LEN) eos_option_path
+    character(len=FIELD_NAME_LEN) :: density_name
     logical :: have_linear_eos, have_linearised_mantle_compressible_eos
     logical :: have_mantle_lookup_eos
 
@@ -434,26 +474,52 @@ contains
        call get_option(trim(eos_option_path)//'/fluids/linear/reference_density', rho0)
        ! As these values are constant for this eos, we need to point reference density and 
        ! thermal_expansion to dummy scalars:
-       reference_density => dummyscalar
+       density_local => dummyscalar
        thermal_expansion => dummyscalar
     elseif(have_linearised_mantle_compressible_eos .OR. have_mantle_lookup_eos) then
        ! Get spatially varying thermal expansion field:
        thermal_expansion=>extract_scalar_field(state,'IsobaricThermalExpansivity')
-       ! Get spatially varying reference density field:
-       reference_density=>extract_scalar_field(state,'CompressibleReferenceDensity')
+       ! Get CompressibleReferenceDensity field:
+       density_local => extract_scalar_field(state,'CompressibleReferenceDensity')
     else
        FLExit("Selected EOS not yet configured for adiabatic_heating_coefficient_projection algorithm")
     endif
 
     ! Integrate to determine RHS:
     call zero(s_field)
-    do ele = 1, element_count(s_field)
-        if(have_linear_eos) then
-           call integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, reference_density, gravity_magnitude, ele, rho0, gamma)
-        else if(have_linearised_mantle_compressible_eos) then             
-           call integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, reference_density, gravity_magnitude, ele)
-        end if
-    end do
+
+    if(have_linear_eos) then
+
+       do ele = 1, element_count(s_field)
+          call integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, density_local, gravity_magnitude, ele, rho0=rho0, gamma=gamma)
+       end do
+       
+    else if(have_linearised_mantle_compressible_eos) then             
+       
+       call get_option(trim(state%option_path)//'/scalar_field::Temperature/prognostic/equation[0]/density[0]/name', density_name)
+       
+       if (trim(density_name)=="CompressibleReferenceDensity") then
+          
+          do ele = 1, element_count(s_field)
+             call integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, density_local, gravity_magnitude, ele)
+          end do
+          
+       elseif (trim(density_name)=="Density") then
+          
+          reference_temperature_local=>extract_scalar_field(state,'CompressibleReferenceTemperature')       
+          
+          do ele = 1, element_count(s_field)
+             call integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, density_local, gravity_magnitude, ele, reference_temperature=reference_temperature_local)
+          end do
+          
+       else
+
+          ewrite(-1,*) "Something has gone wrong in the adiabatic heating coefficient algorithm."
+          FLExit("Density has an unknown name!")
+          
+       end if
+
+    end if
 
     ! Compute inverse lumped mass matrix:
     call allocate(lumped_mass, s_field%mesh, name="Lumped_mass")        
@@ -469,12 +535,13 @@ contains
 
   contains
 
-    subroutine integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, reference_density, gravity_magnitude, ele, rho0, gamma)
+    subroutine integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, density_local, gravity_magnitude, ele, reference_temperature, rho0, gamma)
       type(scalar_field), intent(inout) :: s_field
       type(vector_field), intent(in), pointer :: positions
-      type(scalar_field), intent(in), pointer :: thermal_expansion, reference_density
+      type(scalar_field), intent(in), pointer :: thermal_expansion, density_local
       type(vector_field), intent(in), pointer :: velocity, gravity_direction
       real, intent(in)    :: gravity_magnitude
+      type(scalar_field), optional, intent(in), pointer :: reference_temperature
       real, optional      :: rho0, gamma
       integer, intent(in) :: ele
       
@@ -482,16 +549,15 @@ contains
       integer :: dim, gi
       real, dimension(ele_loc(s_field,ele)) :: ele_val
       real, dimension(positions%dim, ele_ngi(positions, ele)) :: positions_quad, velocity_quad, gravity_direction_quad
-      real, dimension(ele_ngi(positions, ele)) :: detwei, density_quad, gamma_quad, inner_prod
-
+      real, dimension(ele_ngi(positions, ele)) :: detwei, density_quad, gamma_quad, inner_prod, reference_temperature_quad
 
       ! Evaluate key parameters at gauss points:
       call transform_to_physical(positions, ele, detwei = detwei)
-      positions_quad          = ele_val_at_quad(positions, ele)
-      velocity_quad           = ele_val_at_quad(velocity, ele)
-      gravity_direction_quad  = ele_val_at_quad(gravity_direction, ele)
-      density_quad            = ele_val_at_quad(reference_density, ele)
-      gamma_quad              = ele_val_at_quad(thermal_expansion, ele)
+      positions_quad              = ele_val_at_quad(positions, ele)
+      velocity_quad               = ele_val_at_quad(velocity, ele)
+      gravity_direction_quad      = ele_val_at_quad(gravity_direction, ele)
+      density_quad                = ele_val_at_quad(density_local, ele)
+      gamma_quad                  = ele_val_at_quad(thermal_expansion, ele)
 
       ! Calculate inner product of velocity and gravity unit vector at gauss points:
       inner_prod = 0.
@@ -502,9 +568,12 @@ contains
       end do
 
       ! Evaluate nodal values of integral:
-      if(present(rho0) .and. present(gamma)) then
+      if(present(rho0) .and. present(gamma)) then ! Linear EOS
          ele_val = shape_rhs(ele_shape(s_field,ele), -inner_prod*gravity_magnitude*gamma*rho0*detwei)
-      else
+      elseif(present(reference_temperature)) then ! Density Coefficient
+         reference_temperature_quad  = ele_val_at_quad(reference_temperature, ele)
+         ele_val = shape_rhs(ele_shape(s_field,ele), (-inner_prod*gravity_magnitude*gamma_quad*density_quad*detwei) * (1.+gamma_quad*reference_temperature_quad))
+      else ! CompressibleReferenceDensity Coefficient
          ele_val = shape_rhs(ele_shape(s_field,ele), -inner_prod*gravity_magnitude*gamma_quad*density_quad*detwei)
       end if
 

@@ -400,7 +400,7 @@ for n in range(field.node_count):
       <prognostic>
         <mesh name="VelocityMesh"/>
         <equation name="MantleAnelasticEnergy">
-          <density name="CompressibleReferenceDensity*IsobaricSpecificHeatCapacity"/>
+          <density name="CompressibleReferenceDensity"/>
         </equation>
         <spatial_discretisation>
           <continuous_galerkin>

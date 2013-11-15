@@ -553,15 +553,33 @@ contains
         FLExit("Haven't implemented a moving mesh anelastic energy equation yet.")
       end if
 
-      density=>extract_scalar_field(state, "CompressibleReferenceDensity")
+      call get_option(trim(t%option_path)//'/prognostic/equation[0]/density[0]/name', &
+                      density_name)
+
+      density=>extract_scalar_field(state, trim(density_name))
       ewrite_minmax(density)
+      olddensity=>extract_scalar_field(state, "Old"//trim(density_name))
+      ewrite_minmax(olddensity)
+
+      call get_option(trim(t%option_path)// &
+                  '/prognostic/equation[0]/density[0]/discretisation_options/temporal_discretisation/theta', &
+                  density_theta, stat=stat)
+      if (stat/=0) then
+        call get_option(trim(density%option_path)//"/prognostic/temporal_discretisation/theta", density_theta, stat=stat)
+        if (stat/=0) then
+          if (trim(density_name)=="CompressibleReferenceDensity") then
+            density_theta=1.0
+          else
+            FLExit("Additional discretisation options required for the density coefficient. Please set equation/density/discretisation_options to set theta.")
+          end if
+        end if
+      end if
 
       heatcap=>extract_scalar_field(state, "IsobaricSpecificHeatCapacity")
       ewrite_minmax(heatcap)
       reftemp=>extract_scalar_field(state, "CompressibleReferenceTemperature")
       ewrite_minmax(reftemp)
       
-      olddensity=>dummydensity
       pressure=>dummydensity
 
     case(FIELD_EQUATION_KEPSILON)
@@ -970,7 +988,7 @@ contains
         end if
       end if
     case(FIELD_EQUATION_MANTLEANELASTICENERGY)
-      density_at_quad = ele_val_at_quad(density, ele)
+      density_at_quad = density_theta*ele_val_at_quad(density, ele) + (1.-density_theta)*ele_val_at_quad(olddensity, ele)
       heatcap_at_quad = ele_val_at_quad(heatcap, ele)
 
       if(move_mesh) then
@@ -1090,11 +1108,12 @@ contains
          nvfrac_at_quad = ele_val_at_quad(nvfrac, ele)
       end if
     case(FIELD_EQUATION_MANTLEANELASTICENERGY)
-      density_at_quad = ele_val_at_quad(density, ele)
+      density_at_quad = density_theta*ele_val_at_quad(density, ele) + (1.-density_theta)*ele_val_at_quad(olddensity, ele)
       heatcap_at_quad = ele_val_at_quad(heatcap, ele)
       if((integrate_advection_by_parts.and.(abs(1.0 - beta) > epsilon(0.0))).or.&
          ((.not.integrate_advection_by_parts).and.(abs(beta) > epsilon(0.0)))) then
-        densitygrad_at_quad = ele_grad_at_quad(density, ele, drho_t)
+        densitygrad_at_quad = density_theta*ele_grad_at_quad(density, ele, drho_t) +&
+                              (1.-density_theta)*ele_grad_at_quad(olddensity, ele, drho_t)
         heatcapgrad_at_quad = ele_grad_at_quad(heatcap, ele, dcp_t)
         udotgradrho_at_quad = sum(densitygrad_at_quad*velocity_at_quad, 1)
         udotgradcp_at_quad = sum(heatcapgrad_at_quad*velocity_at_quad, 1)
@@ -1489,7 +1508,7 @@ contains
          advection_mat = shape_shape(t_shape, t_shape, detwei * sum(velocity_at_quad * normal, 1) * density_at_quad)
       end if
     case(FIELD_EQUATION_MANTLEANELASTICENERGY)
-      density_at_quad = face_val_at_quad(density, face)
+      density_at_quad = density_theta*face_val_at_quad(density, face) + (1.-density_theta)*face_val_at_quad(olddensity, face)
       heatcap_at_quad = face_val_at_quad(heatcap, face)
 
       advection_mat = shape_shape(t_shape, t_shape, detwei * sum(velocity_at_quad * normal, 1) * density_at_quad * heatcap_at_quad)
