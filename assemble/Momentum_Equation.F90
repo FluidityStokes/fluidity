@@ -676,12 +676,6 @@
             call profiler_toc(u, "assembly")
 
             call profiler_tic(p, "assembly")
-            if(cv_pressure) then
-               ! This call will form the ct_rhs, which for compressible_eos
-               ! is formed for a second time later below.
-               call assemble_divergence_matrix_cv(ct_m(istate)%ptr, state(istate), ct_rhs=ct_rhs(istate), &
-                                             test_mesh=p_theta%mesh, field=u, get_ct=reassemble_ct_m)
-            end if
 
             ! Assemble divergence matrix C^T.
             ! At the moment cg does its own ct assembly. We might change this in the future.
@@ -692,14 +686,30 @@
                  test_mesh=p_theta%mesh, field=u, get_ct=reassemble_ct_m)
             end if
 
-            if (implicit_prognostic_fs .and. reassemble_ct_m) then
-              call add_implicit_viscous_free_surface_integrals(state(istate), &
-                ct_m(istate)%ptr, u, p_mesh, free_surface)
-            end if
-            if (explicit_prognostic_fs) then
-              call add_explicit_viscous_free_surface_integrals(state(istate), &
-                mom_rhs(istate), ct_m(istate)%ptr, reassemble_ct_m, &
-                u, p_mesh, free_surface)
+            if(cv_pressure) then
+               ! This call will form the ct_rhs, which for compressible_eos
+               ! is formed for a second time later below.
+               call assemble_divergence_matrix_cv(ct_m(istate)%ptr, state(istate), ct_rhs=ct_rhs(istate), &
+                                             test_mesh=p_theta%mesh, field=u, get_ct=reassemble_ct_m)
+               if (implicit_prognostic_fs .and. reassemble_ct_m) then
+                 call add_implicit_viscous_free_surface_integrals_cv(state(istate), &
+                   ct_m(istate)%ptr, u, p_mesh, free_surface)
+               end if
+               if (explicit_prognostic_fs) then
+                 call add_explicit_viscous_free_surface_integrals_cv(state(istate), &
+                   ct_m(istate)%ptr, reassemble_ct_m, &
+                   u, p_mesh, free_surface, mom_rhs=mom_rhs(istate))
+               end if
+            else
+               if (implicit_prognostic_fs .and. reassemble_ct_m) then
+                 call add_implicit_viscous_free_surface_integrals(state(istate), &
+                   ct_m(istate)%ptr, u, p_mesh, free_surface)
+               end if
+               if (explicit_prognostic_fs) then
+                 call add_explicit_viscous_free_surface_integrals(state(istate), &
+                   ct_m(istate)%ptr, reassemble_ct_m, &
+                   u, p_mesh, free_surface, mom_rhs=mom_rhs(istate))
+               end if
             end if
 
             if(compressible_eos) then
@@ -753,7 +763,19 @@
                      call assemble_compressible_divergence_matrix_cv(ctp_m(istate)%ptr, state, ct_rhs(istate))
                   else
                      call assemble_compressible_divergence_matrix_cg(ctp_m(istate)%ptr, state, istate, ct_rhs(istate))
+
+                     if (implicit_prognostic_fs) then
+                       call add_implicit_viscous_compressible_free_surface_integrals(state(istate), &
+                         ctp_m(istate)%ptr, u, p_mesh, free_surface)
+                     end if
+
+                     if (explicit_prognostic_fs) then
+                       call add_explicit_viscous_compressible_free_surface_integrals(state(istate), &
+                         ctp_m(istate)%ptr, u, p_mesh, free_surface)
+                     end if
+
                   end if               
+
                else if (shallow_water_projection) then
                  
                   assert(istate==1)
@@ -776,6 +798,15 @@
                      ! was formed already above. The call here will overwrite those values.
                      call assemble_divergence_matrix_cv(ctp_m(istate)%ptr, state(istate), ct_rhs=ct_rhs(istate), &
                                                         test_mesh=p%mesh, field=u, get_ct=reassemble_ct_m)
+                    if (implicit_prognostic_fs .and. reassemble_ct_m) then
+                      call add_implicit_viscous_free_surface_integrals_cv(state(istate), &
+                        ctp_m(istate)%ptr, u, p_mesh, free_surface)
+                    end if
+                    if (explicit_prognostic_fs) then
+                      call add_explicit_viscous_free_surface_integrals_cv(state(istate), &
+                        ctp_m(istate)%ptr, reassemble_ct_m, &
+                        u, p_mesh, free_surface)
+                    end if
                   else                  
                      ! ctp_m is identical to ct_m
                      ctp_m(istate)%ptr => ct_m(istate)%ptr
@@ -789,6 +820,7 @@
                      end if
                      call rotate_ct_m(ctp_m(istate)%ptr, u)
                   end if
+
                   if (sphere_absorption(istate)) then
                      if (dg(istate)) then
                        call zero_non_owned(u)
@@ -1717,7 +1749,9 @@
             end if
 
             ewrite_minmax(compress_projec_rhs)
-            ewrite_minmax(cmc_m)
+            if (reassemble_cmc_m) then
+              ewrite_minmax(cmc_m)
+            end if
 
             call addto(temp_projec_rhs, compress_projec_rhs)
 
@@ -1941,7 +1975,7 @@
 
       subroutine momentum_equation_check_options
 
-         integer :: i, nmat, bc, nbc
+         integer :: i, nmat 
          character(len=FIELD_NAME_LEN) :: schur_scheme
          character(len=FIELD_NAME_LEN) :: schur_preconditioner
          character(len=FIELD_NAME_LEN) :: pressure_mesh
@@ -2153,22 +2187,6 @@
                   ewrite(-1,*) "continuous_galerkin/scheme/use_projection_method"
                   FLExit("Use incompressible projection method if wanting to test continuity with cv dual with CG pressure")                  
                end if
-               
-               ! Check that there are no free_surface boundary conditions for Velocity
-               nbc = option_count("/material_phase["//int2str(i)//"]/vector_field::Velocity&
-                                  &/prognostic/boundary_conditions")
-               
-               bc_loop: do bc = 0, nbc - 1               
-
-                  if(have_option("/material_phase["//int2str(i)//&
-                                 &"]/vector_field::Velocity/prognostic/boundary_conditions["&
-                                 &//int2str(bc)//"]/type::free_surface")) then
-                     ewrite(-1,*) "Cannot have free_surface BC for Velocity of phase ",i+1
-                     ewrite(-1,*) "when using a CG pressure with a CV tested continuity equation"
-                     FLExit("For CG Pressure cannot test the continuity equation with CV when Velocity has a free_surface BC")
-                  end if               
-
-               end do bc_loop
                
                ! Check that the wetting_and_drying model is not being used
                if(have_option("/mesh_adaptivity/mesh_movement/free_surface/wetting_and_drying")) then
