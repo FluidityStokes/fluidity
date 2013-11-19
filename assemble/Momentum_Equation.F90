@@ -790,7 +790,11 @@
                      ! get the CV tested pressure gradient matrix (i.e. the divergence matrix)
                      ! if required with a different unique name. Note there is no need
                      ! to again decide reassemble_ct_m as ctp_m for this case is assembled when ct_m is.
-                      ctp_m(istate)%ptr => get_velocity_divergence_matrix(state(istate), ct_m_name = "CVTestedVelocityDivergenceMatrix")
+                     if (implicit_prognostic_fs) then
+                       ctp_m(istate)%ptr => get_extended_velocity_divergence_matrix(state(istate), u, free_surface, p_mesh, ct_m_name = "CVTestedExtendedVelocityDivergenceMatrix") 
+                     else
+                       ctp_m(istate)%ptr => get_velocity_divergence_matrix(state(istate), ct_m_name = "CVTestedVelocityDivergenceMatrix")
+                     end if
 
                      ! Form the CV tested divergence matrix and ct_rhs.
                      ! This will only reassemble ctp_m when ct_m 
