@@ -1679,6 +1679,7 @@ contains
       ! some temporal discretisation options for clarity
       ptheta = tfield_options%ptheta
       beta = tfield_options%beta
+      equation_type = equation_type_index(trim(tfield%option_path))
 
       ! loop over elements
       element_loop: do ele=1, element_count(tfield)
@@ -1722,7 +1723,6 @@ contains
                                     shape=t_cvshape_full, dshape=dt_t)
           diffusivity_gi = ele_val_at_quad(diffusivity, ele, diff_cvshape_full)
           
-          equation_type = equation_type_index(trim(tfield%option_path))
           if(multiphase .and. equation_type==FIELD_EQUATION_INTERNALENERGY) then
             nvfrac_gi = ele_val_at_quad(nvfrac, ele, diff_cvshape_full)
           end if
