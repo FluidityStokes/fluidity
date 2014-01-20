@@ -722,8 +722,8 @@
                end if
                if (explicit_prognostic_fs) then
                  call add_explicit_viscous_free_surface_integrals(state(istate), &
-                   mom_rhs(istate), ct_m(istate)%ptr, reassemble_ct_m, &
-                   u, p_mesh, free_surface)
+                   ct_m(istate)%ptr, reassemble_ct_m, &
+                   u, p_mesh, free_surface, mom_rhs=mom_rhs(istate))
                end if
             end if
 
@@ -778,7 +778,19 @@
                      call assemble_compressible_divergence_matrix_cv(ctp_m(istate)%ptr, state, ct_rhs(istate))
                   else
                      call assemble_compressible_divergence_matrix_cg(ctp_m(istate)%ptr, state, istate, ct_rhs(istate))
+
+                     if (implicit_prognostic_fs) then
+                       call add_implicit_viscous_compressible_free_surface_integrals(state(istate), &
+                         ctp_m(istate)%ptr, u, p_mesh, free_surface)
+                     end if
+
+                     if (explicit_prognostic_fs) then
+                       call add_explicit_viscous_compressible_free_surface_integrals(state(istate), &
+                         ctp_m(istate)%ptr, u, p_mesh, free_surface)
+                     end if
+
                   end if               
+
                else if (shallow_water_projection) then
                  
                   assert(istate==1)
@@ -817,6 +829,7 @@
                      end if
                      call rotate_ct_m(ctp_m(istate)%ptr, u)
                   end if
+
                   if (sphere_absorption(istate)) then
                      if (dg(istate)) then
                        call zero_non_owned(u)
@@ -1745,7 +1758,9 @@
             end if
 
             ewrite_minmax(compress_projec_rhs)
-            ewrite_minmax(cmc_m)
+            if (reassemble_cmc_m) then
+              ewrite_minmax(cmc_m)
+            end if
 
             call addto(temp_projec_rhs, compress_projec_rhs)
 
