@@ -5,15 +5,10 @@ def readstat_3d():
 
     last_locations_error = zeros((3,100))
     for i in range(100):
-        n = i + 1
-        padding = ''
-        if(n<100):
-            padding = '0'
-            if(n<10):
-                padding ='00'
-        last_locations_error[0,i] = s['Steve_'+padding+str(n)]['position'][0][-1]
-        last_locations_error[1,i] = s['Steve_'+padding+str(n)]['position'][1][-1]
-        last_locations_error[2,i] = s['Steve_'+padding+str(n)]['position'][2][-1]
+        n = `i + 1`.zfill(3)
+        last_locations_error[0,i] = s['Steve_'+n]['position'][0][-1]
+        last_locations_error[1,i] = s['Steve_'+n]['position'][1][-1]
+        last_locations_error[2,i] = s['Steve_'+n]['position'][2][-1]
     X = fromfile('Xvals.txt',sep=' ')
     Y = fromfile('Yvals.txt',sep=' ')
     Z = 0.5*ones(shape(X))

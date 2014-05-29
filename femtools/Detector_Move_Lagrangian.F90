@@ -159,6 +159,7 @@ contains
     type(detector_linked_list), dimension(:), allocatable :: send_list_array
     type(halo_type), pointer :: ele_halo
     integer :: i, j, k, num_proc, dim, all_send_lists_empty, nprocs, stage, cycle
+    integer :: initial_number_global_detectors
     logical :: any_lagrangian
     real :: rk_dt
 
@@ -166,10 +167,13 @@ contains
     ewrite(2,*) "Detector list", detector_list%id, "has", detector_list%length, &
          "local and", detector_list%total_num_det, "global detectors"
 
+    ! Store initial number of global detectors for sanity check at end of detector movement:
+    initial_number_global_detectors = detector_lists%total_num_det
+
     parameters => detector_list%move_parameters
 
     ! Pull some information from state
-    xfield=>extract_vector_field(state(1), "Coordinate")
+    xfield => extract_vector_field(state(1), "Coordinate")
     vfield => extract_vector_field(state(1),"Velocity")
 
     ! We allocate a sendlist for every processor
@@ -234,6 +238,9 @@ contains
     ! This needs to be called after distribute_detectors because the exchange  
     ! routine serialises det%k and det%update_vector if it finds the RK-GS option
     call deallocate_rk_guided_search(detector_list)
+
+    ! Verify that no detectors have been lost:
+    assert(initial_number_global_detectors == detector_list%total_num_det)
 
     ewrite(2,*) "After moving and distributing we have", detector_list%length, &
          "local and", detector_list%total_num_det, "global detectors"
