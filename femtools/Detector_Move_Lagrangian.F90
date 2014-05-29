@@ -168,7 +168,7 @@ contains
          "local and", detector_list%total_num_det, "global detectors"
 
     ! Store initial number of global detectors for sanity check at end of detector movement:
-    initial_number_global_detectors = detector_lists%total_num_det
+    initial_number_global_detectors = detector_list%total_num_det
 
     parameters => detector_list%move_parameters
 
