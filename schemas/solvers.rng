@@ -668,6 +668,12 @@ algorithm, and also a natural ordering (natural) for debugging.</a:documentation
         </attribute>
       </element>
     </optional>
+    <optional>
+      <element name="rescale">
+        <a:documentation>Rescale matrix?</a:documentation>
+        <empty/>
+      </element>
+    </optional>
     <element name="diagnostics">
       <a:documentation>Extra diagnostics to help debug solver problems</a:documentation>
       <optional>

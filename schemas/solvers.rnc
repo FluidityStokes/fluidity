@@ -618,6 +618,10 @@ miscellaneous_solver_options =
       element reordering {
          attribute name { xsd:string }
       }?,
+      ## Rescale matrix?
+      element rescale {
+         empty
+      }?,
       ## Extra diagnostics to help debug solver problems
       element diagnostics {
          ## Print out the norm of vectors and matrices before the
