@@ -1688,8 +1688,8 @@ subroutine SetupKSP(ksp, mat, pmat, solver_option_path, parallel, &
 
     ! If requested, scale matrix:
     if (have_option(trim(solver_option_path)//'/rescale')) then
-       call KSPSetDiagonalScale(ksp, PETSC_TRUE)
-       call KSPSetDiagonalScaleFix(ksp, PETSC_TRUE)
+       call KSPSetDiagonalScale(ksp, PETSC_TRUE, ierr)
+       call KSPSetDiagonalScaleFix(ksp, PETSC_TRUE, ierr)
     end if
 
     ! Inquire about settings as they may have changed by PETSc options:
