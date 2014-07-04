@@ -110,8 +110,7 @@
   <physical_parameters>
     <gravity>
       <magnitude>
-        <real_value rank="0">1.5</real_value>
-        <comment>Equivalent to Dissipation Number. Note that to achieve the desired Rayleigh number, other terms (e.g. viscosity, diffusivity) need to be scaled accordingly.</comment>
+        <real_value rank="0">1e4</real_value>
       </magnitude>
       <vector_field name="GravityDirection" rank="1">
         <prescribed>
@@ -346,16 +345,9 @@
           <prescribed>
             <value name="WholeMesh">
               <anisotropic_symmetric>
-                <python>
-                  <string_value lines="20" type="code" language="python">def val(X, t):
-  from constants import *
-  mu = Di / Ra
-  visc = numpy.zeros((2,2))
-  for i in range(2):
-    for j in range(2):
-      visc[i][j] = mu
-  return visc</string_value>
-                </python>
+                <constant>
+                  <real_value symmetric="true" dim2="dim" shape="2 2" dim1="dim" rank="2">1.0 1.0 1.0 1.0</real_value>
+                </constant>
               </anisotropic_symmetric>
             </value>
             <output/>
@@ -483,7 +475,11 @@
         <scalar_field name="Source" rank="0">
           <diagnostic>
             <mesh name="P2DGMesh"/>
-            <algorithm name="viscous_dissipation" material_phase_support="single "/>
+            <algorithm name="viscous_dissipation" material_phase_support="single ">
+              <scaling>
+                <real_value rank="0">0.00015</real_value>
+              </scaling>
+            </algorithm>
             <output/>
             <stat/>
             <detectors>
@@ -494,7 +490,11 @@
         <scalar_field name="Absorption" rank="0">
           <diagnostic>
             <mesh name="VelocityMesh"/>
-            <algorithm name="adiabatic_heating_coefficient" material_phase_support="single "/>
+            <algorithm name="adiabatic_heating_coefficient" material_phase_support="single ">
+              <scaling>
+                <real_value rank="0">0.00015</real_value>
+              </scaling>
+            </algorithm>
             <output/>
             <stat/>
             <detectors>
@@ -645,7 +645,11 @@
     </scalar_field>
     <scalar_field name="Adiabatic_Absorption" rank="0">
       <diagnostic>
-        <algorithm name="adiabatic_heating_absorption" material_phase_support="single "/>
+        <algorithm name="adiabatic_heating_absorption" material_phase_support="single ">
+          <scaling>
+            <real_value rank="0">0.00015</real_value>
+          </scaling>
+        </algorithm>
         <mesh name="P4Mesh"/>
         <output/>
         <stat/>

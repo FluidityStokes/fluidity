@@ -158,7 +158,7 @@ contains
     type(tensor_field) :: strain_rate_tensor
 
     integer :: dim1, dim2, node
-    real :: val
+    real :: val, scaling_factor
 
     ewrite(1,*) 'In calculate_viscous_dissipation'
 
@@ -210,6 +210,11 @@ contains
        end do
        call set(s_field, node, val)
     end do
+
+    ! Scale
+    call get_option(trim(complete_field_path(trim(s_field%option_path))) // &
+            "/algorithm[0]/scaling", scaling_factor)
+    call scale(s_field, scaling_factor)
 
     ewrite_minmax(s_field)
 
@@ -280,7 +285,7 @@ contains
     type(scalar_field) :: velocity_component, thermal_expansion_remap
     type(scalar_field) :: density_remap
     type(scalar_field) :: reference_temperature_remap
-    real :: gravity_magnitude, gamma, rho0, T0
+    real :: gravity_magnitude, gamma, rho0, T0, scaling_factor
     integer :: node, stat_vel, stat_rho, stat_gamma, stat_reft
 
     character(len=OPTION_PATH_LEN) :: eos_option_path
@@ -420,6 +425,11 @@ contains
        call scale(s_field, -T0)
     end if
 
+    ! Scale appropriately:
+    call get_option(trim(complete_field_path(trim(s_field%option_path))) // &
+         "/algorithm[0]/scaling", scaling_factor)
+    call scale(s_field, scaling_factor)
+       
   end subroutine adiabatic_heating_coefficient
 
   subroutine adiabatic_heating_coefficient_projection(state, s_field)

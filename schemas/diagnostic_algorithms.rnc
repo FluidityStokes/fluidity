@@ -1351,7 +1351,11 @@ viscous_dissipation_algorithm =
       ## algorithm for calculating the viscous dissipation.
        element algorithm {
          attribute name { "viscous_dissipation" },
-         attribute material_phase_support { "single "}
+         attribute material_phase_support { "single "},
+         ## Scaling for viscous dissipation terms (Di/Ra)
+         element scaling {
+           real
+         }
       }
    )
 
@@ -1364,6 +1368,10 @@ viscous_dissipation_plus_surface_adiabat_algorithm =
          ## The surface temperature for the adiabat term
          element surface_temperature {
            real
+         },
+         ## Scaling for viscous dissipation terms (Di/Ra)
+         element scaling {
+	   real
          }
       }
    )
@@ -1374,7 +1382,11 @@ adiabatic_heating_coefficient_algorithm =
       ## needed when applying adiabatic heating absorption term.
        element algorithm {
          attribute name { "adiabatic_heating_coefficient" },
-         attribute material_phase_support { "single "}
+         attribute material_phase_support { "single "},
+         ## Scaling for adiabatic heating terms (Di/Ra)
+         element scaling {
+           real
+         }
       }
    )
 
@@ -1385,7 +1397,11 @@ adiabatic_heating_absorption_algorithm =
       ## This is thus the full absorption term:
        element algorithm {
          attribute name { "adiabatic_heating_absorption" },
-         attribute material_phase_support { "single "}
+         attribute material_phase_support { "single "},
+         ## Scaling for adiabatic heating terms (Di/Ra)
+         element scaling {
+	   real
+         }
        }
    )
 

@@ -1825,6 +1825,10 @@ The mesh must be directly extruded.</a:documentation>
       <attribute name="material_phase_support">
         <value>single </value>
       </attribute>
+      <element name="scaling">
+        <a:documentation>Scaling for viscous dissipation terms (Di/Ra)</a:documentation>
+        <ref name="real"/>
+      </element>
     </element>
   </define>
   <define name="viscous_dissipation_plus_surface_adiabat_algorithm">
@@ -1840,6 +1844,10 @@ The mesh must be directly extruded.</a:documentation>
         <a:documentation>The surface temperature for the adiabat term</a:documentation>
         <ref name="real"/>
       </element>
+      <element name="scaling">
+        <a:documentation>Scaling for viscous dissipation terms (Di/Ra)</a:documentation>
+        <ref name="real"/>
+      </element>
     </element>
   </define>
   <define name="adiabatic_heating_coefficient_algorithm">
@@ -1852,6 +1860,10 @@ needed when applying adiabatic heating absorption term.</a:documentation>
       <attribute name="material_phase_support">
         <value>single </value>
       </attribute>
+      <element name="scaling">
+        <a:documentation>Scaling for adiabatic heating terms (Di/Ra)</a:documentation>
+        <ref name="real"/>
+      </element>
     </element>
   </define>
   <define name="adiabatic_heating_absorption_algorithm">
@@ -1865,6 +1877,10 @@ This is thus the full absorption term:</a:documentation>
       <attribute name="material_phase_support">
         <value>single </value>
       </attribute>
+      <element name="scaling">
+        <a:documentation>Scaling for adiabatic heating terms (Di/Ra)</a:documentation>
+        <ref name="real"/>
+      </element>
     </element>
   </define>
   <!-- Mass matrix -->
