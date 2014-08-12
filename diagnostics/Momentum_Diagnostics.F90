@@ -51,13 +51,15 @@ module momentum_diagnostics
   
   private
   
-  public :: calculate_strain_rate, calculate_bulk_viscosity, calculate_sediment_concentration_dependent_viscosity, &
+  public :: calculate_strain_rate, calculate_bulk_viscosity, calculate_strain_rate_second_invariant, &
+            calculate_sediment_concentration_dependent_viscosity, &
             calculate_buoyancy, calculate_coriolis, calculate_tensor_second_invariant, &
-            calculate_imposed_material_velocity_source, calculate_imposed_material_velocity_absorption, &
+            calculate_imposed_material_velocity_source, &
+            calculate_imposed_material_velocity_absorption, &
             calculate_scalar_potential, calculate_projection_scalar_potential, &
-            calculate_geostrophic_velocity, &
-            calculate_viscous_dissipation, calculate_adiabatic_heating_coefficient, &
-            calculate_adiabatic_heating_absorption, calculate_viscous_dissipation_plus_surface_adiabat           
+            calculate_geostrophic_velocity, calculate_viscous_dissipation, & 
+            calculate_adiabatic_heating_coefficient, calculate_adiabatic_heating_absorption, &
+            calculate_viscous_dissipation_plus_surface_adiabat           
 
 contains
 
@@ -78,6 +80,36 @@ contains
     call strain_rate(source_field, positions, t_field)
 
   end subroutine calculate_strain_rate
+
+  subroutine calculate_strain_rate_second_invariant(state, s_field)
+    type(state_type), intent(inout) :: state
+    type(scalar_field), intent(inout) :: s_field
+
+    type(vector_field), pointer :: positions
+    type(vector_field), pointer :: velocity
+
+    type(tensor_field) :: strain_rate_tensor
+
+    ewrite(1,*) 'In calculate_strain_rate_second_invariant'
+    positions => extract_vector_field(state, "Coordinate")
+    velocity  => extract_vector_field(state, "IteratedVelocity")
+
+    ! Allocate strain_rate tensor:
+    call allocate(strain_rate_tensor, s_field%mesh, name="strain_rate_II")
+
+    call check_source_mesh_derivative(velocity, "strain_rate_second_invariant")
+
+    ! Calculate strain_rate and second invariant:
+    call strain_rate(velocity, positions, strain_rate_tensor)
+    call tensor_second_invariant(strain_rate_tensor, s_field)
+
+    ! Clean-up:
+    call deallocate(strain_rate_tensor)
+
+    ! Prin min and max:
+    ewrite_minmax(s_field) 
+
+  end subroutine calculate_strain_rate_second_invariant
 
   subroutine calculate_sediment_concentration_dependent_viscosity(state, t_field)
     ! calculates viscosity based upon total sediment concentration
@@ -145,7 +177,7 @@ contains
 
   subroutine calculate_viscous_dissipation(state, s_field)
     ! A routine to calculate the viscous dissipation. Currently
-    ! assumes a constant viscosity:
+    ! assumes a constant viscosity tensor:
     type(state_type), intent(inout) :: state
     type(scalar_field), intent(inout) :: s_field
 
