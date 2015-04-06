@@ -119,6 +119,9 @@ module Petsc_Tools
 #if PETSC_VERSION_MINOR>=3
   public MatCreateSeqAIJ, MatCreateMPIAIJ, MatCreateSeqBAIJ, MatCreateMPIBAIJ
 #endif
+#if PETSC_VERSION_MINOR<5
+  public mykspgetoperators
+#endif
 contains
 
   ! Note about definitions in this module:
@@ -678,9 +681,12 @@ contains
     do b=1, nfields
       
       call profiler_tic(fields(b), "petsc2field")
-      call VecGetValues(vec, nnodp, &
-        petsc_numbering%gnn2unn( 1:nnodp, b ), &
-        fields(b)%val( 1:nnodp ), ierr)
+      ! this check should be unnecessary but is a work around for a bug in petsc, fixed in 18ae1927 (pops up with intel 15)
+      if (nnodp>0) then
+        call VecGetValues(vec, nnodp, &
+          petsc_numbering%gnn2unn( 1:nnodp, b ), &
+          fields(b)%val( 1:nnodp ), ierr)
+      end if
       call profiler_toc(fields(b), "petsc2field")
         
     end do
@@ -689,9 +695,11 @@ contains
     do b=1, nfields
       
       call profiler_tic(fields(b), "petsc2field")
-      call VecGetValues(vec, nnodp, &
-        petsc_numbering%gnn2unn( 1:nnodp, b ), &
-        vals, ierr)
+      if (nnodp>0) then
+        call VecGetValues(vec, nnodp, &
+          petsc_numbering%gnn2unn( 1:nnodp, b ), &
+          vals, ierr)
+      end if
       fields(b)%val( 1:nnodp ) = vals
       call profiler_toc(fields(b), "petsc2field")
         
@@ -776,9 +784,12 @@ contains
       
       call profiler_tic(fields(i), "petsc2field")
       do j=1, fields(i)%dim
-         call VecGetValues(vec, nnodp, &
-           petsc_numbering%gnn2unn( 1:nnodp, b ), &
-           fields(i)%val(j, 1:nnodp ), ierr)
+         ! this check should be unnecessary but is a work around for a bug in petsc, fixed in 18ae1927 (pops up with intel 15)
+         if (nnodp>0) then
+           call VecGetValues(vec, nnodp, &
+             petsc_numbering%gnn2unn( 1:nnodp, b ), &
+             fields(i)%val(j, 1:nnodp ), ierr)
+         end if
          b=b+1
       end do
       call profiler_toc(fields(i), "petsc2field")
@@ -791,9 +802,11 @@ contains
       
       call profiler_tic(fields(i), "petsc2field")
       do j=1, fields(i)%dim
-         call VecGetValues(vec, nnodp, &
-           petsc_numbering%gnn2unn( 1:nnodp, b ), &
-           vals, ierr)
+         if (nnodp>0) then
+           call VecGetValues(vec, nnodp, &
+             petsc_numbering%gnn2unn( 1:nnodp, b ), &
+             vals, ierr)
+         end if
          fields(i)%val(j, 1:nnodp ) = vals
          b=b+1
       end do
@@ -1558,6 +1571,24 @@ end subroutine petsc_test_error_handler
   end subroutine MatCreateMPIBAIJ
 #endif
 
+! this is a wrapper around KSPGetOperators, that in petsc <3.5
+! has an extra mat_structure flag. We need to wrap this because
+! we need a local variable.
+! in include/petsc_legacy.h we #define KSPGetOperators -> mykspgetoperators
+#if PETSC_VERSION_MINOR<5
+subroutine mykspgetoperators(ksp, amat, pmat, ierr)
+  KSP, intent(in):: ksp
+  Mat, intent(in):: amat, pmat
+  PetscErrorCode, intent(out):: ierr
+
+  MatStructure:: mat_structure
+  
+  ! need small caps, to avoid #define from include/petsc_legacy.h
+  call  kspgetoperators(ksp, amat, pmat, mat_structure, ierr)
+
+end subroutine mykspgetoperators
+#endif
+
 #include "Reference_count_petsc_numbering_type.F90"
 end module Petsc_Tools
 
@@ -1575,3 +1606,4 @@ PetscErrorCode, intent(out):: ierr
   call MatGetInfo(A, flag, info, ierr)
   
 end subroutine myMatGetInfo
+
