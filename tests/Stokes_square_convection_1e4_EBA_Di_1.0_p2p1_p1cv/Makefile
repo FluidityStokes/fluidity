@@ -5,12 +5,12 @@ MESH = square-structured-linear
 
 default: input
 
-input: src/$(MESH).edge src/$(MESH).ele src/$(MESH).node clean
-	cp src/$(MESH).edge src/$(MESH).ele src/$(MESH).node .
+input: clean
+	./src/generate_mesh.py
 
 clean: clean-mesh clean-run-debug
 clean-mesh:
-	rm -f $(MESH).edge $(MESH).ele $(MESH).node
+	rm -f $(MESH).msh
 clean-run:
 	rm -f $(FLMLMODEL)_?*.vtu $(FLMLMODEL)_?*_checkpoint.edge $(FLMLMODEL)_?*_checkpoint.ele $(FLMLMODEL)_?*_checkpoint.node $(FLMLMODEL)_?*_checkpoint.flml $(FLMLMODEL)_?*_?*_checkpoint.vtu $(FLMLMODEL).stat $(FLMLMODEL).detectors fluidity.err-0 fluidity.log-0 matrixdump matrixdump.info
 clean-run-debug: clean-run
