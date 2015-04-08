@@ -45,6 +45,12 @@ from constants import Ra
 viscous_dissipation= Ra*stat("stokes-1e4-p2p1-ALA-implicit-Di-1.5.stat")["Fluid"]["TemperatureSource"]["integral"][-1]
 </variable>
 
+<variable name="Ra" language="python">
+from fluidity_tools import stat_parser as stat
+import constants
+Ra = constants.Ra
+</variable>
+
 </variables>
 
 <pass_tests>
