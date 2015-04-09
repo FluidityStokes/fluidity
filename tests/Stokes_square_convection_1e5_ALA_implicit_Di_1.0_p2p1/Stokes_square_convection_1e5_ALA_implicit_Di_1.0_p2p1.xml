@@ -28,19 +28,19 @@ nu_top = abs(stat("stokes-1e5-p2p1-ALA-implicit-Di-1.0.stat")["Fluid"]["FullTemp
 </variable>
 
 <variable name="rms_vel" language="python">
-from constants import *
+Ra = 1.e5
 from fluidity_tools import stat_parser as stat
 rms_vel= stat("stokes-1e5-p2p1-ALA-implicit-Di-1.0.stat")["Fluid"]["Velocity%magnitude"]["l2norm"][-1] * Ra
 </variable>
 
 <variable name="adiabatic_absorption" language="python">
-from constants import *
+Ra = 1.e5
 from fluidity_tools import stat_parser as stat
 adiabatic_absorption= stat("stokes-1e5-p2p1-ALA-implicit-Di-1.0.stat")["Fluid"]["Adiabatic_Absorption"]["integral"][-1] * Ra
 </variable>
 
 <variable name="viscous_dissipation" language="python">
-from constants import *
+Ra = 1.e5
 from fluidity_tools import stat_parser as stat
 viscous_dissipation= stat("stokes-1e5-p2p1-ALA-implicit-Di-1.0.stat")["Fluid"]["TemperatureSource"]["integral"][-1] * Ra
 </variable>
