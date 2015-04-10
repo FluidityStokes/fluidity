@@ -61,7 +61,7 @@
       </from_mesh>
     </mesh>
     <mesh name="InputMesh">
-      <from_file file_name="src/hemisphere_shell">
+      <from_file file_name="src/sphere_shell">
         <format name="gmsh"/>
         <stat>
           <include_in_stat/>
@@ -83,7 +83,7 @@
             </bottom_depth>
             <sizing_function>
               <constant>
-                <real_value rank="0">10</real_value>
+                <real_value rank="0">0.375</real_value>
               </constant>
             </sizing_function>
             <top_surface_id>
@@ -104,7 +104,7 @@
             </bottom_depth>
             <sizing_function>
               <constant>
-                <real_value rank="0">10</real_value>
+                <real_value rank="0">0.375</real_value>
               </constant>
             </sizing_function>
             <top_surface_id>
@@ -125,7 +125,7 @@
             </bottom_depth>
             <sizing_function>
               <constant>
-                <real_value rank="0">10</real_value>
+                <real_value rank="0">0.375</real_value>
               </constant>
             </sizing_function>
             <top_surface_id>
@@ -146,7 +146,7 @@
             </bottom_depth>
             <sizing_function>
               <constant>
-                <real_value rank="0">10</real_value>
+                <real_value rank="0">0.375</real_value>
               </constant>
             </sizing_function>
             <top_surface_id>
@@ -167,7 +167,7 @@
             </bottom_depth>
             <sizing_function>
               <constant>
-                <real_value rank="0">10</real_value>
+                <real_value rank="0">0.375</real_value>
               </constant>
             </sizing_function>
             <top_surface_id>
@@ -188,7 +188,7 @@
             </bottom_depth>
             <sizing_function>
               <constant>
-                <real_value rank="0">10</real_value>
+                <real_value rank="0">0.375</real_value>
               </constant>
             </sizing_function>
             <top_surface_id>
@@ -209,7 +209,7 @@
             </bottom_depth>
             <sizing_function>
               <constant>
-                <real_value rank="0">10</real_value>
+                <real_value rank="0">0.375</real_value>
               </constant>
             </sizing_function>
             <top_surface_id>
@@ -230,7 +230,7 @@
             </bottom_depth>
             <sizing_function>
               <constant>
-                <real_value rank="0">10</real_value>
+                <real_value rank="0">0.375</real_value>
               </constant>
             </sizing_function>
             <top_surface_id>
@@ -251,7 +251,7 @@
             </bottom_depth>
             <sizing_function>
               <constant>
-                <real_value rank="0">10</real_value>
+                <real_value rank="0">0.375</real_value>
               </constant>
             </sizing_function>
             <top_surface_id>
@@ -272,7 +272,7 @@
             </bottom_depth>
             <sizing_function>
               <constant>
-                <real_value rank="0">10</real_value>
+                <real_value rank="0">0.375</real_value>
               </constant>
             </sizing_function>
             <top_surface_id>
@@ -293,7 +293,7 @@
             </bottom_depth>
             <sizing_function>
               <constant>
-                <real_value rank="0">10</real_value>
+                <real_value rank="0">0.375</real_value>
               </constant>
             </sizing_function>
             <top_surface_id>
@@ -314,7 +314,7 @@
             </bottom_depth>
             <sizing_function>
               <constant>
-                <real_value rank="0">10</real_value>
+                <real_value rank="0">0.375</real_value>
               </constant>
             </sizing_function>
             <top_surface_id>
@@ -335,7 +335,7 @@
             </bottom_depth>
             <sizing_function>
               <constant>
-                <real_value rank="0">10</real_value>
+                <real_value rank="0">0.375</real_value>
               </constant>
             </sizing_function>
             <top_surface_id>
@@ -356,7 +356,7 @@
             </bottom_depth>
             <sizing_function>
               <constant>
-                <real_value rank="0">10</real_value>
+                <real_value rank="0">0.375</real_value>
               </constant>
             </sizing_function>
             <top_surface_id>
@@ -377,7 +377,7 @@
             </bottom_depth>
             <sizing_function>
               <constant>
-                <real_value rank="0">10</real_value>
+                <real_value rank="0">0.375</real_value>
               </constant>
             </sizing_function>
             <top_surface_id>
@@ -398,7 +398,7 @@
             </bottom_depth>
             <sizing_function>
               <constant>
-                <real_value rank="0">10</real_value>
+                <real_value rank="0">0.375</real_value>
               </constant>
             </sizing_function>
             <top_surface_id>
@@ -406,6 +406,342 @@
             </top_surface_id>
             <bottom_surface_id>
               <integer_value rank="0">16</integer_value>
+            </bottom_surface_id>
+          </regions>
+          <regions name="125">
+            <region_ids>
+              <integer_value shape="1" rank="1">125</integer_value>
+            </region_ids>
+            <bottom_depth>
+              <constant>
+                <real_value rank="0">1.5</real_value>
+              </constant>
+            </bottom_depth>
+            <sizing_function>
+              <constant>
+                <real_value rank="0">0.375</real_value>
+              </constant>
+            </sizing_function>
+            <top_surface_id>
+              <integer_value rank="0">125</integer_value>
+            </top_surface_id>
+            <bottom_surface_id>
+              <integer_value rank="0">101</integer_value>
+            </bottom_surface_id>
+          </regions>
+          <regions name="126">
+            <region_ids>
+              <integer_value shape="1" rank="1">126</integer_value>
+            </region_ids>
+            <bottom_depth>
+              <constant>
+                <real_value rank="0">1.5</real_value>
+              </constant>
+            </bottom_depth>
+            <sizing_function>
+              <constant>
+                <real_value rank="0">0.375</real_value>
+              </constant>
+            </sizing_function>
+            <top_surface_id>
+              <integer_value rank="0">126</integer_value>
+            </top_surface_id>
+            <bottom_surface_id>
+              <integer_value rank="0">102</integer_value>
+            </bottom_surface_id>
+          </regions>
+          <regions name="127">
+            <region_ids>
+              <integer_value shape="1" rank="1">127</integer_value>
+            </region_ids>
+            <bottom_depth>
+              <constant>
+                <real_value rank="0">1.5</real_value>
+              </constant>
+            </bottom_depth>
+            <sizing_function>
+              <constant>
+                <real_value rank="0">0.375</real_value>
+              </constant>
+            </sizing_function>
+            <top_surface_id>
+              <integer_value rank="0">127</integer_value>
+            </top_surface_id>
+            <bottom_surface_id>
+              <integer_value rank="0">103</integer_value>
+            </bottom_surface_id>
+          </regions>
+          <regions name="128">
+            <region_ids>
+              <integer_value shape="1" rank="1">128</integer_value>
+            </region_ids>
+            <bottom_depth>
+              <constant>
+                <real_value rank="0">1.5</real_value>
+              </constant>
+            </bottom_depth>
+            <sizing_function>
+              <constant>
+                <real_value rank="0">0.375</real_value>
+              </constant>
+            </sizing_function>
+            <top_surface_id>
+              <integer_value rank="0">128</integer_value>
+            </top_surface_id>
+            <bottom_surface_id>
+              <integer_value rank="0">104</integer_value>
+            </bottom_surface_id>
+          </regions>
+          <regions name="129">
+            <region_ids>
+              <integer_value shape="1" rank="1">129</integer_value>
+            </region_ids>
+            <bottom_depth>
+              <constant>
+                <real_value rank="0">1.5</real_value>
+              </constant>
+            </bottom_depth>
+            <sizing_function>
+              <constant>
+                <real_value rank="0">0.375</real_value>
+              </constant>
+            </sizing_function>
+            <top_surface_id>
+              <integer_value rank="0">129</integer_value>
+            </top_surface_id>
+            <bottom_surface_id>
+              <integer_value rank="0">105</integer_value>
+            </bottom_surface_id>
+          </regions>
+          <regions name="130">
+            <region_ids>
+              <integer_value shape="1" rank="1">130</integer_value>
+            </region_ids>
+            <bottom_depth>
+              <constant>
+                <real_value rank="0">1.5</real_value>
+              </constant>
+            </bottom_depth>
+            <sizing_function>
+              <constant>
+                <real_value rank="0">0.375</real_value>
+              </constant>
+            </sizing_function>
+            <top_surface_id>
+              <integer_value rank="0">130</integer_value>
+            </top_surface_id>
+            <bottom_surface_id>
+              <integer_value rank="0">106</integer_value>
+            </bottom_surface_id>
+          </regions>
+          <regions name="131">
+            <region_ids>
+              <integer_value shape="1" rank="1">131</integer_value>
+            </region_ids>
+            <bottom_depth>
+              <constant>
+                <real_value rank="0">1.5</real_value>
+              </constant>
+            </bottom_depth>
+            <sizing_function>
+              <constant>
+                <real_value rank="0">0.375</real_value>
+              </constant>
+            </sizing_function>
+            <top_surface_id>
+              <integer_value rank="0">131</integer_value>
+            </top_surface_id>
+            <bottom_surface_id>
+              <integer_value rank="0">107</integer_value>
+            </bottom_surface_id>
+          </regions>
+          <regions name="132">
+            <region_ids>
+              <integer_value shape="1" rank="1">132</integer_value>
+            </region_ids>
+            <bottom_depth>
+              <constant>
+                <real_value rank="0">1.5</real_value>
+              </constant>
+            </bottom_depth>
+            <sizing_function>
+              <constant>
+                <real_value rank="0">0.375</real_value>
+              </constant>
+            </sizing_function>
+            <top_surface_id>
+              <integer_value rank="0">132</integer_value>
+            </top_surface_id>
+            <bottom_surface_id>
+              <integer_value rank="0">108</integer_value>
+            </bottom_surface_id>
+          </regions>
+          <regions name="133">
+            <region_ids>
+              <integer_value shape="1" rank="1">133</integer_value>
+            </region_ids>
+            <bottom_depth>
+              <constant>
+                <real_value rank="0">1.5</real_value>
+              </constant>
+            </bottom_depth>
+            <sizing_function>
+              <constant>
+                <real_value rank="0">0.375</real_value>
+              </constant>
+            </sizing_function>
+            <top_surface_id>
+              <integer_value rank="0">133</integer_value>
+            </top_surface_id>
+            <bottom_surface_id>
+              <integer_value rank="0">109</integer_value>
+            </bottom_surface_id>
+          </regions>
+          <regions name="134">
+            <region_ids>
+              <integer_value shape="1" rank="1">134</integer_value>
+            </region_ids>
+            <bottom_depth>
+              <constant>
+                <real_value rank="0">1.5</real_value>
+              </constant>
+            </bottom_depth>
+            <sizing_function>
+              <constant>
+                <real_value rank="0">0.375</real_value>
+              </constant>
+            </sizing_function>
+            <top_surface_id>
+              <integer_value rank="0">134</integer_value>
+            </top_surface_id>
+            <bottom_surface_id>
+              <integer_value rank="0">110</integer_value>
+            </bottom_surface_id>
+          </regions>
+          <regions name="135">
+            <region_ids>
+              <integer_value shape="1" rank="1">135</integer_value>
+            </region_ids>
+            <bottom_depth>
+              <constant>
+                <real_value rank="0">1.5</real_value>
+              </constant>
+            </bottom_depth>
+            <sizing_function>
+              <constant>
+                <real_value rank="0">0.375</real_value>
+              </constant>
+            </sizing_function>
+            <top_surface_id>
+              <integer_value rank="0">135</integer_value>
+            </top_surface_id>
+            <bottom_surface_id>
+              <integer_value rank="0">111</integer_value>
+            </bottom_surface_id>
+          </regions>
+          <regions name="136">
+            <region_ids>
+              <integer_value shape="1" rank="1">136</integer_value>
+            </region_ids>
+            <bottom_depth>
+              <constant>
+                <real_value rank="0">1.5</real_value>
+              </constant>
+            </bottom_depth>
+            <sizing_function>
+              <constant>
+                <real_value rank="0">0.375</real_value>
+              </constant>
+            </sizing_function>
+            <top_surface_id>
+              <integer_value rank="0">136</integer_value>
+            </top_surface_id>
+            <bottom_surface_id>
+              <integer_value rank="0">112</integer_value>
+            </bottom_surface_id>
+          </regions>
+          <regions name="137">
+            <region_ids>
+              <integer_value shape="1" rank="1">137</integer_value>
+            </region_ids>
+            <bottom_depth>
+              <constant>
+                <real_value rank="0">1.5</real_value>
+              </constant>
+            </bottom_depth>
+            <sizing_function>
+              <constant>
+                <real_value rank="0">0.375</real_value>
+              </constant>
+            </sizing_function>
+            <top_surface_id>
+              <integer_value rank="0">137</integer_value>
+            </top_surface_id>
+            <bottom_surface_id>
+              <integer_value rank="0">113</integer_value>
+            </bottom_surface_id>
+          </regions>
+          <regions name="138">
+            <region_ids>
+              <integer_value shape="1" rank="1">138</integer_value>
+            </region_ids>
+            <bottom_depth>
+              <constant>
+                <real_value rank="0">1.5</real_value>
+              </constant>
+            </bottom_depth>
+            <sizing_function>
+              <constant>
+                <real_value rank="0">0.375</real_value>
+              </constant>
+            </sizing_function>
+            <top_surface_id>
+              <integer_value rank="0">138</integer_value>
+            </top_surface_id>
+            <bottom_surface_id>
+              <integer_value rank="0">114</integer_value>
+            </bottom_surface_id>
+          </regions>
+          <regions name="139">
+            <region_ids>
+              <integer_value shape="1" rank="1">139</integer_value>
+            </region_ids>
+            <bottom_depth>
+              <constant>
+                <real_value rank="0">1.5</real_value>
+              </constant>
+            </bottom_depth>
+            <sizing_function>
+              <constant>
+                <real_value rank="0">0.375</real_value>
+              </constant>
+            </sizing_function>
+            <top_surface_id>
+              <integer_value rank="0">139</integer_value>
+            </top_surface_id>
+            <bottom_surface_id>
+              <integer_value rank="0">115</integer_value>
+            </bottom_surface_id>
+          </regions>
+          <regions name="140">
+            <region_ids>
+              <integer_value shape="1" rank="1">140</integer_value>
+            </region_ids>
+            <bottom_depth>
+              <constant>
+                <real_value rank="0">1.5</real_value>
+              </constant>
+            </bottom_depth>
+            <sizing_function>
+              <constant>
+                <real_value rank="0">0.375</real_value>
+              </constant>
+            </sizing_function>
+            <top_surface_id>
+              <integer_value rank="0">140</integer_value>
+            </top_surface_id>
+            <bottom_surface_id>
+              <integer_value rank="0">116</integer_value>
             </bottom_surface_id>
           </regions>
         </extrude>
@@ -453,7 +789,7 @@
   <physical_parameters>
     <gravity>
       <magnitude>
-        <real_value rank="0">10.0</real_value>
+        <real_value rank="0">1.0e4</real_value>
       </magnitude>
       <vector_field name="GravityDirection" rank="1">
         <prescribed>
@@ -501,7 +837,7 @@
           </poisson_pressure_solution>
           <use_projection_method>
             <full_schur_complement>
-              <inner_matrix name="FullMassMatrix">
+              <inner_matrix name="FullMomentumMatrix">
                 <solver>
                   <iterative_method name="preonly"/>
                   <preconditioner name="lu">
@@ -519,7 +855,7 @@
                   </diagnostics>
                 </solver>
               </inner_matrix>
-              <preconditioner_matrix name="DiagonalSchurComplement"/>
+              <preconditioner_matrix name="ScaledPressureMassMatrix"/>
             </full_schur_complement>
           </use_projection_method>
         </scheme>
@@ -544,14 +880,16 @@
             </solver>
           </preconditioner>
           <relative_error>
-            <real_value rank="0">1.e-6</real_value>
+            <real_value rank="0">1.e-12</real_value>
           </relative_error>
           <max_iterations>
             <integer_value rank="0">100</integer_value>
           </max_iterations>
           <never_ignore_solver_failures/>
           <diagnostics>
-            <monitors/>
+            <monitors>
+              <preconditioned_residual/>
+            </monitors>
           </diagnostics>
         </solver>
         <output/>
@@ -577,7 +915,9 @@
             <stabilisation>
               <no_stabilisation/>
             </stabilisation>
-            <mass_terms/>
+            <mass_terms>
+              <exclude_mass_terms/>
+            </mass_terms>
             <advection_terms>
               <exclude_advection_terms/>
             </advection_terms>
@@ -621,16 +961,39 @@
         </initial_condition>
         <boundary_conditions name="Bottom">
           <surface_ids>
-            <integer_value shape="16" rank="1">1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16</integer_value>
+            <integer_value shape="32" rank="1">1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 101 102 103 104 105 106 107 108 109 110 111 112 113 114 115 116</integer_value>
           </surface_ids>
-          <type name="no_normal_flow"/>
+          <type name="dirichlet">
+            <align_bc_with_surface>
+              <normal_component>
+                <constant>
+                  <real_value rank="0">0.0</real_value>
+                </constant>
+              </normal_component>
+              <normal_direction>
+                <python>
+                  <string_value lines="20" type="code" language="python">def val(X,t):
+  from math import sqrt
+  r = sqrt(X[0]**2+X[1]**2+X[2]**2)
+  return -X[0]/r,-X[1]/r,-X[2]/r</string_value>
+                </python>
+              </normal_direction>
+            </align_bc_with_surface>
+          </type>
         </boundary_conditions>
-        <boundary_conditions name="Sides">
-          <surface_ids>
-            <integer_value shape="8" rank="1">17 18 19 20 21 22 23 24</integer_value>
-          </surface_ids>
-          <type name="no_normal_flow"/>
-        </boundary_conditions>
+        <tensor_field name="Viscosity" rank="2">
+          <prescribed>
+            <mesh name="CoordinateMesh"/>
+            <value name="WholeMesh">
+              <isotropic>
+                <constant>
+                  <real_value rank="0">1.0</real_value>
+                </constant>
+              </isotropic>
+            </value>
+            <output/>
+          </prescribed>
+        </tensor_field>
         <output/>
         <stat>
           <include_in_stat/>
@@ -660,7 +1023,7 @@
           <python>
             <string_value lines="20" type="code" language="python">def val(X, t):
   r = (X[0]**2 + X[1]**2 + X[2]**2)**0.5
-  return 10.*(2.7 - r)</string_value>
+  return 1.e4*(2.7 - r)</string_value>
           </python>
         </value>
         <output/>

@@ -2,7 +2,7 @@
 <testproblem>
   <name>Test of buoyancy at gauss points.</name>
   <owner userid="cwilson"/>
-  <problem_definition length="short" nprocs="1">
+  <problem_definition length="special" nprocs="1">
     <command_line>fluidity -v3 -l p2p1_nodal_2d.flml; fluidity -v3 -l p2p1_gauss_2d.flml; fluidity -v3 -l p2p1_nodal_3d.flml; fluidity -v3 -l p2p1_gauss_3d.flml</command_line>
   </problem_definition>
   <variables>
