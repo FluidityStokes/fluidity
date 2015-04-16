@@ -68,7 +68,8 @@ contains
     type(vector_field) :: prescribed_source
     type(tensor_field), pointer :: tfield
     
-    integer :: stat, i
+    character(len=FIELD_NAME_LEN) :: sfield_name
+    integer :: stat, i, n_generic_scalar_fields, j
     logical :: gravity, diagnostic
     
     ewrite(1,*) 'Entering calculate_momentum_diagnostics'
@@ -87,6 +88,23 @@ contains
       ! for the swe there's no buoyancy term
       gravity = .false.
     end if
+
+    ! generic scalar field dependencies of the eos need to be updated before the density is calculated
+    do i = 1, size(state) ! really we should be looping over submaterials here but we need to pass state into
+                          ! calculate_diagnostic_variable and there's no way to relate the index in submaterials 
+                          ! to the one in state
+       n_generic_scalar_fields = option_count(trim(state(i)%option_path) // "/equation_of_state/fluids/linear" &
+                                                                         //"/generic_scalar_field_dependency")
+       do j = 1, n_generic_scalar_fields
+         call get_option(trim(state(i)%option_path) // "/equation_of_state/fluids/linear" &
+                                                    // "/generic_scalar_field_dependency[" // int2str(j-1) // "]/name", &
+                         sfield_name)
+         sfield => extract_scalar_field(state(i), sfield_name)
+         if (have_option(trim(sfield%option_path) // "/diagnostic")) then
+           call calculate_diagnostic_variable(state, i, sfield)
+         end if
+       end do
+    end do
 
     bulk_density => extract_scalar_field(submaterials(submaterials_istate), 'Density', stat)
     diagnostic = .false.

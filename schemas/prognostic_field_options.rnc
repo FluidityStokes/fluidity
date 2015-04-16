@@ -266,7 +266,8 @@ prognostic_scalar_field =
                   scalar_python_diagnostic_algorithm |
                   internal_algorithm |
                   viscous_dissipation_algorithm |
-                  viscous_dissipation_plus_surface_adiabat_algorithm
+                  viscous_dissipation_plus_surface_adiabat_algorithm |
+                  viscous_dissipation_plus_surface_adiabat_and_latent_heating_algorithm
                ),
                ## Add the source field directly to the 
                ## matrix system right hand side. To be 
@@ -294,7 +295,9 @@ prognostic_scalar_field =
                (
                   scalar_python_diagnostic_algorithm |
                   internal_algorithm |
-		  adiabatic_heating_coefficient_algorithm
+                  adiabatic_heating_coefficient_algorithm |
+                  phase_change_latent_heating_absorption |
+                  adiabatic_plus_latent_heating_algorithm
                ),
                diagnostic_scalar_field_no_adapt
             }

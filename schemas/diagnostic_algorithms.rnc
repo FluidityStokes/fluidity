@@ -1405,6 +1405,131 @@ viscous_dissipation_plus_surface_adiabat_algorithm =
       }
    )
 
+viscous_dissipation_plus_surface_adiabat_and_latent_heating_algorithm =
+   (
+      ## algorithm for calculating the viscous dissipation with a surface adiabat term.
+       element algorithm {
+         attribute name { "viscous_dissipation_plus_surface_terms" },
+         attribute material_phase_support { "single "},
+         latent_heating_options,
+         ## The surface temperature for the adiabat term
+         element surface_temperature {
+           real
+         }
+      }
+   )
+
+phase_change_latent_heating_absorption = 
+   (
+      ## algorithm for calculating the latent heating due to a phase change
+      element algorithm {
+        attribute name { "phase_change_latent_heating_absorption" },
+        attribute material_phase_support { "single" },
+        latent_heating_options
+      }
+   )
+
+phase_change_latent_heating = 
+   (
+      ## algorithm for calculating the latent heating due to a phase change
+      element algorithm {
+        attribute name { "phase_change_latent_heating" },
+        attribute material_phase_support { "single" },
+        latent_heating_options,
+        ## The surface temperature (if extracted from the full temperature)
+        element surface_temperature {
+          real
+        }?
+      }
+   )
+
+latent_heating_options =
+   (
+      ## Provide the name of a field describing a phase change.
+      element phase_change_indicator_field {
+        attribute name { xsd:string },
+        ## The change in the density across this phase change.
+        ## 
+        ## This may be the same as the expansion coefficient for this field in the equation of state.
+        element delta_rho {
+          real
+        },
+        ## The Clapeyron slope of the phase change.
+        ##
+        ## If using the depth_dependent_clapeyron_phase_change_indicator diagnostic algorithm for this field
+        ## this may be the same as the Calpeyron slope provided there.
+        element clapeyron_slope {
+          real
+        }
+      }+,
+      ## Spatial discretisation options
+      element spatial_discretisation {
+         ## Options relating to the mass matrix
+         element mass_terms {
+           ## Exclude the time derivative from the caluclation of the latent heating
+           element exclude_mass {
+             comment
+           }?
+         }
+      },
+      ## Temporal discretisation options
+      element temporal_discretisation {
+         ## Implicit/explicit control (THETA)
+         ##  =0.  -- explicit
+         ##  =0.5 -- Crank-Nicolson
+         ##  =1.  -- implicit
+         element theta {
+            real
+         }
+      },
+      (
+         ## Consistent mass Galerkin projection of latent heating. Requires
+         ## solver options.
+         element solver {
+            linear_solver_options_sym
+         }|
+         ## Lumped mass Galerkin projection of the latent heating.
+         element lump_mass {
+            comment
+         }|
+         ## Discontinuous galerkin projection of the latent heating.
+         ##
+         ## The mesh must be discontinuous!
+         element discontinuous_galerkin_mass {
+            comment
+         }
+      )
+   )
+
+depth_dependent_clapeyron_phase_change_indicator =
+   (
+      ## algorithm for calculating a temperature and depth dependent phase change indicator (0 to 1)
+      ## using a Clausius-Clapeyron slope and a tanh function
+      ##
+      ## This mostly follows the description of Christensen & Yuen, 1985.
+      element algorithm {
+        attribute name { "depth_dependent_clapeyron_phase_change_indicator" },
+        attribute material_phase_support { "single" },
+        ## The depth of the phase change at zero temperature 
+        element reference_depth {
+          real
+        },
+        ## The Clapeyron slope of the phase change.
+        ##
+        ## NOTE that this will be divided by rho0*g to convert it to depth dependence.
+        element clapeyron_slope {
+          real
+        },
+        ## The width of the phase transition.
+        ##
+        ## NOTE that this differs from the definition of Christensen & Yuen, 1985 where the width used
+        ## is actually a half width so equal to half this value.
+        element transition_width {
+          real
+        }
+      }
+   )
+
 adiabatic_heating_coefficient_algorithm =
    (
       ## algorithm for calculating adiabatic_heating coefficient,
@@ -1424,6 +1549,17 @@ adiabatic_heating_absorption_algorithm =
          attribute name { "adiabatic_heating_absorption" },
          attribute material_phase_support { "single "}
        }
+   )
+
+adiabatic_plus_latent_heating_algorithm =
+   (
+      ## algorithm for calculating adiabatic and latent heating coefficient,
+      ## needed when applying adiabatic heating absorption term.
+       element algorithm {
+         attribute name { "adiabatic_plus_latent_heating_coefficient" },
+         attribute material_phase_support { "single "},
+         latent_heating_options
+      }
    )
 
 # Mass matrix
@@ -1557,6 +1693,7 @@ scalar_diagnostic_algorithms |= scalar_copy_algorithm
 scalar_diagnostic_algorithms |= scalar_advection_algorithm
 scalar_diagnostic_algorithms |= scalar_edge_lengths_algorithm
 scalar_diagnostic_algorithms |= projection_scalar_potential_algorithm
+scalar_diagnostic_algorithms |= phase_change_latent_heating
 scalar_diagnostic_algorithms |= particle_reynolds_number_algorithm
 scalar_diagnostic_algorithms |= apparent_density_algorithm
 scalar_diagnostic_algorithms |= node_halo_diagnostic_algorithm
@@ -1571,6 +1708,7 @@ scalar_diagnostic_algorithms |= element_universal_numbering_algorithm
 scalar_diagnostic_algorithms |= element_ownership_algorithm
 scalar_diagnostic_algorithms |= element_halo_diagnostic_algorithm
 scalar_diagnostic_algorithms |= div_algorithm
+scalar_diagnostic_algorithms |= depth_dependent_clapeyron_phase_change_indicator
 scalar_diagnostic_algorithms |= curl_2d_algorithm
 scalar_diagnostic_algorithms |= column_id_algorithm
 scalar_diagnostic_algorithms |= adiabatic_heating_coefficient_algorithm

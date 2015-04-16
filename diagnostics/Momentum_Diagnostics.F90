@@ -40,6 +40,7 @@ module momentum_diagnostics
   use global_parameters, only : OPTION_PATH_LEN
   use multimaterial_module
   use solvers
+  use sparse_matrices_fields
   use sparsity_patterns_meshes
   use spud
   use state_fields_module
@@ -59,7 +60,12 @@ module momentum_diagnostics
             calculate_scalar_potential, calculate_projection_scalar_potential, &
             calculate_geostrophic_velocity, calculate_viscous_dissipation, & 
             calculate_adiabatic_heating_coefficient, calculate_adiabatic_heating_absorption, &
-            calculate_viscous_dissipation_plus_surface_adiabat           
+            calculate_adiabatic_plus_latent_heating_coefficient, &
+            calculate_viscous_dissipation_plus_surface_adiabat, &
+            calculate_viscous_dissipation_plus_surface_terms, &
+            calculate_depth_dependent_clapeyron_phase_change_indicator, &
+            calculate_phase_change_latent_heating_absorption, &
+            calculate_phase_change_latent_heating
   
 contains
 
@@ -120,7 +126,6 @@ contains
     type(tensor_field), pointer :: zero_conc_viscosity
     type(scalar_field) :: rhs
     integer :: sediment_classes, i
-    character(len = FIELD_NAME_LEN) :: field_name
     
     ewrite(1,*) 'In calculate_sediment_concentration_dependent_viscosity'
 
@@ -259,7 +264,6 @@ contains
     type(scalar_field), intent(inout) :: s_field
 
     type(scalar_field) :: surface_adiabat_field
-    logical :: include_surface_adiabat
     
     ewrite(1,*) 'In calculate_viscous_dissipation_plus_surface_adiabat'
 
@@ -281,13 +285,45 @@ contains
 
   end subroutine calculate_viscous_dissipation_plus_surface_adiabat
 
+  subroutine calculate_viscous_dissipation_plus_surface_terms(state, s_field)
+    type(state_type), intent(inout) :: state
+    type(scalar_field), intent(inout) :: s_field
+
+    type(scalar_field) :: surface_field
+    
+    ewrite(1,*) 'In calculate_viscous_dissipation_plus_surface_terms'
+
+    ! This must be done first since it sets the scalar field to the viscous dissipation
+    call calculate_viscous_dissipation(state, s_field)
+
+    ! Allocate surface adiabat field, which will later be added to viscous dissipation:
+    call allocate(surface_field, s_field%mesh, "SurfaceField")
+    surface_field%option_path = s_field%option_path
+
+    ! Calculate surface adiabat term:
+    call adiabatic_heating_coefficient(state, surface_field, include_surface_adiabat=.true.)
+
+    ! Add surface adiabat to viscous dissipation:
+    call addto(s_field, surface_field)
+
+    call zero(surface_field)
+
+    ! Calculate surface latent heating term:
+    call latent_heating_projection(state, surface_field)
+
+    ! Add surface latent heating to viscous dissipation and clean up:
+    call addto(s_field, surface_field, -1.0)
+    call deallocate(surface_field)
+
+    ewrite_minmax(s_field)
+
+  end subroutine calculate_viscous_dissipation_plus_surface_terms
+
   subroutine calculate_adiabatic_heating_coefficient(state, s_field)
     ! Calculates adiabatic heating coefficient, which is later multiplied
     ! by Temperature to form an absorption term :
     type(state_type), intent(inout) :: state
     type(scalar_field), intent(inout) :: s_field
-
-    logical :: include_surface_adiabat
 
     ewrite(1,*) 'In calculate_adiabatic_heating_coefficient'
 
@@ -636,6 +672,269 @@ contains
     call deallocate(temperature_remap)
 
   end subroutine calculate_adiabatic_heating_absorption
+
+  subroutine calculate_adiabatic_plus_latent_heating_coefficient(state, s_field)
+    type(state_type), intent(inout) :: state
+    type(scalar_field), intent(inout) :: s_field
+
+    type(scalar_field) :: latent_heating_field
+
+    ewrite(1,*) 'In calculate_adiabatic_plus_latent_heating_coefficient'
+
+    call adiabatic_heating_coefficient(state, s_field, include_surface_adiabat=.false.)
+
+    call allocate(latent_heating_field, s_field%mesh, "LatentHeatingField")
+    latent_heating_field%option_path = s_field%option_path
+
+    call latent_heating_projection(state, latent_heating_field)
+
+    call addto(s_field, latent_heating_field, -1.0)
+
+    call deallocate(latent_heating_field)
+
+    ewrite_minmax(s_field)
+
+  end subroutine calculate_adiabatic_plus_latent_heating_coefficient
+
+  subroutine calculate_depth_dependent_clapeyron_phase_change_indicator(state, s_field)
+    ! Calculates a field indicating a temperature and depth dependent phase 
+    ! change based on a Clausius-Clapeyron slope
+    type(state_type), intent(inout) :: state
+    type(scalar_field), intent(inout) :: s_field
+
+    type(scalar_field), pointer :: temperature
+    type(scalar_field) :: temperature_remap, vertical_position, overpressure
+    type(vector_field) :: positions
+
+    integer :: i, gdim, stat
+    real :: z0, gammac, w, g, rho0
+
+    ewrite(2,*) "Entering calculate_depth_dependent_clapeyron_phase_change_indicator"
+
+    call get_option("/geometry/dimension", gdim)
+
+    call get_option(trim(s_field%option_path)//"/diagnostic/algorithm/reference_depth", z0)
+    call get_option(trim(s_field%option_path)//"/diagnostic/algorithm/clapeyron_slope", gammac)
+    call get_option(trim(s_field%option_path)//"/diagnostic/algorithm/transition_width", w)
+
+    call get_option("/physical_parameters/gravity/magnitude", g, stat)
+    if (stat /= 0) then
+      FLExit("depth_dependent_clapeyron_phase_change_indicator needs a gravity magnitude to be available.")
+    end if
+
+    call get_option(trim(state%option_path)//"/equation_of_state/fluids/linear/reference_density", rho0, stat)
+    if (stat /= 0) then
+      FLExit("depth_dependent_clapeyron_phase_change_indicator needs a reference_density in the same material_phase.")
+    end if
+    
+    positions = get_nodal_coordinate_field(state, s_field%mesh)
+    vertical_position = extract_scalar_field(positions, gdim)
+
+    ! Extract temperature from state:
+    temperature => extract_scalar_field(state, "Temperature")
+    call allocate(temperature_remap, s_field%mesh, "TemperatureRemap")
+    call remap_field(temperature, temperature_remap)
+
+    call allocate(overpressure, s_field%mesh, "OverPressure")
+
+    call set(overpressure, temperature)
+    call scale(overpressure, gammac/rho0/g)
+    call addto(overpressure, vertical_position)
+    call scale(overpressure, -1.0)
+    call addto(overpressure, z0)
+    
+    do i = 1, node_count(s_field)
+      call set(s_field, i, 0.5*(1. + tanh(2.*node_val(overpressure, i)/w)))
+    end do
+
+    ewrite_minmax(s_field)
+
+    call deallocate(overpressure)
+    call deallocate(temperature_remap)
+    call deallocate(positions)
+
+  end subroutine calculate_depth_dependent_clapeyron_phase_change_indicator
+
+  subroutine calculate_phase_change_latent_heating_absorption(state, s_field)
+    type(state_type), intent(inout) :: state
+    type(scalar_field), intent(inout) :: s_field
+
+    ewrite(2,*) "Entering calculate_phase_change_latent_heating_absorption."
+
+    call latent_heating_projection(state, s_field)
+
+  end subroutine calculate_phase_change_latent_heating_absorption
+
+  subroutine calculate_phase_change_latent_heating(state, s_field)
+    type(state_type), intent(inout) :: state
+    type(scalar_field), intent(inout) :: s_field
+
+    type(scalar_field), pointer :: temperature
+
+    ewrite(2,*) "Entering calculate_phase_change_latent_heating."
+
+    temperature => extract_scalar_field(state, "Temperature")
+
+    call latent_heating_projection(state, s_field, temperature)
+
+  end subroutine calculate_phase_change_latent_heating
+
+  subroutine latent_heating_projection(state, s_field, temperature)
+    type(state_type), intent(inout) :: state
+    type(scalar_field), intent(inout) :: s_field
+    type(scalar_field), pointer, optional :: temperature
+
+    type(scalar_field_pointer), dimension(:), allocatable :: gammas, oldgammas
+    type(scalar_field), pointer :: masslump
+    type(scalar_field) :: rhs_field
+    type(csr_matrix), pointer :: mass
+    type(vector_field), pointer :: velocity, positions
+    
+    real, dimension(:), allocatable :: delta_rhos, m_clapeyrons
+
+    character(len=OPTION_PATH_LEN) :: option_path, gamma_option_path, eos_option_path
+    character(len=FIELD_NAME_LEN) :: field_name
+    integer :: i, ngammas, ele
+    real :: rho0, dt, theta, T0
+    logical :: lump_mass, dg_mass, exclude_mass, surface_temperature
+
+    call zero(s_field)
+
+    option_path = trim(s_field%option_path) // "/diagnostic/algorithm[0]"
+    
+    ngammas = option_count(trim(option_path) // &
+               "/phase_change_indicator_field")
+
+    allocate(gammas(ngammas), oldgammas(ngammas), delta_rhos(ngammas), m_clapeyrons(ngammas))
+
+    do i = 1, ngammas
+      gamma_option_path = trim(option_path) // &
+                     "/phase_change_indicator_field[" // int2str(i-1) // "]"
+
+      call get_option(trim(gamma_option_path) // "/name", field_name)
+      gammas(i)%ptr => extract_scalar_field(state, "Iterated"//trim(field_name))
+      ewrite_minmax(gammas(i)%ptr)
+      oldgammas(i)%ptr => extract_scalar_field(state, "Old"//trim(field_name))
+      ewrite_minmax(oldgammas(i)%ptr)
+
+      call get_option(trim(gamma_option_path) // "/delta_rho", delta_rhos(i))
+      call get_option(trim(gamma_option_path) // "/clapeyron_slope", m_clapeyrons(i))
+    end do
+    velocity  => extract_vector_field(state, "NonlinearVelocity")
+    positions => extract_vector_field(state, "Coordinate")
+
+    if (present(temperature)) then
+      ewrite_minmax(temperature)
+    end if
+    surface_temperature = have_option(trim(option_path) // "/surface_temperature" )
+    call get_option(trim(option_path) // "/surface_temperature", T0, default=0.0)
+
+    exclude_mass = have_option(trim(option_path) // "/spatial_discretisation/mass_terms/exclude_mass")
+    call get_option(trim(option_path) // "/temporal_discretisation/theta", theta)
+    call get_option("/timestepping/timestep", dt)
+
+    eos_option_path='/material_phase::'//trim(state%name)//'/equation_of_state'
+    call get_option(trim(eos_option_path)//'/fluids/linear/reference_density', rho0)
+
+    call allocate(rhs_field, s_field%mesh, "RHSLatentHeatingField")
+    call zero(rhs_field)
+
+    do ele = 1, ele_count(s_field)
+      call integrate_rhs_ele(ele)
+    end do
+
+    lump_mass = have_option(trim(option_path) // &
+               "/lump_mass")
+
+    dg_mass = have_option(trim(option_path) // &
+               "/discontinuous_galerkin_mass")
+
+    if(lump_mass) then
+      masslump => get_lumped_mass(state, s_field%mesh)
+      s_field%val = rhs_field%val / masslump%val
+    else if (dg_mass) then
+      assert(continuity(s_field)<0)
+      mass => get_dg_inverse_mass(state, s_field%mesh)
+      call mult(s_field, mass, rhs_field)
+    else
+      mass => get_mass_matrix(state, s_field%mesh)  
+      call petsc_solve(s_field, mass, rhs_field, option_path = trim(s_field%option_path)//"/diagnostic/algorithm")
+    end if
+
+    call deallocate(rhs_field)
+    deallocate(gammas, oldgammas, delta_rhos, m_clapeyrons)
+
+  contains
+
+    subroutine integrate_rhs_ele(ele)
+      integer, intent(in) :: ele
+      
+      ! For integration:
+      type(element_type), pointer :: rhs_shape, gamma_shape
+      integer :: dim, gi
+      real :: coeff
+      logical :: l_exclude_mass
+      real, dimension(ele_loc(rhs_field, ele)) :: rhs_addto
+      real, dimension(ele_ngi(positions, ele)) :: detwei, inner_prod
+      real, dimension(positions%dim, ele_ngi(positions, ele)) :: velocity_quad, grad_gamma_quad
+      real, dimension(:,:,:), allocatable :: dgamma_t
+
+      assert(size(gammas)==size(oldgammas))
+      assert(size(gammas)==size(delta_rhos))
+      assert(size(gammas)==size(m_clapeyrons))
+
+      l_exclude_mass = present_and_true(exclude_mass)
+
+      gamma_shape => ele_shape(gammas(1)%ptr, ele)
+      allocate(dgamma_t(ele_loc(gammas(1)%ptr, ele), ele_ngi(positions,ele), mesh_dim(positions)))
+      call transform_to_physical(positions, ele, gamma_shape, dgamma_t,  detwei = detwei)
+
+      rhs_addto = 0.0
+      rhs_shape => ele_shape(rhs_field, ele)
+
+      if (present(temperature)) then
+        detwei = detwei*(ele_val_at_quad(temperature, ele) + T0)
+      else if (surface_temperature) then
+        detwei = detwei*T0
+      end if
+
+      velocity_quad = ele_val_at_quad(velocity, ele)
+
+      do i = 1, size(gammas)
+        coeff = m_clapeyrons(i)*delta_rhos(i)/rho0/(rho0+delta_rhos(i))
+        if (.not. l_exclude_mass) then
+          rhs_addto = rhs_addto + shape_rhs(rhs_shape, coeff*detwei* &
+                       ((ele_val_at_quad(gammas(i)%ptr, ele) - ele_val_at_quad(oldgammas(i)%ptr, ele))/dt))
+        end if
+
+        if (.not. (ele_shape(gammas(i)%ptr, ele) == gamma_shape)) then
+          gamma_shape => ele_shape(gammas(i)%ptr, ele)
+          deallocate(dgamma_t)
+          allocate(dgamma_t(ele_loc(gammas(i)%ptr, ele), ele_ngi(positions,ele), mesh_dim(positions)))
+          call transform_to_physical(positions, ele, gamma_shape, dgamma_t)
+        end if
+
+        grad_gamma_quad = theta*ele_grad_at_quad(gammas(i)%ptr, ele, dgamma_t) + &
+                          (1.-theta)*ele_grad_at_quad(oldgammas(i)%ptr, ele, dgamma_t)
+
+        inner_prod = 0.
+        do dim = 1, velocity%dim
+           do gi = 1, ele_ngi(velocity, ele)
+              inner_prod(gi) = inner_prod(gi) + velocity_quad(dim,gi)*grad_gamma_quad(dim,gi)
+           end do
+        end do
+
+        rhs_addto = rhs_addto + shape_rhs( rhs_shape, coeff*detwei*inner_prod )
+      end do
+
+      ! Add this to the global RHS vector:
+      call addto(rhs_field, ele_nodes(rhs_field, ele), rhs_addto)
+
+      deallocate(dgamma_t)
+           
+    end subroutine integrate_rhs_ele
+
+  end subroutine latent_heating_projection
 
   subroutine calculate_bulk_viscosity(states, t_field)
     type(state_type), dimension(:), intent(inout) :: states

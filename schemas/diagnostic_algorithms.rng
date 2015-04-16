@@ -1888,6 +1888,145 @@ The mesh must be directly extruded.</a:documentation>
       </element>
     </element>
   </define>
+  <define name="viscous_dissipation_plus_surface_adiabat_and_latent_heating_algorithm">
+    <element name="algorithm">
+      <a:documentation>algorithm for calculating the viscous dissipation with a surface adiabat term.</a:documentation>
+      <attribute name="name">
+        <value>viscous_dissipation_plus_surface_terms</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single </value>
+      </attribute>
+      <ref name="latent_heating_options"/>
+      <element name="surface_temperature">
+        <a:documentation>The surface temperature for the adiabat term</a:documentation>
+        <ref name="real"/>
+      </element>
+    </element>
+  </define>
+  <define name="phase_change_latent_heating_absorption">
+    <element name="algorithm">
+      <a:documentation>algorithm for calculating the latent heating due to a phase change</a:documentation>
+      <attribute name="name">
+        <value>phase_change_latent_heating_absorption</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single</value>
+      </attribute>
+      <ref name="latent_heating_options"/>
+    </element>
+  </define>
+  <define name="phase_change_latent_heating">
+    <element name="algorithm">
+      <a:documentation>algorithm for calculating the latent heating due to a phase change</a:documentation>
+      <attribute name="name">
+        <value>phase_change_latent_heating</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single</value>
+      </attribute>
+      <ref name="latent_heating_options"/>
+      <optional>
+        <element name="surface_temperature">
+          <a:documentation>The surface temperature (if extracted from the full temperature)</a:documentation>
+          <ref name="real"/>
+        </element>
+      </optional>
+    </element>
+  </define>
+  <define name="latent_heating_options">
+    <oneOrMore>
+      <element name="phase_change_indicator_field">
+        <a:documentation>Provide the name of a field describing a phase change.</a:documentation>
+        <attribute name="name">
+          <data type="string"/>
+        </attribute>
+        <element name="delta_rho">
+          <a:documentation>The change in the density across this phase change.
+
+This may be the same as the expansion coefficient for this field in the equation of state.</a:documentation>
+          <ref name="real"/>
+        </element>
+        <element name="clapeyron_slope">
+          <a:documentation>The Clapeyron slope of the phase change.
+
+If using the depth_dependent_clapeyron_phase_change_indicator diagnostic algorithm for this field
+this may be the same as the Calpeyron slope provided there.</a:documentation>
+          <ref name="real"/>
+        </element>
+      </element>
+    </oneOrMore>
+    <element name="spatial_discretisation">
+      <a:documentation>Spatial discretisation options</a:documentation>
+      <element name="mass_terms">
+        <a:documentation>Options relating to the mass matrix</a:documentation>
+        <optional>
+          <element name="exclude_mass">
+            <a:documentation>Exclude the time derivative from the caluclation of the latent heating</a:documentation>
+            <ref name="comment"/>
+          </element>
+        </optional>
+      </element>
+    </element>
+    <element name="temporal_discretisation">
+      <a:documentation>Temporal discretisation options</a:documentation>
+      <element name="theta">
+        <a:documentation>Implicit/explicit control (THETA)
+ =0.  -- explicit
+ =0.5 -- Crank-Nicolson
+ =1.  -- implicit</a:documentation>
+        <ref name="real"/>
+      </element>
+    </element>
+    <choice>
+      <element name="solver">
+        <a:documentation>Consistent mass Galerkin projection of latent heating. Requires
+solver options.</a:documentation>
+        <ref name="linear_solver_options_sym"/>
+      </element>
+      <element name="lump_mass">
+        <a:documentation>Lumped mass Galerkin projection of the latent heating.</a:documentation>
+        <ref name="comment"/>
+      </element>
+      <element name="discontinuous_galerkin_mass">
+        <a:documentation>Discontinuous galerkin projection of the latent heating.
+
+The mesh must be discontinuous!</a:documentation>
+        <ref name="comment"/>
+      </element>
+    </choice>
+  </define>
+  <define name="depth_dependent_clapeyron_phase_change_indicator">
+    <element name="algorithm">
+      <a:documentation>algorithm for calculating a temperature and depth dependent phase change indicator (0 to 1)
+using a Clausius-Clapeyron slope and a tanh function
+
+This mostly follows the description of Christensen &amp; Yuen, 1985.</a:documentation>
+      <attribute name="name">
+        <value>depth_dependent_clapeyron_phase_change_indicator</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single</value>
+      </attribute>
+      <element name="reference_depth">
+        <a:documentation>The depth of the phase change at zero temperature </a:documentation>
+        <ref name="real"/>
+      </element>
+      <element name="clapeyron_slope">
+        <a:documentation>The Clapeyron slope of the phase change.
+
+NOTE that this will be divided by rho0*g to convert it to depth dependence.</a:documentation>
+        <ref name="real"/>
+      </element>
+      <element name="transition_width">
+        <a:documentation>The width of the phase transition.
+
+NOTE that this differs from the definition of Christensen &amp; Yuen, 1985 where the width used
+is actually a half width so equal to half this value.</a:documentation>
+        <ref name="real"/>
+      </element>
+    </element>
+  </define>
   <define name="adiabatic_heating_coefficient_algorithm">
     <element name="algorithm">
       <a:documentation>algorithm for calculating adiabatic_heating coefficient,
@@ -1911,6 +2050,19 @@ This is thus the full absorption term:</a:documentation>
       <attribute name="material_phase_support">
         <value>single </value>
       </attribute>
+    </element>
+  </define>
+  <define name="adiabatic_plus_latent_heating_algorithm">
+    <element name="algorithm">
+      <a:documentation>algorithm for calculating adiabatic and latent heating coefficient,
+needed when applying adiabatic heating absorption term.</a:documentation>
+      <attribute name="name">
+        <value>adiabatic_plus_latent_heating_coefficient</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single </value>
+      </attribute>
+      <ref name="latent_heating_options"/>
     </element>
   </define>
   <!-- Mass matrix -->
@@ -2110,6 +2262,9 @@ This field needs to be interpolated between adapts.</a:documentation>
     <ref name="projection_scalar_potential_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="phase_change_latent_heating"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="particle_reynolds_number_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
@@ -2150,6 +2305,9 @@ This field needs to be interpolated between adapts.</a:documentation>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="div_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="depth_dependent_clapeyron_phase_change_indicator"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="curl_2d_algorithm"/>
