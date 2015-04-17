@@ -2009,7 +2009,10 @@ This mostly follows the description of Christensen &amp; Yuen, 1985.</a:document
         <value>single</value>
       </attribute>
       <element name="reference_depth">
-        <a:documentation>The depth of the phase change at zero temperature </a:documentation>
+        <a:documentation>The depth of the phase change at zero temperature.
+
+NOTE that this is the depth from the top of the domain where the vertical coordinate is assumed 
+to be the last coordinate.</a:documentation>
         <ref name="real"/>
       </element>
       <element name="clapeyron_slope">
