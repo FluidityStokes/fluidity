@@ -1450,17 +1450,25 @@ latent_heating_options =
         attribute name { xsd:string },
         ## The change in the density across this phase change.
         ## 
-        ## This may be the same as the expansion coefficient for this field in the equation of state.
+        ## If activated the value given here is used.  
+        ## Otherwise the negated expansivity for this field under a fluid linear eos is taken.
+        ##
+        ## Normaly the values used in the equation of state and here will be the same but this option is provided 
+        ## for when they differ (e.g. non-dimensional simulations).
         element delta_rho {
           real
-        },
+        }?,
         ## The Clapeyron slope of the phase change.
         ##
-        ## If using the depth_dependent_clapeyron_phase_change_indicator diagnostic algorithm for this field
-        ## this may be the same as the Calpeyron slope provided there.
+        ## If activated the value given here is used.  
+        ## Otherwise we assume that a depth_dependent_depth_dependent_clapeyron_phase_change_indicator
+        ## diagnostic algorithm has been used for this field and taken the clapeyron slope from there.
+        ##
+        ## Normaly the values used in the algorithm and here will be the same but this option is provided 
+        ## for when they differ (e.g. non-dimensional simulations).
         element clapeyron_slope {
           real
-        }
+        }?
       }+,
       ## Spatial discretisation options
       element spatial_discretisation {
@@ -1482,23 +1490,11 @@ latent_heating_options =
             real
          }
       },
-      (
-         ## Consistent mass Galerkin projection of latent heating. Requires
-         ## solver options.
-         element solver {
-            linear_solver_options_sym
-         }|
-         ## Lumped mass Galerkin projection of the latent heating.
-         element lump_mass {
-            comment
-         }|
-         ## Discontinuous galerkin projection of the latent heating.
-         ##
-         ## The mesh must be discontinuous!
-         element discontinuous_galerkin_mass {
-            comment
-         }
-      )
+      ## Consistent mass Galerkin projection of latent heating. Requires
+      ## solver options.
+      element solver {
+         linear_solver_options_sym
+      }?
    )
 
 depth_dependent_clapeyron_phase_change_indicator =
@@ -1514,12 +1510,12 @@ depth_dependent_clapeyron_phase_change_indicator =
         ##
         ## NOTE that this is the depth from the top of the domain where the vertical coordinate is assumed 
         ## to be the last coordinate.
+        ##
+        ## NOTE that this will be scaled by rho0*g to convert it to a pressure.
         element reference_depth {
           real
         },
         ## The Clapeyron slope of the phase change.
-        ##
-        ## NOTE that this will be divided by rho0*g to convert it to depth dependence.
         element clapeyron_slope {
           real
         },
@@ -1527,6 +1523,8 @@ depth_dependent_clapeyron_phase_change_indicator =
         ##
         ## NOTE that this differs from the definition of Christensen & Yuen, 1985 where the width used
         ## is actually a half width so equal to half this value.
+        ##
+        ## NOTE that this will be scaled by rho0*g to convert it to a pressure.
         element transition_width {
           real
         }

@@ -1941,19 +1941,31 @@ The mesh must be directly extruded.</a:documentation>
         <attribute name="name">
           <data type="string"/>
         </attribute>
-        <element name="delta_rho">
-          <a:documentation>The change in the density across this phase change.
+        <optional>
+          <element name="delta_rho">
+            <a:documentation>The change in the density across this phase change.
 
-This may be the same as the expansion coefficient for this field in the equation of state.</a:documentation>
-          <ref name="real"/>
-        </element>
-        <element name="clapeyron_slope">
-          <a:documentation>The Clapeyron slope of the phase change.
+If activated the value given here is used.  
+Otherwise the negated expansivity for this field under a fluid linear eos is taken.
 
-If using the depth_dependent_clapeyron_phase_change_indicator diagnostic algorithm for this field
-this may be the same as the Calpeyron slope provided there.</a:documentation>
-          <ref name="real"/>
-        </element>
+Normaly the values used in the equation of state and here will be the same but this option is provided 
+for when they differ (e.g. non-dimensional simulations).</a:documentation>
+            <ref name="real"/>
+          </element>
+        </optional>
+        <optional>
+          <element name="clapeyron_slope">
+            <a:documentation>The Clapeyron slope of the phase change.
+
+If activated the value given here is used.  
+Otherwise we assume that a depth_dependent_depth_dependent_clapeyron_phase_change_indicator
+diagnostic algorithm has been used for this field and taken the clapeyron slope from there.
+
+Normaly the values used in the algorithm and here will be the same but this option is provided 
+for when they differ (e.g. non-dimensional simulations).</a:documentation>
+            <ref name="real"/>
+          </element>
+        </optional>
       </element>
     </oneOrMore>
     <element name="spatial_discretisation">
@@ -1978,23 +1990,13 @@ this may be the same as the Calpeyron slope provided there.</a:documentation>
         <ref name="real"/>
       </element>
     </element>
-    <choice>
+    <optional>
       <element name="solver">
         <a:documentation>Consistent mass Galerkin projection of latent heating. Requires
 solver options.</a:documentation>
         <ref name="linear_solver_options_sym"/>
       </element>
-      <element name="lump_mass">
-        <a:documentation>Lumped mass Galerkin projection of the latent heating.</a:documentation>
-        <ref name="comment"/>
-      </element>
-      <element name="discontinuous_galerkin_mass">
-        <a:documentation>Discontinuous galerkin projection of the latent heating.
-
-The mesh must be discontinuous!</a:documentation>
-        <ref name="comment"/>
-      </element>
-    </choice>
+    </optional>
   </define>
   <define name="depth_dependent_clapeyron_phase_change_indicator">
     <element name="algorithm">
@@ -2012,20 +2014,22 @@ This mostly follows the description of Christensen &amp; Yuen, 1985.</a:document
         <a:documentation>The depth of the phase change at zero temperature.
 
 NOTE that this is the depth from the top of the domain where the vertical coordinate is assumed 
-to be the last coordinate.</a:documentation>
+to be the last coordinate.
+
+NOTE that this will be scaled by rho0*g to convert it to a pressure.</a:documentation>
         <ref name="real"/>
       </element>
       <element name="clapeyron_slope">
-        <a:documentation>The Clapeyron slope of the phase change.
-
-NOTE that this will be divided by rho0*g to convert it to depth dependence.</a:documentation>
+        <a:documentation>The Clapeyron slope of the phase change.</a:documentation>
         <ref name="real"/>
       </element>
       <element name="transition_width">
         <a:documentation>The width of the phase transition.
 
 NOTE that this differs from the definition of Christensen &amp; Yuen, 1985 where the width used
-is actually a half width so equal to half this value.</a:documentation>
+is actually a half width so equal to half this value.
+
+NOTE that this will be scaled by rho0*g to convert it to a pressure.</a:documentation>
         <ref name="real"/>
       </element>
     </element>

@@ -309,10 +309,10 @@ contains
     call zero(surface_field)
 
     ! Calculate surface latent heating term:
-    call latent_heating_projection(state, surface_field)
+    call latent_heating(state, surface_field)
 
     ! Add surface latent heating to viscous dissipation and clean up:
-    call addto(s_field, surface_field, -1.0)
+    call addto(s_field, surface_field)
     call deallocate(surface_field)
 
     ewrite_minmax(s_field)
@@ -686,7 +686,7 @@ contains
     call allocate(latent_heating_field, s_field%mesh, "LatentHeatingField")
     latent_heating_field%option_path = s_field%option_path
 
-    call latent_heating_projection(state, latent_heating_field)
+    call latent_heating(state, latent_heating_field)
 
     call addto(s_field, latent_heating_field, -1.0)
 
@@ -739,13 +739,13 @@ contains
     call allocate(overpressure, s_field%mesh, "OverPressure")
 
     call set(overpressure, temperature)
-    call scale(overpressure, gammac/rho0/g)
-    call addto(overpressure, vertical_position)
+    call scale(overpressure, gammac)
+    call addto(overpressure, vertical_position, scale=rho0*g)
     call scale(overpressure, -1.0)
-    call addto(overpressure, z0)
+    call addto(overpressure, z0*rho0*g)
     
     do i = 1, node_count(s_field)
-      call set(s_field, i, 0.5*(1. + tanh(2.*node_val(overpressure, i)/w)))
+      call set(s_field, i, 0.5*(1. + tanh(2.*node_val(overpressure, i)/w/rho0/g)))
     end do
 
     ewrite_minmax(s_field)
@@ -762,7 +762,8 @@ contains
 
     ewrite(2,*) "Entering calculate_phase_change_latent_heating_absorption."
 
-    call latent_heating_projection(state, s_field)
+    call latent_heating(state, s_field)
+    call scale(s_field, -1.0)
 
   end subroutine calculate_phase_change_latent_heating_absorption
 
@@ -776,28 +777,32 @@ contains
 
     temperature => extract_scalar_field(state, "Temperature")
 
-    call latent_heating_projection(state, s_field, temperature)
+    call latent_heating(state, s_field, temperature)
 
   end subroutine calculate_phase_change_latent_heating
 
-  subroutine latent_heating_projection(state, s_field, temperature)
+  subroutine latent_heating(state, s_field, temperature)
     type(state_type), intent(inout) :: state
     type(scalar_field), intent(inout) :: s_field
     type(scalar_field), pointer, optional :: temperature
 
     type(scalar_field_pointer), dimension(:), allocatable :: gammas, oldgammas
-    type(scalar_field), pointer :: masslump
-    type(scalar_field) :: rhs_field
-    type(csr_matrix), pointer :: mass
-    type(vector_field), pointer :: velocity, positions
+    type(vector_field), pointer :: velocity
     
-    real, dimension(:), allocatable :: delta_rhos, m_clapeyrons
+    type(element_type) :: grad_gamma_shape
+    type(element_type), pointer :: gamma_shape
+    type(mesh_type) :: grad_gamma_mesh
+    type(scalar_field) :: grad_gamma_scalar
+    type(vector_field) :: velocity_remap
 
-    character(len=OPTION_PATH_LEN) :: option_path, gamma_option_path, eos_option_path
+    real, dimension(:), allocatable :: delta_rhos, m_clapeyrons
+    character(len=OPTION_PATH_LEN) :: option_path, gamma_option_path
     character(len=FIELD_NAME_LEN) :: field_name
-    integer :: i, ngammas, ele
+    integer :: i, ngammas, stat
     real :: rho0, dt, theta, T0
-    logical :: lump_mass, dg_mass, exclude_mass, surface_temperature
+    logical :: exclude_mass, have_surface_temperature, remaps_valid
+
+    ewrite(2,*) "Entering latent_heating."
 
     call zero(s_field)
 
@@ -805,6 +810,8 @@ contains
     
     ngammas = option_count(trim(option_path) // &
                "/phase_change_indicator_field")
+
+    remaps_valid = .true.
 
     allocate(gammas(ngammas), oldgammas(ngammas), delta_rhos(ngammas), m_clapeyrons(ngammas))
 
@@ -818,24 +825,223 @@ contains
       oldgammas(i)%ptr => extract_scalar_field(state, "Old"//trim(field_name))
       ewrite_minmax(oldgammas(i)%ptr)
 
-      call get_option(trim(gamma_option_path) // "/delta_rho", delta_rhos(i))
-      call get_option(trim(gamma_option_path) // "/clapeyron_slope", m_clapeyrons(i))
-    end do
-    velocity  => extract_vector_field(state, "NonlinearVelocity")
-    positions => extract_vector_field(state, "Coordinate")
+      if (remaps_valid) then
+        gamma_shape => gammas(i)%ptr%mesh%shape
+        grad_gamma_shape = make_element_shape(vertices=gamma_shape%numbering%vertices, dim=gamma_shape%dim, &
+                                              degree=gamma_shape%degree-1, quad=gamma_shape%quadrature)
+        grad_gamma_mesh = make_mesh(model=gammas(i)%ptr%mesh, shape=grad_gamma_shape, continuity=-1)
+        grad_gamma_mesh%name="Grad"//trim(gammas(i)%ptr%mesh%name)
+        call deallocate(grad_gamma_shape)
+        call allocate(grad_gamma_scalar, grad_gamma_mesh, "DummyScalarGrad"//trim(gammas(i)%ptr%name))
+        call deallocate(grad_gamma_mesh)
+        call test_remap_validity(grad_gamma_scalar, s_field, stat=stat)
+        call deallocate(grad_gamma_scalar)
+        remaps_valid = stat==0
+      end if
 
-    if (present(temperature)) then
-      ewrite_minmax(temperature)
-    end if
-    surface_temperature = have_option(trim(option_path) // "/surface_temperature" )
+      if (have_option(trim(gamma_option_path) // "/delta_rho")) then
+        call get_option(trim(gamma_option_path) // "/delta_rho", delta_rhos(i))
+      else
+        call get_option(trim(state%option_path) // "/equation_of_state/fluids/linear" // &
+                       "/generic_scalar_field_dependency::"//trim(field_name)//"/expansion_coefficient", &
+                       delta_rhos(i), stat=stat)
+        if (stat /= 0) then
+          ewrite(-1,*) "Couldn't find delta_rho: should be specified in diagnostic algorithm "
+          ewrite(-1,* ) "or in a linear fluids equation of state"
+          FLExit("Unable to find delta_rho value when calculating the latent heating.")
+        end if
+        delta_rhos(i) = -delta_rhos(i)
+      end if
+
+      if (have_option(trim(gamma_option_path) // "/clapeyron_slope")) then
+        call get_option(trim(gamma_option_path) // "/clapeyron_slope", m_clapeyrons(i))
+      else
+        call get_option(trim(state%option_path) // "/scalar_field::" // trim(field_name)// &
+                      "/diagnostic/algorithm::depth_dependent_clapeyron_phase_change_indicator/clapeyron_slope", &
+                       m_clapeyrons(i), stat=stat)
+        if (stat /= 0) then
+          ewrite(-1,*) "Couldn't find clapeyron_slope: should be specified in this diagnostic algorithm "
+          ewrite(-1,* ) "or in the depth_dependent_clapeyron_phase_change_indicator diagnostic algorithm."
+          FLExit("Unable to find clapeyron_slope value when calculating the latent heating.")
+        end if
+      end if
+    end do
+
+    have_surface_temperature = have_option(trim(option_path) // "/surface_temperature" )
     call get_option(trim(option_path) // "/surface_temperature", T0, default=0.0)
 
     exclude_mass = have_option(trim(option_path) // "/spatial_discretisation/mass_terms/exclude_mass")
     call get_option(trim(option_path) // "/temporal_discretisation/theta", theta)
     call get_option("/timestepping/timestep", dt)
 
-    eos_option_path='/material_phase::'//trim(state%name)//'/equation_of_state'
-    call get_option(trim(eos_option_path)//'/fluids/linear/reference_density', rho0)
+    call get_option(trim(state%option_path)//"/equation_of_state/fluids/linear/reference_density", rho0, stat)
+    if (stat /= 0) then
+      FLExit("Latent heating calculation needs a reference_density in the same material_phase.")
+    end if
+
+    if (remaps_valid) then
+      velocity  => extract_vector_field(state, "NonlinearVelocity")
+      call allocate(velocity_remap, velocity%dim, s_field%mesh, "RemappedVelocity")
+      call test_remap_validity(velocity, velocity_remap, stat=stat)
+      call deallocate(velocity_remap)
+      remaps_valid = stat==0
+    end if
+
+    if (present(temperature)) then
+      ewrite_minmax(temperature)
+      if (remaps_valid) then
+        call test_remap_validity(temperature, s_field, stat=stat)
+        remaps_valid = stat==0
+      end if
+    end if
+
+    if (remaps_valid) then
+      call latent_heating_pointwise(state, s_field, &
+                                    gammas, oldgammas, &
+                                    delta_rhos, m_clapeyrons, &
+                                    have_surface_temperature, T0, &
+                                    exclude_mass, theta, dt, rho0, &
+                                    temperature)
+    else
+      call latent_heating_projection(state, s_field, &
+                                     gammas, oldgammas, &
+                                     delta_rhos, m_clapeyrons, &
+                                     have_surface_temperature, T0, &
+                                     exclude_mass, theta, dt, rho0, &
+                                     temperature)
+    end if
+    
+    deallocate(gammas, oldgammas, delta_rhos, m_clapeyrons)
+
+  end subroutine latent_heating
+
+  subroutine latent_heating_pointwise(state, s_field, &
+                                      gammas, oldgammas, &
+                                      delta_rhos, m_clapeyrons, &
+                                      have_surface_temperature, T0, &
+                                      exclude_mass, theta, dt, rho0, &
+                                      temperature)
+    type(state_type), intent(inout) :: state
+    type(scalar_field), intent(inout) :: s_field
+    type(scalar_field_pointer), dimension(:), intent(in) :: gammas, oldgammas
+    real, dimension(:), intent(in) :: delta_rhos, m_clapeyrons
+    logical, intent(in) :: have_surface_temperature, exclude_mass
+    real, intent(in) :: T0, theta, dt, rho0
+    type(scalar_field), pointer, optional :: temperature
+
+    type(element_type) :: grad_gamma_shape
+    type(element_type), pointer :: gamma_shape
+    type(mesh_type) :: grad_gamma_mesh
+    type(scalar_field) :: remapped
+    type(vector_field) :: velocity_remap, grad_gamma
+    type(vector_field), pointer :: velocity, positions
+
+    integer :: i
+    real :: coeff
+
+    ewrite(2,*) "Entering latent_heating_pointwise."
+
+    call zero(s_field)
+
+    velocity  => extract_vector_field(state, "NonlinearVelocity")
+    positions => extract_vector_field(state, "Coordinate")
+
+    call allocate(velocity_remap, velocity%dim, s_field%mesh, "RemappedVelocity")
+    call remap_field(velocity, velocity_remap)
+
+    gamma_shape => gammas(1)%ptr%mesh%shape
+
+    grad_gamma_shape = make_element_shape(vertices=gamma_shape%numbering%vertices, dim=gamma_shape%dim, &
+                                          degree=gamma_shape%degree-1, quad=gamma_shape%quadrature)
+    grad_gamma_mesh = make_mesh(model=gammas(1)%ptr%mesh, shape=grad_gamma_shape, continuity=-1)
+    grad_gamma_mesh%name="Grad"//trim(gammas(1)%ptr%mesh%name)
+    call deallocate(grad_gamma_shape)
+    call allocate(grad_gamma, positions%dim, grad_gamma_mesh, "Grad"//trim(gammas(1)%ptr%name))
+    call deallocate(grad_gamma_mesh)
+
+    call allocate(remapped, s_field%mesh, "Remapped")
+
+    do i = 1, size(gammas)
+      coeff = m_clapeyrons(i)*delta_rhos(i)/rho0/(rho0+delta_rhos(i))
+
+      if (.not. (gammas(i)%ptr%mesh%shape == gamma_shape)) then
+        call deallocate(grad_gamma)
+        gamma_shape => gammas(i)%ptr%mesh%shape
+        grad_gamma_shape = make_element_shape(vertices=gamma_shape%numbering%vertices, dim=gamma_shape%dim, &
+                                              degree=gamma_shape%degree-1, quad=gamma_shape%quadrature)
+        grad_gamma_mesh = make_mesh(model=gammas(i)%ptr%mesh, shape=grad_gamma_shape, continuity=-1)
+        grad_gamma_mesh%name="Grad"//trim(gammas(i)%ptr%mesh%name)
+        call deallocate(grad_gamma_shape)
+        call allocate(grad_gamma, positions%dim, grad_gamma_mesh, "Grad"//trim(gammas(i)%ptr%name))
+        call deallocate(grad_gamma_mesh)
+      end if
+
+      call grad(gammas(i)%ptr, positions, grad_gamma)
+      call inner_product(remapped, velocity_remap, grad_gamma)
+      call addto(s_field, remapped, scale=theta*coeff)
+
+      call grad(oldgammas(i)%ptr, positions, grad_gamma)
+      call inner_product(remapped, velocity_remap, grad_gamma)
+      call addto(s_field, remapped, scale=(1.-theta)*coeff)
+
+      if (.not. exclude_mass) then
+        call remap_field(gammas(i)%ptr, remapped)
+        call addto(s_field, remapped, scale=coeff/dt)
+
+        call remap_field(oldgammas(i)%ptr, remapped)
+        call addto(s_field, remapped, scale=-coeff/dt)
+      end if
+
+    end do
+
+    if (present(temperature)) then
+      call remap_field(temperature, remapped)
+      call addto(remapped, T0)
+      call scale(s_field, remapped)
+    else if (have_surface_temperature) then
+      call scale(s_field, T0)
+    end if
+
+
+    call deallocate(velocity_remap)
+    call deallocate(remapped)
+    call deallocate(grad_gamma)
+
+  end subroutine latent_heating_pointwise
+
+  subroutine latent_heating_projection(state, s_field, &
+                                       gammas, oldgammas, &
+                                       delta_rhos, m_clapeyrons, &
+                                       have_surface_temperature, T0, &
+                                       exclude_mass, theta, dt, rho0, &
+                                       temperature)
+    type(state_type), intent(inout) :: state
+    type(scalar_field), intent(inout) :: s_field
+    type(scalar_field_pointer), dimension(:), intent(in) :: gammas, oldgammas
+    real, dimension(:), intent(in) :: delta_rhos, m_clapeyrons
+    logical, intent(in) :: have_surface_temperature, exclude_mass
+    real, intent(in) :: T0, theta, dt, rho0
+    type(scalar_field), pointer, optional :: temperature
+
+    type(scalar_field), pointer :: masslump
+    type(scalar_field) :: rhs_field
+    type(csr_matrix), pointer :: mass
+    type(vector_field), pointer :: velocity, positions
+    
+    character(len=OPTION_PATH_LEN) :: option_path
+    integer :: ele
+
+    ewrite(2,*) "Entering latent_heating_projection."
+
+    call zero(s_field)
+
+    option_path = trim(s_field%option_path) // "/diagnostic/algorithm[0]"
+    
+
+    call zero(s_field)
+
+    velocity  => extract_vector_field(state, "NonlinearVelocity")
+    positions => extract_vector_field(state, "Coordinate")
 
     call allocate(rhs_field, s_field%mesh, "RHSLatentHeatingField")
     call zero(rhs_field)
@@ -844,26 +1050,18 @@ contains
       call integrate_rhs_ele(ele)
     end do
 
-    lump_mass = have_option(trim(option_path) // &
-               "/lump_mass")
-
-    dg_mass = have_option(trim(option_path) // &
-               "/discontinuous_galerkin_mass")
-
-    if(lump_mass) then
-      masslump => get_lumped_mass(state, s_field%mesh)
-      s_field%val = rhs_field%val / masslump%val
-    else if (dg_mass) then
-      assert(continuity(s_field)<0)
+    if (have_option(trim(option_path)//"/diagnostic/algorithm/solver")) then
+      mass => get_mass_matrix(state, s_field%mesh)  
+      call petsc_solve(s_field, mass, rhs_field, option_path = trim(s_field%option_path)//"/diagnostic/algorithm")
+    else if (continuity(s_field)<0) then
       mass => get_dg_inverse_mass(state, s_field%mesh)
       call mult(s_field, mass, rhs_field)
     else
-      mass => get_mass_matrix(state, s_field%mesh)  
-      call petsc_solve(s_field, mass, rhs_field, option_path = trim(s_field%option_path)//"/diagnostic/algorithm")
+      masslump => get_cv_mass(state, s_field%mesh)
+      s_field%val = rhs_field%val / masslump%val
     end if
 
     call deallocate(rhs_field)
-    deallocate(gammas, oldgammas, delta_rhos, m_clapeyrons)
 
   contains
 
@@ -872,9 +1070,8 @@ contains
       
       ! For integration:
       type(element_type), pointer :: rhs_shape, gamma_shape
-      integer :: dim, gi
+      integer :: i, dim, gi
       real :: coeff
-      logical :: l_exclude_mass
       real, dimension(ele_loc(rhs_field, ele)) :: rhs_addto
       real, dimension(ele_ngi(positions, ele)) :: detwei, inner_prod
       real, dimension(positions%dim, ele_ngi(positions, ele)) :: velocity_quad, grad_gamma_quad
@@ -883,19 +1080,18 @@ contains
       assert(size(gammas)==size(oldgammas))
       assert(size(gammas)==size(delta_rhos))
       assert(size(gammas)==size(m_clapeyrons))
-
-      l_exclude_mass = present_and_true(exclude_mass)
+      assert(size(gammas)>0)
 
       gamma_shape => ele_shape(gammas(1)%ptr, ele)
       allocate(dgamma_t(ele_loc(gammas(1)%ptr, ele), ele_ngi(positions,ele), mesh_dim(positions)))
-      call transform_to_physical(positions, ele, gamma_shape, dgamma_t,  detwei = detwei)
+      call transform_to_physical(positions, ele, gamma_shape, dgamma_t, detwei = detwei)
 
       rhs_addto = 0.0
       rhs_shape => ele_shape(rhs_field, ele)
 
       if (present(temperature)) then
         detwei = detwei*(ele_val_at_quad(temperature, ele) + T0)
-      else if (surface_temperature) then
+      else if (have_surface_temperature) then
         detwei = detwei*T0
       end if
 
@@ -903,7 +1099,7 @@ contains
 
       do i = 1, size(gammas)
         coeff = m_clapeyrons(i)*delta_rhos(i)/rho0/(rho0+delta_rhos(i))
-        if (.not. l_exclude_mass) then
+        if (.not. exclude_mass) then
           rhs_addto = rhs_addto + shape_rhs(rhs_shape, coeff*detwei* &
                        ((ele_val_at_quad(gammas(i)%ptr, ele) - ele_val_at_quad(oldgammas(i)%ptr, ele))/dt))
         end if
