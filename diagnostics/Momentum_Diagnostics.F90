@@ -707,14 +707,16 @@ contains
     type(vector_field) :: positions
 
     integer :: i, gdim, stat
-    real :: z0, d0, gammac, w, g, rho0
+    real :: z0, ztop, d0, gammac, w, g, rho0
 
     ewrite(2,*) "Entering calculate_depth_dependent_clapeyron_phase_change_indicator"
 
     call get_option("/geometry/dimension", gdim)
 
     call get_option(trim(s_field%option_path)//"/diagnostic/algorithm/reference_depth", d0)
-    z0 = domain_bbox(gdim, 2) - d0
+    ztop = domain_bbox(gdim, 2)
+    call allmax(ztop)
+    z0 = ztop - d0
     call get_option(trim(s_field%option_path)//"/diagnostic/algorithm/clapeyron_slope", gammac)
     call get_option(trim(s_field%option_path)//"/diagnostic/algorithm/transition_width", w)
 
