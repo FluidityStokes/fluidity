@@ -1942,8 +1942,10 @@ The mesh must be directly extruded.</a:documentation>
           <data type="string"/>
         </attribute>
         <optional>
-          <element name="delta_rho">
-            <a:documentation>The change in the density across this phase change.
+          <element name="delta_rho_fraction">
+            <a:documentation>The fractional change in the density across this phase change.
+
+This is the fractional change relative to the reference_density used with the eos.
 
 If activated the value given here is used.  
 Otherwise the negated expansivity for this field under a fluid linear eos is taken.

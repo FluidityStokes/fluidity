@@ -1448,14 +1448,16 @@ latent_heating_options =
       ## Provide the name of a field describing a phase change.
       element phase_change_indicator_field {
         attribute name { xsd:string },
-        ## The change in the density across this phase change.
+        ## The fractional change in the density across this phase change.
+        ##
+        ## This is the fractional change relative to the reference_density used with the eos.
         ## 
         ## If activated the value given here is used.  
         ## Otherwise the negated expansivity for this field under a fluid linear eos is taken.
         ##
         ## Normaly the values used in the equation of state and here will be the same but this option is provided 
         ## for when they differ (e.g. non-dimensional simulations).
-        element delta_rho {
+        element delta_rho_fraction {
           real
         }?,
         ## The Clapeyron slope of the phase change.

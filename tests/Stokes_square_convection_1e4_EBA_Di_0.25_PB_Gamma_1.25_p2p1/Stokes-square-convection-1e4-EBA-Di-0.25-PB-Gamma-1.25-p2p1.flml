@@ -514,9 +514,9 @@ epsilon = 3.e-2</comment>
             <mesh name="P3DGMesh"/>
             <algorithm name="viscous_dissipation_plus_surface_terms" material_phase_support="single ">
               <phase_change_indicator_field name="PhaseChangeIndicator">
-                <delta_rho>
+                <delta_rho_fraction>
                   <real_value rank="0">0.05</real_value>
-                </delta_rho>
+                </delta_rho_fraction>
                 <clapeyron_slope>
                   <real_value rank="0">1.25</real_value>
                 </clapeyron_slope>
@@ -547,9 +547,9 @@ epsilon = 3.e-2</comment>
             <mesh name="P3DGMesh"/>
             <algorithm name="adiabatic_plus_latent_heating_coefficient" material_phase_support="single ">
               <phase_change_indicator_field name="PhaseChangeIndicator">
-                <delta_rho>
+                <delta_rho_fraction>
                   <real_value rank="0">0.05</real_value>
-                </delta_rho>
+                </delta_rho_fraction>
                 <clapeyron_slope>
                   <real_value rank="0">1.25</real_value>
                 </clapeyron_slope>
@@ -741,9 +741,9 @@ epsilon = 3.e-2</comment>
       <diagnostic>
         <algorithm name="phase_change_latent_heating" material_phase_support="single">
           <phase_change_indicator_field name="PhaseChangeIndicator">
-            <delta_rho>
+            <delta_rho_fraction>
               <real_value rank="0">0.05</real_value>
-            </delta_rho>
+            </delta_rho_fraction>
             <clapeyron_slope>
               <real_value rank="0">1.25</real_value>
             </clapeyron_slope>

@@ -40,6 +40,8 @@ module diagnostic_fields_wrapper
   use spud
   use parallel_tools
   use diagnostic_fields, only: calculate_diagnostic_variable
+  use diagnostic_fields_wrapper_new, only : &
+    & calculate_diagnostic_variable_new => calculate_diagnostic_variable
   use multimaterial_module, only: calculate_material_mass, &
                                   calculate_bulk_material_pressure, &
                                   calculate_sum_material_volume_fractions, &
@@ -71,8 +73,9 @@ contains
     type(state_type), dimension(:) :: state
     logical, intent(in), optional :: exclude_nonrecalculated
 
-    integer :: i,stat
-    type(scalar_field), pointer :: s_field
+    character(len=FIELD_NAME_LEN) :: gsfield_name
+    integer :: i,stat, n_generic_scalar_fields, j
+    type(scalar_field), pointer :: s_field, gs_field
     type(vector_field), pointer :: v_field
     logical :: diagnostic
 
@@ -423,6 +426,21 @@ contains
          diagnostic = have_option(trim(s_field%option_path)//"/diagnostic")
          if(diagnostic .and. .not.(aliased(s_field))) then
            if(recalculate(trim(s_field%option_path))) then
+             ! before calculating the Density update any diagnostic generic scalar fields in this state
+             ! this has to be done here because it requires all states to be passed into calculate_diagnostic_variable
+             ! and we may only be passing in the submaterials array further down...
+             n_generic_scalar_fields = option_count(trim(state(i)%option_path) // "/equation_of_state/fluids/linear" &
+                                                                               //"/generic_scalar_field_dependency")
+             do j = 1, n_generic_scalar_fields
+               call get_option(trim(state(i)%option_path) // "/equation_of_state/fluids/linear" &
+                                                          // "/generic_scalar_field_dependency[" // int2str(j-1) // "]/name", &
+                               gsfield_name)
+               gs_field => extract_scalar_field(state(i), gsfield_name)
+               if (have_option(trim(gs_field%option_path) // "/diagnostic")) then
+                 call calculate_diagnostic_variable_new(state, i, gs_field)
+               end if
+             end do
+
              if(option_count("/material_phase/vector_field::Velocity/prognostic") > 1) then 
                call get_phase_submaterials(state, i, submaterials)
                call calculate_densities(submaterials, bulk_density=s_field)

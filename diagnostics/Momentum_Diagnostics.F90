@@ -841,16 +841,16 @@ contains
         remaps_valid = stat==0
       end if
 
-      if (have_option(trim(gamma_option_path) // "/delta_rho")) then
-        call get_option(trim(gamma_option_path) // "/delta_rho", delta_rhos(i))
+      if (have_option(trim(gamma_option_path) // "/delta_rho_fraction")) then
+        call get_option(trim(gamma_option_path) // "/delta_rho_fraction", delta_rhos(i))
       else
         call get_option(trim(state%option_path) // "/equation_of_state/fluids/linear" // &
                        "/generic_scalar_field_dependency::"//trim(field_name)//"/expansion_coefficient", &
                        delta_rhos(i), stat=stat)
         if (stat /= 0) then
-          ewrite(-1,*) "Couldn't find delta_rho: should be specified in diagnostic algorithm "
-          ewrite(-1,* ) "or in a linear fluids equation of state"
-          FLExit("Unable to find delta_rho value when calculating the latent heating.")
+          ewrite(-1,*) "Couldn't find delta_rho_fraction: should be specified in diagnostic algorithm "
+          ewrite(-1,*) "or in a linear fluids equation of state"
+          FLExit("Unable to find delta_rho_fraction value when calculating the latent heating.")
         end if
         delta_rhos(i) = -delta_rhos(i)
       end if
@@ -964,7 +964,7 @@ contains
     call allocate(remapped, s_field%mesh, "Remapped")
 
     do i = 1, size(gammas)
-      coeff = m_clapeyrons(i)*delta_rhos(i)/rho0/(rho0+delta_rhos(i))
+      coeff = m_clapeyrons(i)*delta_rhos(i)/(rho0*(1.0+delta_rhos(i)))
 
       if (.not. (gammas(i)%ptr%mesh%shape == gamma_shape)) then
         call deallocate(grad_gamma)
@@ -1100,7 +1100,7 @@ contains
       velocity_quad = ele_val_at_quad(velocity, ele)
 
       do i = 1, size(gammas)
-        coeff = m_clapeyrons(i)*delta_rhos(i)/rho0/(rho0+delta_rhos(i))
+        coeff = m_clapeyrons(i)*delta_rhos(i)/(rho0*(1.0+delta_rhos(i)))
         if (.not. exclude_mass) then
           rhs_addto = rhs_addto + shape_rhs(rhs_shape, coeff*detwei* &
                        ((ele_val_at_quad(gammas(i)%ptr, ele) - ele_val_at_quad(oldgammas(i)%ptr, ele))/dt))
