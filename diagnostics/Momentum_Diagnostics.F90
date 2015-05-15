@@ -194,8 +194,10 @@ contains
     type(scalar_field) :: viscosity_component, viscosity_component_remap
     type(tensor_field) :: strain_rate_tensor
 
-    integer :: dim1, dim2, node
-    real :: val
+    integer :: dim1, dim2, node, stat
+    real :: val, cp, rho0
+
+    logical :: have_heat_capacity
 
     ewrite(1,*) 'In calculate_viscous_dissipation'
 
@@ -229,6 +231,17 @@ contains
     call allocate(viscosity_component_remap, s_field%mesh, "RemappedViscosityComponent")
     call remap_field(viscosity_component, viscosity_component_remap)
 
+    have_heat_capacity = have_option(trim(s_field%option_path) // "/diagnostic/algorithm[0]/heat_capacity" )
+    call get_option(trim(s_field%option_path) // "/diagnostic/algorithm[0]/heat_capacity", cp, default=1.0)
+    if (have_heat_capacity) then
+      call get_option(trim(state%option_path)//'/equation_of_state/fluids/linear/reference_density', rho0, stat=stat)
+      if (stat /= 0) then
+        FLExit("Specifying a heat capacity assumes a reference density is available under a linear eos.")
+      end if
+    else
+      rho0 = 1.0
+    end if
+
     ! Calculate viscous dissipation (scalar s_field):
     do node=1,node_count(s_field)
        val = 0.
@@ -248,6 +261,10 @@ contains
        call set(s_field, node, val)
     end do
 
+    if (have_heat_capacity) then
+      call scale(s_field, (1./cp/rho0))
+      ewrite(2,*) "  Scaling viscous dissipation by cp, rho0.", cp, rho0
+    end if
     ewrite_minmax(s_field)
 
     ! Deallocate:
@@ -348,12 +365,12 @@ contains
     type(scalar_field) :: velocity_component, thermal_expansion_remap
     type(scalar_field) :: density_remap
     type(scalar_field) :: reference_temperature_remap
-    real :: gravity_magnitude, gamma, rho0, T0
-    integer :: node, stat_vel, stat_rho, stat_gamma, stat_reft
+    real :: gravity_magnitude, gamma, rho0, T0, cp
+    integer :: node, stat_vel, stat_rho, stat_gamma, stat_reft, stat
 
     character(len=OPTION_PATH_LEN) :: eos_option_path
     character(len=FIELD_NAME_LEN) :: density_name
-    logical :: have_linear_eos, have_linearised_mantle_compressible_eos
+    logical :: have_linear_eos, have_linearised_mantle_compressible_eos, have_heat_capacity
 
     ewrite(1,*) 'In adiabatic_heating_coefficient'
 
@@ -367,6 +384,17 @@ contains
     ! Extract gravitational info from state:
     gravity_direction => extract_vector_field(state, "GravityDirection")
     call get_option("/physical_parameters/gravity/magnitude", gravity_magnitude)
+
+    have_heat_capacity = have_option(trim(s_field%option_path) // "/diagnostic/algorithm[0]/heat_capacity" )
+    call get_option(trim(s_field%option_path) // "/diagnostic/algorithm[0]/heat_capacity", cp, default=1.0)
+    if (have_heat_capacity) then
+      call get_option(trim(state%option_path)//'/equation_of_state/fluids/linear/reference_density', rho0, stat=stat)
+      if (stat /= 0) then
+        FLExit("Specifying a heat capacity assumes a reference density is available under a linear eos.")
+      end if
+    else
+      rho0 = 1.0
+    end if
 
     if(stat_vel == 0) then
 
@@ -391,6 +419,10 @@ contains
           end do
 
        elseif(have_linearised_mantle_compressible_eos) then
+
+          if (have_heat_capacity) then
+            FLExit("Specifying a heat capacity currently assumes a linear eos.")
+          end if
 
           ! Get spatially varying thermal expansion field and remap to s_field%mesh if possible and required:
           thermal_expansion_local=>extract_scalar_field(state,'IsobaricThermalExpansivity')       
@@ -488,6 +520,12 @@ contains
        call scale(s_field, -T0)
     end if
 
+    if (have_heat_capacity) then
+       call scale(s_field, (1./rho0/cp))
+       ewrite(2,*) "  Scaling adiabatic heating by cp, rho0.", cp, rho0
+    end if
+
+
   end subroutine adiabatic_heating_coefficient
 
   subroutine adiabatic_heating_coefficient_projection(state, s_field)
@@ -507,7 +545,7 @@ contains
 
     character(len=OPTION_PATH_LEN) eos_option_path
     character(len=FIELD_NAME_LEN) :: density_name
-    logical :: have_linear_eos, have_linearised_mantle_compressible_eos
+    logical :: have_linear_eos, have_linearised_mantle_compressible_eos, have_heat_capacity
 
     ewrite(1,*) 'In adiabatic_heating_coefficient_projection'
 
@@ -529,6 +567,7 @@ contains
     eos_option_path='/material_phase::'//trim(state%name)//'/equation_of_state'
     have_linear_eos = (have_option(trim(eos_option_path)//'/fluids/linear'))
     have_linearised_mantle_compressible_eos = (have_option(trim(eos_option_path)//'/compressible/linearised_mantle'))
+    have_heat_capacity = have_option(trim(s_field%option_path) // "/diagnostic/algorithm[0]/heat_capacity" )
 
     ! Extract relevant parameters from options/state:
     if(have_linear_eos) then
@@ -537,10 +576,13 @@ contains
        ! Get value for reference density (constant)
        call get_option(trim(eos_option_path)//'/fluids/linear/reference_density', rho0)
        ! As these values are constant for this eos, we need to point reference density and 
-	   ! thermal_expansion to dummy scalars:
+       ! thermal_expansion to dummy scalars:
        density_local => dummyscalar
        thermal_expansion => dummyscalar
     elseif(have_linearised_mantle_compressible_eos) then
+       if (have_heat_capacity) then
+         FLExit("Specifying a heat capacity currently assumes a linear eos.")
+       end if
        ! Get spatially varying thermal expansion field:
        thermal_expansion=>extract_scalar_field(state,'IsobaricThermalExpansivity')
        ! Get CompressibleReferenceDensity field:
@@ -801,8 +843,8 @@ contains
     character(len=OPTION_PATH_LEN) :: option_path, gamma_option_path
     character(len=FIELD_NAME_LEN) :: field_name
     integer :: i, ngammas, stat
-    real :: rho0, dt, theta, T0
-    logical :: exclude_mass, have_surface_temperature, remaps_valid
+    real :: rho0, dt, theta, T0, cp
+    logical :: exclude_mass, have_surface_temperature, remaps_valid, have_heat_capacity
 
     ewrite(2,*) "Entering latent_heating."
 
@@ -881,6 +923,9 @@ contains
       FLExit("Latent heating calculation needs a reference_density in the same material_phase.")
     end if
 
+    have_heat_capacity = have_option(trim(option_path) // "/heat_capacity" )
+    call get_option(trim(option_path) // "/heat_capacity", cp, default=1.0)
+
     if (remaps_valid) then
       velocity  => extract_vector_field(state, "NonlinearVelocity")
       call allocate(velocity_remap, velocity%dim, s_field%mesh, "RemappedVelocity")
@@ -902,15 +947,20 @@ contains
                                     gammas, oldgammas, &
                                     delta_rhos, m_clapeyrons, &
                                     have_surface_temperature, T0, &
-                                    exclude_mass, theta, dt, rho0, &
+                                    exclude_mass, theta, dt, &
                                     temperature)
     else
       call latent_heating_projection(state, s_field, &
                                      gammas, oldgammas, &
                                      delta_rhos, m_clapeyrons, &
                                      have_surface_temperature, T0, &
-                                     exclude_mass, theta, dt, rho0, &
+                                     exclude_mass, theta, dt, &
                                      temperature)
+    end if
+
+    if (have_heat_capacity) then
+      call scale(s_field, (1./cp/rho0))
+      ewrite(2,*) "  Scaling latent heating by cp, rho0.", cp, rho0
     end if
     
     deallocate(gammas, oldgammas, delta_rhos, m_clapeyrons)
@@ -921,14 +971,14 @@ contains
                                       gammas, oldgammas, &
                                       delta_rhos, m_clapeyrons, &
                                       have_surface_temperature, T0, &
-                                      exclude_mass, theta, dt, rho0, &
+                                      exclude_mass, theta, dt, &
                                       temperature)
     type(state_type), intent(inout) :: state
     type(scalar_field), intent(inout) :: s_field
     type(scalar_field_pointer), dimension(:), intent(in) :: gammas, oldgammas
     real, dimension(:), intent(in) :: delta_rhos, m_clapeyrons
     logical, intent(in) :: have_surface_temperature, exclude_mass
-    real, intent(in) :: T0, theta, dt, rho0
+    real, intent(in) :: T0, theta, dt
     type(scalar_field), pointer, optional :: temperature
 
     type(element_type) :: grad_gamma_shape
@@ -964,7 +1014,8 @@ contains
     call allocate(remapped, s_field%mesh, "Remapped")
 
     do i = 1, size(gammas)
-      coeff = m_clapeyrons(i)*delta_rhos(i)/(rho0*(1.0+delta_rhos(i)))
+      ! This assumes we're using an AdvectionDiffusion equation type
+      coeff = m_clapeyrons(i)*delta_rhos(i)/(1.0+delta_rhos(i))
 
       if (.not. (gammas(i)%ptr%mesh%shape == gamma_shape)) then
         call deallocate(grad_gamma)
@@ -1015,14 +1066,14 @@ contains
                                        gammas, oldgammas, &
                                        delta_rhos, m_clapeyrons, &
                                        have_surface_temperature, T0, &
-                                       exclude_mass, theta, dt, rho0, &
+                                       exclude_mass, theta, dt, &
                                        temperature)
     type(state_type), intent(inout) :: state
     type(scalar_field), intent(inout) :: s_field
     type(scalar_field_pointer), dimension(:), intent(in) :: gammas, oldgammas
     real, dimension(:), intent(in) :: delta_rhos, m_clapeyrons
     logical, intent(in) :: have_surface_temperature, exclude_mass
-    real, intent(in) :: T0, theta, dt, rho0
+    real, intent(in) :: T0, theta, dt
     type(scalar_field), pointer, optional :: temperature
 
     type(scalar_field), pointer :: masslump
@@ -1100,7 +1151,8 @@ contains
       velocity_quad = ele_val_at_quad(velocity, ele)
 
       do i = 1, size(gammas)
-        coeff = m_clapeyrons(i)*delta_rhos(i)/(rho0*(1.0+delta_rhos(i)))
+        ! This assumes we're using an AdvectionDiffusion equation type
+        coeff = m_clapeyrons(i)*delta_rhos(i)/(1.0+delta_rhos(i))
         if (.not. exclude_mass) then
           rhs_addto = rhs_addto + shape_rhs(rhs_shape, coeff*detwei* &
                        ((ele_val_at_quad(gammas(i)%ptr, ele) - ele_val_at_quad(oldgammas(i)%ptr, ele))/dt))

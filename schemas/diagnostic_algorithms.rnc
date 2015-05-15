@@ -1388,7 +1388,8 @@ viscous_dissipation_algorithm =
       ## algorithm for calculating the viscous dissipation.
        element algorithm {
          attribute name { "viscous_dissipation" },
-         attribute material_phase_support { "single "}
+         attribute material_phase_support { "single "},
+         heat_capacity_option
       }
    )
 
@@ -1401,7 +1402,8 @@ viscous_dissipation_plus_surface_adiabat_algorithm =
          ## The surface temperature for the adiabat term
          element surface_temperature {
            real
-         }
+         },
+         heat_capacity_option
       }
    )
 
@@ -1415,7 +1417,8 @@ viscous_dissipation_plus_surface_adiabat_and_latent_heating_algorithm =
          ## The surface temperature for the adiabat term
          element surface_temperature {
            real
-         }
+         },
+         heat_capacity_option
       }
    )
 
@@ -1425,7 +1428,8 @@ phase_change_latent_heating_absorption =
       element algorithm {
         attribute name { "phase_change_latent_heating_absorption" },
         attribute material_phase_support { "single" },
-        latent_heating_options
+        latent_heating_options,
+        heat_capacity_option 
       }
    )
 
@@ -1533,13 +1537,29 @@ depth_dependent_clapeyron_phase_change_indicator =
       }
    )
 
+heat_capacity_option =
+   (
+      ## When used with an AdvectionDiffusion equation type for temperature 
+      ## this option allows you to specify the heat capacity by which the adiabatic 
+      ## heating, viscous dissipation and latent heating should be divided (along with rho0, 
+      ## which is taken from the eos).
+      ##
+      ## In combination with the MantleAnelasticEnergy equation type this option 
+      ## should not be turned on (as it also activates the division by rho0, regardless 
+      ## of what the heat capacity is set to).
+      element heat_capacity {
+        real
+      }?
+   )
+
 adiabatic_heating_coefficient_algorithm =
    (
       ## algorithm for calculating adiabatic_heating coefficient,
       ## needed when applying adiabatic heating absorption term.
        element algorithm {
          attribute name { "adiabatic_heating_coefficient" },
-         attribute material_phase_support { "single "}
+         attribute material_phase_support { "single "},
+         heat_capacity_option
       }
    )
 
@@ -1561,7 +1581,8 @@ adiabatic_plus_latent_heating_algorithm =
        element algorithm {
          attribute name { "adiabatic_plus_latent_heating_coefficient" },
          attribute material_phase_support { "single "},
-         latent_heating_options
+         latent_heating_options,
+         heat_capacity_option 
       }
    )
 
@@ -1714,7 +1735,6 @@ scalar_diagnostic_algorithms |= div_algorithm
 scalar_diagnostic_algorithms |= depth_dependent_clapeyron_phase_change_indicator
 scalar_diagnostic_algorithms |= curl_2d_algorithm
 scalar_diagnostic_algorithms |= column_id_algorithm
-scalar_diagnostic_algorithms |= adiabatic_heating_coefficient_algorithm
 scalar_diagnostic_algorithms |= adiabatic_heating_absorption_algorithm
 scalar_diagnostic_algorithms |= finite_element_lumped_mass_matrix
 scalar_diagnostic_algorithms |= control_volume_mass_matrix

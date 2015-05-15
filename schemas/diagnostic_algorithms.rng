@@ -1871,6 +1871,7 @@ The mesh must be directly extruded.</a:documentation>
       <attribute name="material_phase_support">
         <value>single </value>
       </attribute>
+      <ref name="heat_capacity_option"/>
     </element>
   </define>
   <define name="viscous_dissipation_plus_surface_adiabat_algorithm">
@@ -1886,6 +1887,7 @@ The mesh must be directly extruded.</a:documentation>
         <a:documentation>The surface temperature for the adiabat term</a:documentation>
         <ref name="real"/>
       </element>
+      <ref name="heat_capacity_option"/>
     </element>
   </define>
   <define name="viscous_dissipation_plus_surface_adiabat_and_latent_heating_algorithm">
@@ -1902,6 +1904,7 @@ The mesh must be directly extruded.</a:documentation>
         <a:documentation>The surface temperature for the adiabat term</a:documentation>
         <ref name="real"/>
       </element>
+      <ref name="heat_capacity_option"/>
     </element>
   </define>
   <define name="phase_change_latent_heating_absorption">
@@ -1914,6 +1917,7 @@ The mesh must be directly extruded.</a:documentation>
         <value>single</value>
       </attribute>
       <ref name="latent_heating_options"/>
+      <ref name="heat_capacity_option"/>
     </element>
   </define>
   <define name="phase_change_latent_heating">
@@ -2036,6 +2040,21 @@ NOTE that this will be scaled by rho0*g to convert it to a pressure.</a:document
       </element>
     </element>
   </define>
+  <define name="heat_capacity_option">
+    <optional>
+      <element name="heat_capacity">
+        <a:documentation>When used with an AdvectionDiffusion equation type for temperature 
+this option allows you to specify the heat capacity by which the adiabatic 
+heating, viscous dissipation and latent heating should be divided (along with rho0, 
+which is taken from the eos).
+
+In combination with the MantleAnelasticEnergy equation type this option 
+should not be turned on (as it also activates the division by rho0, regardless 
+of what the heat capacity is set to).</a:documentation>
+        <ref name="real"/>
+      </element>
+    </optional>
+  </define>
   <define name="adiabatic_heating_coefficient_algorithm">
     <element name="algorithm">
       <a:documentation>algorithm for calculating adiabatic_heating coefficient,
@@ -2046,6 +2065,7 @@ needed when applying adiabatic heating absorption term.</a:documentation>
       <attribute name="material_phase_support">
         <value>single </value>
       </attribute>
+      <ref name="heat_capacity_option"/>
     </element>
   </define>
   <define name="adiabatic_heating_absorption_algorithm">
@@ -2072,6 +2092,7 @@ needed when applying adiabatic heating absorption term.</a:documentation>
         <value>single </value>
       </attribute>
       <ref name="latent_heating_options"/>
+      <ref name="heat_capacity_option"/>
     </element>
   </define>
   <!-- Mass matrix -->
@@ -2323,9 +2344,6 @@ This field needs to be interpolated between adapts.</a:documentation>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="column_id_algorithm"/>
-  </define>
-  <define name="scalar_diagnostic_algorithms" combine="choice">
-    <ref name="adiabatic_heating_coefficient_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="adiabatic_heating_absorption_algorithm"/>
