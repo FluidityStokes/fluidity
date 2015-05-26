@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <fluidity_options>
   <simulation_name>
-    <string_value lines="1">stokes-1e4-p2p1-EBA-Di-0.25-PB-Gamma-1.25</string_value>
+    <string_value lines="1">stokes-1e4-p2p1-EBA-Di-0.25-PB-Gamma--1.66</string_value>
     <comment>This case compares to an extended Bousinessq case at Di = 0.25, Ra=1e4, from King et. al. GJI 2009.</comment>
   </simulation_name>
   <problem_type>
@@ -421,7 +421,9 @@ epsilon = 3.e-2</comment>
     <scalar_field name="Temperature" rank="0">
       <prognostic>
         <mesh name="VelocityMesh"/>
-        <equation name="AdvectionDiffusion"/>
+        <equation name="MantleAnelasticEnergy">
+          <density name="CompressibleReferenceDensity"/>
+        </equation>
         <spatial_discretisation>
           <continuous_galerkin>
             <stabilisation>
@@ -518,7 +520,7 @@ epsilon = 3.e-2</comment>
                   <real_value rank="0">0.05</real_value>
                 </delta_rho_fraction>
                 <clapeyron_slope>
-                  <real_value rank="0">1.25</real_value>
+                  <real_value rank="0">-1.66666666666667</real_value>
                 </clapeyron_slope>
               </phase_change_indicator_field>
               <spatial_discretisation>
@@ -551,7 +553,7 @@ epsilon = 3.e-2</comment>
                   <real_value rank="0">0.05</real_value>
                 </delta_rho_fraction>
                 <clapeyron_slope>
-                  <real_value rank="0">1.25</real_value>
+                  <real_value rank="0">-1.66666666666667</real_value>
                 </clapeyron_slope>
               </phase_change_indicator_field>
               <spatial_discretisation>
@@ -711,12 +713,12 @@ epsilon = 3.e-2</comment>
 0.5 - (epsilon/Di)*Gamma*(1.-0.5)
 epsilon = 3.e-2
 Di = 0.25
-Gamma = 1.25</comment>
+Gamma = -1.66</comment>
           </reference_depth>
           <clapeyron_slope>
-            <real_value rank="0">0.0375</real_value>
+            <real_value rank="0">-0.05</real_value>
             <comment>This is the clapeyron slope scaled by epsilon:
-clapeyron_slope = 1.25
+clapeyron_slope = -1.6666666666666667
 epsilon = 3.e-2</comment>
           </clapeyron_slope>
           <transition_width>
@@ -748,7 +750,7 @@ epsilon = 3.e-2</comment>
               <real_value rank="0">0.05</real_value>
             </delta_rho_fraction>
             <clapeyron_slope>
-              <real_value rank="0">1.25</real_value>
+              <real_value rank="0">-1.66666666666667</real_value>
             </clapeyron_slope>
           </phase_change_indicator_field>
           <spatial_discretisation>

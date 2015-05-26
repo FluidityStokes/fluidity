@@ -421,7 +421,9 @@ epsilon = 3.e-2</comment>
     <scalar_field name="Temperature" rank="0">
       <prognostic>
         <mesh name="VelocityMesh"/>
-        <equation name="AdvectionDiffusion"/>
+        <equation name="MantleAnelasticEnergy">
+          <density name="CompressibleReferenceDensity"/>
+        </equation>
         <spatial_discretisation>
           <continuous_galerkin>
             <stabilisation>

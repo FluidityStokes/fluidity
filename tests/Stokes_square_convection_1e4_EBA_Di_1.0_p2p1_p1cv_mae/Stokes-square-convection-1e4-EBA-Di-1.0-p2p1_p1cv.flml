@@ -1,8 +1,8 @@
 <?xml version='1.0' encoding='utf-8'?>
 <fluidity_options>
   <simulation_name>
-    <string_value lines="1">stokes-1e4-p2p1-EBA-Di-0.25-PB-Gamma-1.25</string_value>
-    <comment>This case compares to an extended Bousinessq case at Di = 0.25, Ra=1e4, from King et. al. GJI 2009.</comment>
+    <string_value lines="1">stokes-1e4-p2p1-p1cv-EBA-Di-1.0</string_value>
+    <comment>This case compares to an extended Bousinessq case at Di = 1.0, Ra=1e4, from King et. al. GJI 2009. A P1_CV control volume discretisation is used for temperature.</comment>
   </simulation_name>
   <problem_type>
     <string_value lines="1">stokes</string_value>
@@ -32,70 +32,9 @@
         </stat>
       </from_mesh>
     </mesh>
-    <mesh name="P2DGMesh">
-      <from_mesh>
-        <mesh name="CoordinateMesh"/>
-        <mesh_shape>
-          <polynomial_degree>
-            <integer_value rank="0">2</integer_value>
-          </polynomial_degree>
-        </mesh_shape>
-        <mesh_continuity>
-          <string_value>discontinuous</string_value>
-        </mesh_continuity>
-        <stat>
-          <exclude_from_stat/>
-        </stat>
-      </from_mesh>
-    </mesh>
-    <mesh name="P4Mesh">
-      <from_mesh>
-        <mesh name="CoordinateMesh"/>
-        <mesh_shape>
-          <polynomial_degree>
-            <integer_value rank="0">4</integer_value>
-          </polynomial_degree>
-        </mesh_shape>
-        <stat>
-          <exclude_from_stat/>
-        </stat>
-      </from_mesh>
-    </mesh>
-    <mesh name="LatentHeatingMesh">
-      <from_mesh>
-        <mesh name="CoordinateMesh"/>
-        <mesh_shape>
-          <polynomial_degree>
-            <integer_value rank="0">5</integer_value>
-          </polynomial_degree>
-        </mesh_shape>
-        <mesh_continuity>
-          <string_value>discontinuous</string_value>
-        </mesh_continuity>
-        <stat>
-          <exclude_from_stat/>
-        </stat>
-      </from_mesh>
-    </mesh>
-    <mesh name="P3DGMesh">
-      <from_mesh>
-        <mesh name="CoordinateMesh"/>
-        <mesh_shape>
-          <polynomial_degree>
-            <integer_value rank="0">3</integer_value>
-          </polynomial_degree>
-        </mesh_shape>
-        <mesh_continuity>
-          <string_value>discontinuous</string_value>
-        </mesh_continuity>
-        <stat>
-          <exclude_from_stat/>
-        </stat>
-      </from_mesh>
-    </mesh>
     <quadrature>
       <degree>
-        <integer_value rank="0">6</integer_value>
+        <integer_value rank="0">5</integer_value>
       </degree>
     </quadrature>
   </geometry>
@@ -142,7 +81,7 @@
   <physical_parameters>
     <gravity>
       <magnitude>
-        <real_value rank="0">0.25</real_value>
+        <real_value rank="0">1.0</real_value>
         <comment>Equivalent to Dissipation Number</comment>
       </magnitude>
       <vector_field name="GravityDirection" rank="1">
@@ -181,17 +120,6 @@
               <real_value rank="0">1.0</real_value>
             </thermal_expansion_coefficient>
           </temperature_dependency>
-          <generic_scalar_field_dependency name="PhaseChangeIndicator">
-            <reference_value>
-              <real_value rank="0">0.0</real_value>
-            </reference_value>
-            <expansion_coefficient>
-              <real_value rank="0">-1.66666666666667</real_value>
-              <comment>This is the density jump divided by epsilon negated.
-delta_rho = 0.05
-epsilon = 3.e-2</comment>
-            </expansion_coefficient>
-          </generic_scalar_field_dependency>
           <subtract_out_hydrostatic_level/>
         </linear>
       </fluids>
@@ -227,30 +155,13 @@ epsilon = 3.e-2</comment>
                   </diagnostics>
                 </solver>
               </inner_matrix>
-              <preconditioner_matrix name="ScaledPressureMassMatrix"/>
+              <preconditioner_matrix name="DiagonalSchurComplement"/>
             </full_schur_complement>
           </use_projection_method>
         </scheme>
         <solver>
-          <iterative_method name="fgmres"/>
-          <preconditioner name="ksp">
-            <solver>
-              <iterative_method name="preonly"/>
-              <preconditioner name="lu">
-                <factorization_package name="petsc"/>
-              </preconditioner>
-              <relative_error>
-                <real_value rank="0">1e-06</real_value>
-              </relative_error>
-              <max_iterations>
-                <integer_value rank="0">100</integer_value>
-              </max_iterations>
-              <never_ignore_solver_failures/>
-              <diagnostics>
-                <monitors/>
-              </diagnostics>
-            </solver>
-          </preconditioner>
+          <iterative_method name="cg"/>
+          <preconditioner name="jacobi"/>
           <relative_error>
             <real_value rank="0">1.0e-8</real_value>
           </relative_error>
@@ -379,6 +290,7 @@ epsilon = 3.e-2</comment>
         </boundary_conditions>
         <tensor_field name="Viscosity" rank="2">
           <prescribed>
+            <mesh name="CoordinateMesh"/>
             <value name="WholeMesh">
               <anisotropic_symmetric>
                 <python>
@@ -420,18 +332,45 @@ epsilon = 3.e-2</comment>
     </vector_field>
     <scalar_field name="Temperature" rank="0">
       <prognostic>
-        <mesh name="VelocityMesh"/>
-        <equation name="AdvectionDiffusion"/>
+        <mesh name="CoordinateMesh"/>
+        <equation name="MantleAnelasticEnergy">
+          <density name="CompressibleReferenceDensity">
+            <discretisation_options>
+              <spatial_discretisation>
+                <control_volumes>
+                  <face_value name="FiniteElement">
+                    <limit_face_value>
+                      <limiter name="Sweby"/>
+                    </limit_face_value>
+                  </face_value>
+                </control_volumes>
+              </spatial_discretisation>
+              <temporal_discretisation>
+                <theta>
+                  <real_value rank="0">1.0</real_value>
+                </theta>
+              </temporal_discretisation>
+            </discretisation_options>
+          </density>
+        </equation>
         <spatial_discretisation>
-          <continuous_galerkin>
-            <stabilisation>
-              <no_stabilisation/>
-            </stabilisation>
-            <advection_terms/>
+          <control_volumes>
             <mass_terms>
               <exclude_mass_terms/>
             </mass_terms>
-          </continuous_galerkin>
+            <face_value name="FiniteElement">
+              <limit_face_value>
+                <limiter name="Sweby">
+                  <project_upwind_value_from_point>
+                    <reflect_off_domain_boundaries/>
+                    <bound_projected_value_locally/>
+                    <store_upwind_elements/>
+                  </project_upwind_value_from_point>
+                </limiter>
+              </limit_face_value>
+            </face_value>
+            <diffusion_scheme name="ElementGradient"/>
+          </control_volumes>
           <conservative_advection>
             <real_value rank="0">0.0</real_value>
           </conservative_advection>
@@ -440,6 +379,15 @@ epsilon = 3.e-2</comment>
           <theta>
             <real_value rank="0">1.0</real_value>
           </theta>
+          <control_volumes>
+            <number_advection_iterations>
+              <integer_value rank="0">3</integer_value>
+            </number_advection_iterations>
+            <maximum_courant_number_per_subcycle>
+              <real_value rank="0">0.5</real_value>
+              <courant_number name="ControlVolumeCFLNumber"/>
+            </maximum_courant_number_per_subcycle>
+          </control_volumes>
         </temporal_discretisation>
         <solver>
           <iterative_method name="preonly"/>
@@ -511,26 +459,8 @@ epsilon = 3.e-2</comment>
         </tensor_field>
         <scalar_field name="Source" rank="0">
           <diagnostic>
-            <mesh name="P3DGMesh"/>
-            <algorithm name="viscous_dissipation_plus_surface_terms" material_phase_support="single ">
-              <phase_change_indicator_field name="PhaseChangeIndicator">
-                <delta_rho_fraction>
-                  <real_value rank="0">0.05</real_value>
-                </delta_rho_fraction>
-                <clapeyron_slope>
-                  <real_value rank="0">1.25</real_value>
-                </clapeyron_slope>
-              </phase_change_indicator_field>
-              <spatial_discretisation>
-                <mass_terms>
-                  <exclude_mass/>
-                </mass_terms>
-              </spatial_discretisation>
-              <temporal_discretisation>
-                <theta>
-                  <real_value rank="0">1</real_value>
-                </theta>
-              </temporal_discretisation>
+            <mesh name="CoordinateMesh"/>
+            <algorithm name="viscous_dissipation_plus_surface_adiabat" material_phase_support="single ">
               <surface_temperature>
                 <real_value rank="0">0.091</real_value>
               </surface_temperature>
@@ -544,27 +474,8 @@ epsilon = 3.e-2</comment>
         </scalar_field>
         <scalar_field name="Absorption" rank="0">
           <diagnostic>
-            <mesh name="P3DGMesh"/>
-            <algorithm name="adiabatic_plus_latent_heating_coefficient" material_phase_support="single ">
-              <phase_change_indicator_field name="PhaseChangeIndicator">
-                <delta_rho_fraction>
-                  <real_value rank="0">0.05</real_value>
-                </delta_rho_fraction>
-                <clapeyron_slope>
-                  <real_value rank="0">1.25</real_value>
-                </clapeyron_slope>
-              </phase_change_indicator_field>
-              <spatial_discretisation>
-                <mass_terms>
-                  <exclude_mass/>
-                </mass_terms>
-              </spatial_discretisation>
-              <temporal_discretisation>
-                <theta>
-                  <real_value rank="0">1</real_value>
-                </theta>
-              </temporal_discretisation>
-            </algorithm>
+            <mesh name="CoordinateMesh"/>
+            <algorithm name="adiabatic_heating_coefficient" material_phase_support="single "/>
             <output/>
             <stat/>
             <detectors>
@@ -612,10 +523,8 @@ epsilon = 3.e-2</comment>
         <algorithm legacy="true" name="Internal" material_phase_support="multiple"/>
         <mesh name="CoordinateMesh"/>
         <solver>
-          <iterative_method name="preonly"/>
-          <preconditioner name="lu">
-            <factorization_package name="petsc"/>
-          </preconditioner>
+          <iterative_method name="cg"/>
+          <preconditioner name="sor"/>
           <relative_error>
             <real_value rank="0">1.0e-7</real_value>
           </relative_error>
@@ -643,7 +552,7 @@ epsilon = 3.e-2</comment>
     <scalar_field name="Adiabatic_Absorption" rank="0">
       <diagnostic>
         <algorithm name="adiabatic_heating_absorption" material_phase_support="single "/>
-        <mesh name="P4Mesh"/>
+        <mesh name="CoordinateMesh"/>
         <output/>
         <stat/>
         <convergence>
@@ -659,7 +568,7 @@ epsilon = 3.e-2</comment>
     </scalar_field>
     <scalar_field name="CompressibleReferenceDensity" rank="0">
       <prescribed>
-        <mesh name="VelocityMesh"/>
+        <mesh name="CoordinateMesh"/>
         <value name="WholeMesh">
           <constant>
             <real_value rank="0">1.0</real_value>
@@ -674,7 +583,7 @@ epsilon = 3.e-2</comment>
     </scalar_field>
     <scalar_field name="CompressibleReferenceTemperature" rank="0">
       <prescribed>
-        <mesh name="VelocityMesh"/>
+        <mesh name="CoordinateMesh"/>
         <value name="WholeMesh">
           <constant>
             <real_value rank="0">0.</real_value>
@@ -689,7 +598,7 @@ epsilon = 3.e-2</comment>
     </scalar_field>
     <scalar_field name="IsobaricSpecificHeatCapacity" rank="0">
       <prescribed>
-        <mesh name="VelocityMesh"/>
+        <mesh name="CoordinateMesh"/>
         <value name="WholeMesh">
           <constant>
             <real_value rank="0">1.0</real_value>
@@ -701,83 +610,6 @@ epsilon = 3.e-2</comment>
           <exclude_from_detectors/>
         </detectors>
       </prescribed>
-    </scalar_field>
-    <scalar_field name="PhaseChangeIndicator" rank="0">
-      <diagnostic>
-        <algorithm name="depth_dependent_clapeyron_phase_change_indicator" material_phase_support="single">
-          <reference_depth>
-            <real_value rank="0">0.5</real_value>
-            <comment>This is designed so that given a diffusive temperature profile the phase change will occur halfway through the domain:
-0.5 - (epsilon/Di)*Gamma*(1.-0.5)
-epsilon = 3.e-2
-Di = 0.25
-Gamma = 1.25</comment>
-          </reference_depth>
-          <clapeyron_slope>
-            <real_value rank="0">0.0375</real_value>
-            <comment>This is the clapeyron slope scaled by epsilon:
-clapeyron_slope = 1.25
-epsilon = 3.e-2</comment>
-          </clapeyron_slope>
-          <transition_width>
-            <real_value rank="0">0.1</real_value>
-          </transition_width>
-          <reference_temperature>
-            <real_value rank="0">0.5</real_value>
-          </reference_temperature>
-        </algorithm>
-        <mesh name="VelocityMesh"/>
-        <output/>
-        <stat/>
-        <convergence>
-          <include_in_convergence/>
-        </convergence>
-        <detectors>
-          <include_in_detectors/>
-        </detectors>
-        <steady_state>
-          <include_in_steady_state/>
-        </steady_state>
-      </diagnostic>
-    </scalar_field>
-    <scalar_field name="LatentHeating" rank="0">
-      <diagnostic>
-        <algorithm name="phase_change_latent_heating" material_phase_support="single">
-          <phase_change_indicator_field name="PhaseChangeIndicator">
-            <delta_rho_fraction>
-              <real_value rank="0">0.05</real_value>
-            </delta_rho_fraction>
-            <clapeyron_slope>
-              <real_value rank="0">1.25</real_value>
-            </clapeyron_slope>
-          </phase_change_indicator_field>
-          <spatial_discretisation>
-            <mass_terms>
-              <exclude_mass/>
-            </mass_terms>
-          </spatial_discretisation>
-          <temporal_discretisation>
-            <theta>
-              <real_value rank="0">1</real_value>
-            </theta>
-          </temporal_discretisation>
-          <surface_temperature>
-            <real_value rank="0">0.091</real_value>
-          </surface_temperature>
-        </algorithm>
-        <mesh name="LatentHeatingMesh"/>
-        <output/>
-        <stat/>
-        <convergence>
-          <include_in_convergence/>
-        </convergence>
-        <detectors>
-          <include_in_detectors/>
-        </detectors>
-        <steady_state>
-          <include_in_steady_state/>
-        </steady_state>
-      </diagnostic>
     </scalar_field>
   </material_phase>
 </fluidity_options>
