@@ -1508,7 +1508,7 @@ depth_dependent_clapeyron_phase_change_indicator =
       element algorithm {
         attribute name { "depth_dependent_clapeyron_phase_change_indicator" },
         attribute material_phase_support { "single" },
-        ## The depth of the phase change at zero temperature.
+        ## The depth of the phase change at the reference temperature (see below).
         ##
         ## NOTE that this is the depth from the top of the domain where the vertical coordinate is assumed 
         ## to be the last coordinate.
@@ -1529,7 +1529,13 @@ depth_dependent_clapeyron_phase_change_indicator =
         ## NOTE that this will be scaled by rho0*g to convert it to a pressure.
         element transition_width {
           real
-        }
+        },
+        ## The reference temperature at which the reference depth is assumed to lie.
+        ##
+        ## This is zero if not activated.
+        element reference_temperature {
+          real
+        }?
       }
    )
 

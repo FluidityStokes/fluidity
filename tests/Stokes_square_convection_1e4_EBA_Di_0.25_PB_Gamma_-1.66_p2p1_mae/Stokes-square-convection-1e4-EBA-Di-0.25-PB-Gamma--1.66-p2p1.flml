@@ -708,7 +708,7 @@ epsilon = 3.e-2</comment>
       <diagnostic>
         <algorithm name="depth_dependent_clapeyron_phase_change_indicator" material_phase_support="single">
           <reference_depth>
-            <real_value rank="0">0.6</real_value>
+            <real_value rank="0">0.5</real_value>
             <comment>This is designed so that given a diffusive temperature profile the phase change will occur halfway through the domain:
 0.5 - (epsilon/Di)*Gamma*(1.-0.5)
 epsilon = 3.e-2
@@ -724,6 +724,9 @@ epsilon = 3.e-2</comment>
           <transition_width>
             <real_value rank="0">0.1</real_value>
           </transition_width>
+          <reference_temperature>
+            <real_value rank="0">0.5</real_value>
+          </reference_temperature>
         </algorithm>
         <mesh name="VelocityMesh"/>
         <output/>
