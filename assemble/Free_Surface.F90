@@ -305,7 +305,8 @@ contains
       
       ! reference density
       variable_reference_density = .false.
-      linearised_mantle_eos = have_option(trim(state%option_path)//"/equation_of_state/compressible/linearised_mantle")
+      linearised_mantle_eos = have_option(trim(state%option_path)//"/equation_of_state/compressible/linearised_mantle") .or. &
+                              have_option(trim(state%option_path)//"/equation_of_state/fluids/linearised_mantle")
       if (linearised_mantle_eos) then
         variable_reference_density = .true.
         variable_rho0 => extract_scalar_field(state, "CompressibleReferenceDensity")
@@ -690,7 +691,8 @@ contains
     gravity_normal => extract_vector_field(state, "GravityDirection")
     ! reference density
     variable_reference_density = .false.
-    linearised_mantle_eos = have_option(trim(state%option_path)//"/equation_of_state/compressible/linearised_mantle")
+    linearised_mantle_eos = have_option(trim(state%option_path)//"/equation_of_state/compressible/linearised_mantle") .or. &
+                            have_option(trim(state%option_path)//"/equation_of_state/fluids/linearised_mantle")
     if (linearised_mantle_eos) then
       variable_reference_density = .true.
       variable_rho0 => extract_scalar_field(state, "CompressibleReferenceDensity")
@@ -883,7 +885,8 @@ contains
     
     ! reference density
     variable_reference_density = .false.
-    linearised_mantle_eos = have_option(trim(state%option_path)//"/equation_of_state/compressible/linearised_mantle")
+    linearised_mantle_eos = have_option(trim(state%option_path)//"/equation_of_state/compressible/linearised_mantle") .or. &
+                            have_option(trim(state%option_path)//"/equation_of_state/fluids/linearised_mantle")
     if (linearised_mantle_eos) then
       variable_reference_density = .true.
       variable_rho0 => extract_scalar_field(state, "CompressibleReferenceDensity")
@@ -1155,7 +1158,8 @@ contains
 
     ! reference density
     variable_reference_density = .false.
-    linearised_mantle_eos = have_option(trim(state%option_path)//"/equation_of_state/compressible/linearised_mantle")
+    linearised_mantle_eos = have_option(trim(state%option_path)//"/equation_of_state/compressible/linearised_mantle") .or. &
+                            have_option(trim(state%option_path)//"/equation_of_state/fluids/linearised_mantle")
     if (linearised_mantle_eos) then
       variable_reference_density = .true.
       variable_rho0 => extract_scalar_field(state, "CompressibleReferenceDensity")
@@ -2014,7 +2018,8 @@ contains
    x => extract_vector_field(state, "Coordinate")
    ! reference density
    variable_reference_density = .false.
-   linearised_mantle_eos = have_option(trim(state%option_path)//"/equation_of_state/compressible/linearised_mantle")
+   linearised_mantle_eos = have_option(trim(state%option_path)//"/equation_of_state/compressible/linearised_mantle") .or. &
+                           have_option(trim(state%option_path)//"/equation_of_state/fluids/linearised_mantle")
    if (linearised_mantle_eos) then
      variable_reference_density = .true.
      variable_rho0 => extract_scalar_field(state, "CompressibleReferenceDensity")
@@ -2145,7 +2150,8 @@ contains
     x => extract_vector_field(state, "Coordinate")
     ! reference density
     variable_reference_density = .false.
-    linearised_mantle_eos = have_option(trim(state%option_path)//"/equation_of_state/compressible/linearised_mantle")
+    linearised_mantle_eos = have_option(trim(state%option_path)//"/equation_of_state/compressible/linearised_mantle") .or. &
+                            have_option(trim(state%option_path)//"/equation_of_state/fluids/linearised_mantle")
     if (linearised_mantle_eos) then
       variable_reference_density = .true.
       variable_rho0 => extract_scalar_field(state, "CompressibleReferenceDensity")
@@ -3353,7 +3359,8 @@ contains
 
   subroutine free_surface_module_check_options
     
-    character(len=OPTION_PATH_LEN):: option_path, phase_path, pressure_path, density_path, pade_path, linmantle_path
+    character(len=OPTION_PATH_LEN):: option_path, phase_path, pressure_path, density_path, linear_eos_path, fluids_linmantle_path, &
+                                     comp_linmantle_path, pade_path 
     character(len=FIELD_NAME_LEN):: fs_meshname, p_meshname, bctype
     logical:: have_free_surface, have_explicit_free_surface, have_viscous_free_surface, have_standard_free_surface
     logical:: local_have_explicit_free_surface, local_have_viscous_free_surface
@@ -3505,13 +3512,25 @@ contains
         end if
       end if
       
-      option_path=trim(phase_path)//'/equation_of_state/fluids/linear/subtract_out_hydrostatic_level'
+      linear_eos_path=trim(phase_path)//'/equation_of_state/fluids/linear'
       pade_path=trim(phase_path)//'/equation_of_state/fluids/ocean_pade_approximation'
-      linmantle_path=trim(phase_path)//'/equation_of_state/compressible/linearised_mantle'
-      if (have_free_surface .and. .not.(have_option(option_path)) .and. .not.(have_option(pade_path)) &
-          .and. .not.(have_option(linmantle_path))) then
+      comp_linmantle_path=trim(phase_path)//'/equation_of_state/compressible/linearised_mantle'
+      fluids_linmantle_path=trim(phase_path)//'/equation_of_state/fluids/linearised_mantle'
+      if (have_free_surface .and. .not.(have_option(linear_eos_path).or.have_option(pade_path).or. &
+                                        have_option(comp_linmantle_path).or.have_option(fluids_linmantle_path))) then
+        FLExit("Free surface not known to work with selected equation of state.")
+      end if
+
+      option_path='/material_phase/equation_of_state/fluids/linear/subtract_out_hydrostatic_level'
+      if (have_free_surface .and. have_option(linear_eos_path) .and. option_count(option_path)==0) then
         ewrite(-1,*) "Missing option: ", trim(option_path)
-        FLExit("With the free surface you need to subtract out the hydrostatic level.")
+        FLExit("With the free surface you need to subtract out the hydrostatic level in one material_phase.")
+      end if
+      
+      option_path='/material_phase/equation_of_state/fluids/linearised_mantle/subtract_out_hydrostatic_level'
+      if (have_free_surface .and. have_option(fluids_linmantle_path) .and. option_count(option_path)==0) then
+        ewrite(-1,*) "Missing option: ", trim(option_path)
+        FLExit("With the free surface you need to subtract out the hydrostatic level in one material_phase.")
       end if
       
       option_path=trim(phase_path)//'/scalar_field::Pressure/prognostic/reference_node'

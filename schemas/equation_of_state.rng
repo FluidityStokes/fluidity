@@ -94,6 +94,27 @@ approximation</a:documentation>
             </element>
           </optional>
         </element>
+        <element name="linearised_mantle">
+          <a:documentation>This equation linearises the temperature dependence
+around a reference state.  It depends on the prescribed/diagnostic fields:
+ - CompressibleReferenceDensity
+ - IsobaricThermalExpansivity
+which should vary in at most depth.
+It also requires the prognostic fields:
+ - Temperature
+ - Pressure
+ - Density.
+
+It is intended to be used in combination with a MantleAnelasticEnergy equation type for Temperature.</a:documentation>
+          <ref name="comment"/>
+          <optional>
+            <element name="subtract_out_hydrostatic_level">
+              <a:documentation>Enable this option to subtract out
+the hydrostatic level</a:documentation>
+              <ref name="comment"/>
+            </element>
+          </optional>
+        </element>
       </choice>
     </element>
   </define>

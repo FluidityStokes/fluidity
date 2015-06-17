@@ -238,13 +238,15 @@ contains
     type(scalar_field), intent(inout), optional, target :: bulk_density
     logical, intent(in), optional ::momentum_diagnostic
     
-    type(scalar_field) :: eosdensity
+    type(scalar_field) :: eosdensity, dummydrhodp
     type(scalar_field), pointer :: tmpdensity
     type(scalar_field) :: bulksumvolumefractionsbound
     type(scalar_field) :: buoyancysumvolumefractionsbound
+    type(scalar_field) :: reference_density_field, hydrostatic_rho0_field
     type(mesh_type), pointer :: mesh
     integer, dimension(size(state)) :: state_order
     logical :: subtract_out_hydrostatic, multimaterial
+    logical :: subtract_out_field, subtract_out_constant
     character(len=OPTION_PATH_LEN) :: option_path
     integer :: subtract_count, materialvolumefraction_count
     real :: hydrostatic_rho0, reference_density
@@ -264,8 +266,10 @@ contains
     
     if(present(bulk_density)) then
       mesh => bulk_density%mesh
-    else
+    else if (present(buoyancy_density)) then
       mesh => buoyancy_density%mesh
+    else
+      FLAbort("Called calculate_densities without asking for a density.")
     end if
     
     multimaterial = .false.
@@ -281,14 +285,15 @@ contains
         
         subtract_count = subtract_count + &
             option_count(trim(option_path)//'/fluids/linear/subtract_out_hydrostatic_level') + &
-            option_count(trim(option_path)//'/fluids/ocean_pade_approximation')
+            option_count(trim(option_path)//'/fluids/ocean_pade_approximation') + &
+            option_count(trim(option_path)//'/fluids/linearised_mantle/subtract_out_hydrostatic_level')
         
       end do
       if(size(state)/=materialvolumefraction_count) then
         FLExit("Multiple material_phases but not all of them have MaterialVolumeFractions.")
       end if
       if(subtract_count>1) then
-        FLExit("You can only select one material_phase to use the reference_density from to subtract out the hydrostatic level.")
+        FLExit("You can only select one material_phase to use the reference density from to subtract out the hydrostatic level.")
       end if
       
       multimaterial = .true.
@@ -316,12 +321,15 @@ contains
     
     boussinesq = .false.
     hydrostatic_rho0 = 0.0
+    subtract_out_constant = .false.
+    subtract_out_field = .false.
     state_loop: do i = 1, size(state)
   
       option_path='/material_phase::'//trim(state(state_order(i))%name)//'/equation_of_state'
       
-      if(have_option(trim(option_path)//'/fluids')) then
-        ! we have a fluids eos
+      if(have_option(trim(option_path)//'/fluids/linear') .or. &
+         have_option(trim(option_path)//'/fluids/ocean_pade_approximation')) then
+        ! we have a fluids eos (linear or ocean_pade_approximation)
       
         subtract_out_hydrostatic = &
           have_option(trim(option_path)//'/fluids/linear/subtract_out_hydrostatic_level') .or. &
@@ -343,6 +351,7 @@ contains
               ! if multimaterial we have to subtract out a single global value at the end
               ! so save it for now
               hydrostatic_rho0 = reference_density
+              subtract_out_constant = .true.
             end if
             call add_scaled_material_property(state(state_order(i)), buoyancy_density, eosdensity, &
                                               sumvolumefractionsbound=buoyancysumvolumefractionsbound, &
@@ -391,6 +400,59 @@ contains
         
         call deallocate(eosdensity)
         
+      else if(have_option(trim(option_path)//'/fluids/linearised_mantle')) then
+        ! we have another type of fluid (incompressible) eos (linearised_mantle)
+
+        subtract_out_hydrostatic = &
+          have_option(trim(option_path)//'/fluids/linearised_mantle/subtract_out_hydrostatic_level')
+        
+        ! here we use a "compressible" eos routine so allocate a dummy drhodp 
+        ! (not really used because we exclude the compressible component)
+        call allocate(dummydrhodp, mesh, "DummyChangeInDensityWithPressure")
+
+        call allocate(eosdensity, mesh, "LocalPerturbationDensity")
+
+        ! not using this eos in a compressible way
+        call compressible_eos_linearised_mantle(state(state_order(i)), dummydrhodp, density=eosdensity, &
+                                                reference_density=reference_density_field, &
+                                                exclude_pressure_buoyancy=.true.)
+
+        if(present(buoyancy_density)) then
+          if(multimaterial) then
+            if(subtract_out_hydrostatic) then
+              ! if multimaterial we have to subtract out a single global value at the end
+              ! so save it for now
+              hydrostatic_rho0_field = reference_density_field
+              call incref(hydrostatic_rho0_field)
+              subtract_out_field = .true.
+            end if
+            call add_scaled_material_property(state(state_order(i)), buoyancy_density, eosdensity, &
+                                              sumvolumefractionsbound=buoyancysumvolumefractionsbound, &
+                                              momentum_diagnostic=momentum_diagnostic)
+          else
+            call set(buoyancy_density, eosdensity)
+            if(subtract_out_hydrostatic) then
+              call addto(buoyancy_density, reference_density_field, scale=-1.0)
+            end if
+          end if
+          
+        end if
+        
+        if(present(bulk_density)) then
+          if(multimaterial) then
+            ! the perturbation density has already had the reference density added to it
+            ! if you're multimaterial
+            call add_scaled_material_property(state(state_order(i)), bulk_density, eosdensity, &
+                                              sumvolumefractionsbound=bulksumvolumefractionsbound, &
+                                              momentum_diagnostic=momentum_diagnostic)
+          else
+            call set(bulk_density, eosdensity)
+          end if
+        end if
+
+        call deallocate(dummydrhodp)
+        call deallocate(reference_density_field)
+
       else
         ! we don't have a fluids eos
         
@@ -448,7 +510,15 @@ contains
     end do state_loop
     
     if(present(buoyancy_density)) then
-      if(multimaterial) call addto(buoyancy_density, -hydrostatic_rho0)
+      if(multimaterial) then
+        if (subtract_out_constant) then
+          call addto(buoyancy_density, -hydrostatic_rho0)
+        end if
+        if (subtract_out_field) then
+          call addto(buoyancy_density, hydrostatic_rho0_field, scale=-1.0)
+          call deallocate(hydrostatic_rho0_field)
+        end if
+      end if
       
       if(boussinesq) then
         ! the buoyancy density is being used in a Boussinesq eqn
