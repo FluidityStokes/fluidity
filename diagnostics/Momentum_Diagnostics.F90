@@ -353,7 +353,7 @@ contains
 
     character(len=OPTION_PATH_LEN) :: eos_option_path
     character(len=FIELD_NAME_LEN) :: density_name
-    logical :: have_linear_eos, have_linearised_mantle_compressible_eos
+    logical :: have_linear_eos, have_linearised_mantle_eos
 
     ewrite(1,*) 'In adiabatic_heating_coefficient'
 
@@ -364,20 +364,53 @@ contains
     call test_remap_validity(velocity,velocity_remap,stat_vel)
     call deallocate(velocity_remap)
 
+    stat_gamma = 0
+    stat_rho = 0
+    stat_reft = 0
+    eos_option_path='/material_phase::'//trim(state%name)//'/equation_of_state'
+    have_linearised_mantle_eos = (have_option(trim(eos_option_path)//'/compressible/linearised_mantle')) .or. &
+                                 (have_option(trim(eos_option_path)//'/fluids/linearised_mantle'))
+    if(have_linearised_mantle_eos) then
+
+       ! Get spatially varying thermal expansion field and remap to s_field%mesh if possible and required:
+       thermal_expansion_local=>extract_scalar_field(state,'IsobaricThermalExpansivity')       
+       call allocate(thermal_expansion_remap, s_field%mesh, 'RemappedIsobaricThermalExpansivity')
+       call test_remap_validity(thermal_expansion_local,thermal_expansion_remap,stat_gamma)
+       call deallocate(thermal_expansion_remap)
+
+       ! Get CompressibleReferenceDensity and remap to s_field%mesh if possible and required:
+       density_local => extract_scalar_field(state,'CompressibleReferenceDensity')
+       call allocate(density_remap, s_field%mesh, 'RemappedCompressibleReferenceDensity')
+       call test_remap_validity(density_local,density_remap,stat_rho)
+       call deallocate(density_remap)
+
+       ! Calculate and set adiabatic heating coefficient:
+       call get_option(trim(state%option_path)//'/scalar_field::Temperature/prognostic/equation[0]/density[0]/name', density_name)
+
+       if (trim(density_name)=="Density") then
+
+          reference_temperature_local=>extract_scalar_field(state,'CompressibleReferenceTemperature')       
+          call allocate(reference_temperature_remap, s_field%mesh, 'RemappedCompressibleReferenceTemperature')
+          call test_remap_validity(reference_temperature_local,reference_temperature_remap,stat_reft)
+          call deallocate(reference_temperature_remap)
+
+       end if
+
+    end if
+
+
     ! Extract gravitational info from state:
     gravity_direction => extract_vector_field(state, "GravityDirection")
     call get_option("/physical_parameters/gravity/magnitude", gravity_magnitude)
 
-    if(stat_vel == 0) then
+    if(stat_vel == 0 .and. stat_gamma == 0 .and. stat_rho == 0 .and. stat_reft == 0) then
 
        call allocate(velocity_component, s_field%mesh, "VerticalVelocityComponent")
        ! Take inner product of velocity and gravity to determine vertical component of velocity:
        call inner_product(velocity_component, velocity, gravity_direction)
        
        ! Determine which EOS is relevant:
-       eos_option_path='/material_phase::'//trim(state%name)//'/equation_of_state'
        have_linear_eos = (have_option(trim(eos_option_path)//'/fluids/linear'))
-       have_linearised_mantle_compressible_eos = (have_option(trim(eos_option_path)//'/compressible/linearised_mantle'))
 
        if(have_linear_eos) then
 
@@ -390,7 +423,7 @@ contains
              call set(s_field, node, -gamma*rho0*gravity_magnitude*node_val(velocity_component,node))
           end do
 
-       elseif(have_linearised_mantle_compressible_eos) then
+       elseif(have_linearised_mantle_eos) then
 
           ! Get spatially varying thermal expansion field and remap to s_field%mesh if possible and required:
           thermal_expansion_local=>extract_scalar_field(state,'IsobaricThermalExpansivity')       
@@ -507,7 +540,7 @@ contains
 
     character(len=OPTION_PATH_LEN) eos_option_path
     character(len=FIELD_NAME_LEN) :: density_name
-    logical :: have_linear_eos, have_linearised_mantle_compressible_eos
+    logical :: have_linear_eos, have_linearised_mantle_eos
 
     ewrite(1,*) 'In adiabatic_heating_coefficient_projection'
 
@@ -528,7 +561,8 @@ contains
     ! Determine which EOS is relevant:
     eos_option_path='/material_phase::'//trim(state%name)//'/equation_of_state'
     have_linear_eos = (have_option(trim(eos_option_path)//'/fluids/linear'))
-    have_linearised_mantle_compressible_eos = (have_option(trim(eos_option_path)//'/compressible/linearised_mantle'))
+    have_linearised_mantle_eos = (have_option(trim(eos_option_path)//'/compressible/linearised_mantle')) .or. &
+                                 (have_option(trim(eos_option_path)//'/fluids/linearised_mantle'))
 
     ! Extract relevant parameters from options/state:
     if(have_linear_eos) then
@@ -540,13 +574,13 @@ contains
        ! thermal_expansion to dummy scalars:
        density_local => dummyscalar
        thermal_expansion => dummyscalar
-    elseif(have_linearised_mantle_compressible_eos) then
+    elseif(have_linearised_mantle_eos) then
        ! Get spatially varying thermal expansion field:
        thermal_expansion=>extract_scalar_field(state,'IsobaricThermalExpansivity')
        ! Get CompressibleReferenceDensity field:
        density_local => extract_scalar_field(state,'CompressibleReferenceDensity')
     else
-       FLExit("Selected EOS not yet configured for adiabatic_heating_coefficient_CV algorithm")
+       FLExit("Selected EOS not yet configured for adiabatic_heating_coefficient_projection algorithm")
     endif
 
     ! Integrate to determine RHS:
@@ -558,7 +592,7 @@ contains
           call integrate_RHS_ele(s_field, positions, velocity, gravity_direction, thermal_expansion, density_local, gravity_magnitude, ele, rho0=rho0, gamma=gamma)
        end do
        
-    else if(have_linearised_mantle_compressible_eos) then             
+    else if(have_linearised_mantle_eos) then             
        
        call get_option(trim(state%option_path)//'/scalar_field::Temperature/prognostic/equation[0]/density[0]/name', density_name)
        
@@ -586,7 +620,7 @@ contains
     end if
 
     ! Compute inverse lumped mass matrix:
-    call allocate(lumped_mass, s_field%mesh, name="Lumped_mass")        
+    call allocate(lumped_mass, s_field%mesh, name="Lumped_mass")
     call compute_cv_mass(positions, lumped_mass)
     call invert(lumped_mass)
     

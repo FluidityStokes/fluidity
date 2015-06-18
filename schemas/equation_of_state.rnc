@@ -83,6 +83,25 @@ fluids_eos_options =
                element include_depth_below_surface {
                   empty
                }?
+            }|
+            ## This equation linearises the temperature dependence
+            ## around a reference state.  It depends on the prescribed/diagnostic fields:
+            ##  - CompressibleReferenceDensity
+            ##  - IsobaricThermalExpansivity
+            ## which should vary in at most depth.
+            ## It also requires the prognostic fields:
+            ##  - Temperature
+            ##  - Pressure
+            ##  - Density.
+            ##
+            ## It is intended to be used in combination with a MantleAnelasticEnergy equation type for Temperature.
+            element linearised_mantle {
+              comment,
+              ## Enable this option to subtract out
+              ## the hydrostatic level
+              element subtract_out_hydrostatic_level {
+                 comment
+              }?
             }
          )
       }   

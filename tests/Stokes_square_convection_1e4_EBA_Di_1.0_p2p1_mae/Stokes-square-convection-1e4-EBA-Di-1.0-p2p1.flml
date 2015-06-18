@@ -137,20 +137,9 @@
   <material_phase name="Fluid">
     <equation_of_state>
       <fluids>
-        <linear>
-          <reference_density>
-            <real_value rank="0">1.0</real_value>
-          </reference_density>
-          <temperature_dependency>
-            <reference_temperature>
-              <real_value rank="0">0.0</real_value>
-            </reference_temperature>
-            <thermal_expansion_coefficient>
-              <real_value rank="0">1.0</real_value>
-            </thermal_expansion_coefficient>
-          </temperature_dependency>
+        <linearised_mantle>
           <subtract_out_hydrostatic_level/>
-        </linear>
+        </linearised_mantle>
       </fluids>
     </equation_of_state>
     <scalar_field name="Pressure" rank="0">
@@ -255,6 +244,7 @@
             <stress_terms>
               <stress_form/>
             </stress_terms>
+            <buoyancy/>
           </continuous_galerkin>
           <conservative_advection>
             <real_value rank="0">1.0</real_value>
@@ -591,6 +581,21 @@
       </prescribed>
     </scalar_field>
     <scalar_field name="IsobaricSpecificHeatCapacity" rank="0">
+      <prescribed>
+        <mesh name="VelocityMesh"/>
+        <value name="WholeMesh">
+          <constant>
+            <real_value rank="0">1.0</real_value>
+          </constant>
+        </value>
+        <output/>
+        <stat/>
+        <detectors>
+          <exclude_from_detectors/>
+        </detectors>
+      </prescribed>
+    </scalar_field>
+    <scalar_field name="IsobaricThermalExpansivity" rank="0">
       <prescribed>
         <mesh name="VelocityMesh"/>
         <value name="WholeMesh">

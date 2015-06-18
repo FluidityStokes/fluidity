@@ -38,7 +38,8 @@ module equation_of_state
   
   private
   public :: calculate_perturbation_density, mcD_J_W_F2002, &
-            compressible_eos, compressible_material_eos
+            compressible_eos, compressible_material_eos, &
+            compressible_eos_linearised_mantle
 
 contains
 
@@ -731,11 +732,13 @@ contains
   end subroutine compressible_eos_foam
         
   subroutine compressible_eos_linearised_mantle(state, drhodp, &
-    density, pressure, buoyancy_density)
+    density, pressure, buoyancy_density, reference_density, exclude_pressure_buoyancy)
     ! Linearised mantle equation of state
     type(state_type), intent(in) :: state
     type(scalar_field), intent(inout) :: drhodp
     type(scalar_field), intent(inout), optional :: density, pressure, buoyancy_density
+    type(scalar_field), intent(inout), optional :: reference_density ! if present this needs to be deallocated by the caller
+    logical, optional :: exclude_pressure_buoyancy
     
     !locals
     integer :: stat
@@ -744,14 +747,18 @@ contains
     type(scalar_field) :: pressure_remap, density_remap, referencedensity_remap, &
                           compressibility, dpdrho, thermalexpansion_remap, &
                           temperatureproduct
-    logical :: implicit_pressure_buoyancy, exclude_pressure_buoyancy
+    logical :: implicit_pressure_buoyancy, l_exclude_pressure_buoyancy
     character(len=OPTION_PATH_LEN) :: linearised_mantle_eos_path
     
     call zero(drhodp)
 
-    linearised_mantle_eos_path = "/equation_of_state/compressible/linearised_mantle/"
-    exclude_pressure_buoyancy = have_option(trim(state%option_path)//&
-         trim(linearised_mantle_eos_path)//"/exclude_pressure_buoyancy")
+    if (present(exclude_pressure_buoyancy)) then
+      l_exclude_pressure_buoyancy = exclude_pressure_buoyancy
+    else
+      linearised_mantle_eos_path = "/equation_of_state/compressible/linearised_mantle/"
+      l_exclude_pressure_buoyancy = have_option(trim(state%option_path)//&
+           trim(linearised_mantle_eos_path)//"/exclude_pressure_buoyancy")
+    end if
     
     ! Extract relevant parameters from state and remap to drhodp mesh so that all
     ! parameters are on same mesh:    
@@ -760,7 +767,7 @@ contains
     call remap_field(referencedensity_local, referencedensity_remap)
     call set(drhodp, referencedensity_remap)
     
-    if(.not.(exclude_pressure_buoyancy)) then
+    if(.not.(l_exclude_pressure_buoyancy)) then
        bulkmodulus_local=>extract_scalar_field(state,'IsothermalBulkModulus')
        call allocate(compressibility, drhodp%mesh, 'RemappedIsothermalBulkModulus')
        call remap_field(bulkmodulus_local, compressibility)
@@ -784,11 +791,11 @@ contains
        
        if(present(density).or.present(buoyancy_density)) then
           ! Calculate the density field:          
-          if(exclude_pressure_buoyancy) then ! TALA Cases
+          if(l_exclude_pressure_buoyancy) then ! TALA Cases
              ! density = reference_density + (referencedensity*thermalexpansion*temperature)
              if(present(density)) then
                 assert(density%mesh==drhodp%mesh)
-                call set(density, drhodp)
+                call set(density, referencedensity_remap)
                 call addto(density, temperatureproduct, -1.0)
              end if
              
@@ -863,7 +870,11 @@ contains
 
     end if
 
-    call deallocate(referencedensity_remap)
+    if (present(reference_density)) then
+      reference_density = referencedensity_remap
+    else
+      call deallocate(referencedensity_remap)
+    end if
 
   end subroutine compressible_eos_linearised_mantle
 
