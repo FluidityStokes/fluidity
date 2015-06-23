@@ -64,8 +64,7 @@ contains
     
     ! Local variables  
     type(scalar_field), pointer :: bulk_density, buoyancy_density, sfield
-    type(vector_field), pointer :: vfield, x, velocity
-    type(vector_field) :: prescribed_source
+    type(vector_field), pointer :: vfield, velocity
     type(tensor_field), pointer :: tfield
     
     character(len=FIELD_NAME_LEN) :: sfield_name
@@ -464,6 +463,7 @@ contains
 
         call deallocate(dummydrhodp)
         call deallocate(reference_density_field)
+        call deallocate(eosdensity)
 
       else
         ! we don't have a fluids eos
