@@ -441,6 +441,18 @@ contains
                end if
              end do
 
+             n_generic_scalar_fields = option_count(trim(state(i)%option_path) // "/equation_of_state/fluids/linearised_mantle" &
+                                                                               //"/generic_scalar_field_dependency")
+             do j = 1, n_generic_scalar_fields
+               call get_option(trim(state(i)%option_path) // "/equation_of_state/fluids/linearised_mantle" &
+                                                          // "/generic_scalar_field_dependency[" // int2str(j-1) // "]/name", &
+                               gsfield_name)
+               gs_field => extract_scalar_field(state(i), gsfield_name)
+               if (have_option(trim(gs_field%option_path) // "/diagnostic")) then
+                 call calculate_diagnostic_variable_new(state, i, gs_field)
+               end if
+             end do
+
              if(option_count("/material_phase/vector_field::Velocity/prognostic") > 1) then 
                call get_phase_submaterials(state, i, submaterials)
                call calculate_densities(submaterials, bulk_density=s_field)

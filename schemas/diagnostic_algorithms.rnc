@@ -1463,7 +1463,7 @@ latent_heating_options =
         ## The Clapeyron slope of the phase change.
         ##
         ## If activated the value given here is used.  
-        ## Otherwise we assume that a depth_dependent_depth_dependent_clapeyron_phase_change_indicator
+        ## Otherwise we assume that a pressure/depth_dependent_clapeyron_phase_change_indicator
         ## diagnostic algorithm has been used for this field and taken the clapeyron slope from there.
         ##
         ## Normaly the values used in the algorithm and here will be the same but this option is provided 
@@ -1531,6 +1531,39 @@ depth_dependent_clapeyron_phase_change_indicator =
           real
         },
         ## The reference temperature at which the reference depth is assumed to lie.
+        ##
+        ## This is zero if not activated.
+        element reference_temperature {
+          real
+        }?
+      }
+   )
+
+pressure_dependent_clapeyron_phase_change_indicator =
+   (
+      ## algorithm for calculating a temperature and depth dependent phase change indicator (0 to 1)
+      ## using a Clausius-Clapeyron slope and a tanh function
+      ##
+      ## This mostly follows the description of Christensen & Yuen, 1985.
+      element algorithm {
+        attribute name { "pressure_dependent_clapeyron_phase_change_indicator" },
+        attribute material_phase_support { "single" },
+        ## The pressure of the phase change at the reference temperature (see below).
+        element reference_pressure {
+          real
+        },
+        ## The Clapeyron slope of the phase change.
+        element clapeyron_slope {
+          real
+        },
+        ## The width of the phase transition (in units of pressure).
+        ##
+        ## NOTE that this differs from the definition of Christensen & Yuen, 1985 where the width used
+        ## is actually a half width so equal to half this value and is in units of depth.
+        element transition_width {
+          real
+        },
+        ## The reference temperature at which the reference pressure is assumed to lie.
         ##
         ## This is zero if not activated.
         element reference_temperature {
@@ -1718,6 +1751,7 @@ scalar_diagnostic_algorithms |= element_ownership_algorithm
 scalar_diagnostic_algorithms |= element_halo_diagnostic_algorithm
 scalar_diagnostic_algorithms |= div_algorithm
 scalar_diagnostic_algorithms |= depth_dependent_clapeyron_phase_change_indicator
+scalar_diagnostic_algorithms |= pressure_dependent_clapeyron_phase_change_indicator
 scalar_diagnostic_algorithms |= curl_2d_algorithm
 scalar_diagnostic_algorithms |= column_id_algorithm
 scalar_diagnostic_algorithms |= adiabatic_heating_coefficient_algorithm
