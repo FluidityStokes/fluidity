@@ -104,6 +104,18 @@ contains
            call calculate_diagnostic_variable(state, i, sfield)
          end if
        end do
+
+       n_generic_scalar_fields = option_count(trim(state(i)%option_path) // "/equation_of_state/fluids/linearised_mantle" &
+                                                                         //"/generic_scalar_field_dependency")
+       do j = 1, n_generic_scalar_fields
+         call get_option(trim(state(i)%option_path) // "/equation_of_state/fluids/linearised_mantle" &
+                                                    // "/generic_scalar_field_dependency[" // int2str(j-1) // "]/name", &
+                         sfield_name)
+         sfield => extract_scalar_field(state(i), sfield_name)
+         if (have_option(trim(sfield%option_path) // "/diagnostic")) then
+           call calculate_diagnostic_variable(state, i, sfield)
+         end if
+       end do
     end do
 
     bulk_density => extract_scalar_field(submaterials(submaterials_istate), 'Density', stat)

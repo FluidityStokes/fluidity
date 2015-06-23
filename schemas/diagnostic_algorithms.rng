@@ -1960,7 +1960,7 @@ for when they differ (e.g. non-dimensional simulations).</a:documentation>
             <a:documentation>The Clapeyron slope of the phase change.
 
 If activated the value given here is used.  
-Otherwise we assume that a depth_dependent_depth_dependent_clapeyron_phase_change_indicator
+Otherwise we assume that a pressure/depth_dependent_clapeyron_phase_change_indicator
 diagnostic algorithm has been used for this field and taken the clapeyron slope from there.
 
 Normaly the values used in the algorithm and here will be the same but this option is provided 
@@ -2037,6 +2037,43 @@ NOTE that this will be scaled by rho0*g to convert it to a pressure.</a:document
       <optional>
         <element name="reference_temperature">
           <a:documentation>The reference temperature at which the reference depth is assumed to lie.
+
+This is zero if not activated.</a:documentation>
+          <ref name="real"/>
+        </element>
+      </optional>
+    </element>
+  </define>
+  <define name="pressure_dependent_clapeyron_phase_change_indicator">
+    <element name="algorithm">
+      <a:documentation>algorithm for calculating a temperature and depth dependent phase change indicator (0 to 1)
+using a Clausius-Clapeyron slope and a tanh function
+
+This mostly follows the description of Christensen &amp; Yuen, 1985.</a:documentation>
+      <attribute name="name">
+        <value>pressure_dependent_clapeyron_phase_change_indicator</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single</value>
+      </attribute>
+      <element name="reference_pressure">
+        <a:documentation>The pressure of the phase change at the reference temperature (see below).</a:documentation>
+        <ref name="real"/>
+      </element>
+      <element name="clapeyron_slope">
+        <a:documentation>The Clapeyron slope of the phase change.</a:documentation>
+        <ref name="real"/>
+      </element>
+      <element name="transition_width">
+        <a:documentation>The width of the phase transition (in units of pressure).
+
+NOTE that this differs from the definition of Christensen &amp; Yuen, 1985 where the width used
+is actually a half width so equal to half this value and is in units of depth.</a:documentation>
+        <ref name="real"/>
+      </element>
+      <optional>
+        <element name="reference_temperature">
+          <a:documentation>The reference temperature at which the reference pressure is assumed to lie.
 
 This is zero if not activated.</a:documentation>
           <ref name="real"/>
@@ -2325,6 +2362,9 @@ This field needs to be interpolated between adapts.</a:documentation>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="depth_dependent_clapeyron_phase_change_indicator"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="pressure_dependent_clapeyron_phase_change_indicator"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="curl_2d_algorithm"/>

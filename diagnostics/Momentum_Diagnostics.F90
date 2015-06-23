@@ -64,6 +64,7 @@ module momentum_diagnostics
             calculate_viscous_dissipation_plus_surface_adiabat, &
             calculate_viscous_dissipation_plus_surface_terms, &
             calculate_depth_dependent_clapeyron_phase_change_indicator, &
+            calculate_pressure_dependent_clapeyron_phase_change_indicator, &
             calculate_phase_change_latent_heating_absorption, &
             calculate_phase_change_latent_heating
   
@@ -794,6 +795,55 @@ contains
 
   end subroutine calculate_depth_dependent_clapeyron_phase_change_indicator
 
+  subroutine calculate_pressure_dependent_clapeyron_phase_change_indicator(state, s_field)
+    ! Calculates a field indicating a temperature and reference pressure dependent phase 
+    ! change based on a Clausius-Clapeyron slope
+    type(state_type), intent(inout) :: state
+    type(scalar_field), intent(inout) :: s_field
+
+    type(scalar_field), pointer :: temperature, reference_pressure
+    type(scalar_field) :: temperature_remap, reference_pressure_remap, overpressure
+
+    integer :: i
+    real :: p0, gammac, w, T0
+
+    ewrite(2,*) "Entering calculate_pressure_dependent_clapeyron_phase_change_indicator"
+
+    call get_option(trim(s_field%option_path)//"/diagnostic/algorithm/reference_pressure", p0)
+    call get_option(trim(s_field%option_path)//"/diagnostic/algorithm/clapeyron_slope", gammac)
+    call get_option(trim(s_field%option_path)//"/diagnostic/algorithm/transition_width", w)
+    call get_option(trim(s_field%option_path)//"/diagnostic/algorithm/reference_temperature", T0, default=0.0)
+
+    reference_pressure => extract_scalar_field(state, "CompressibleReferencePressure")
+    call allocate(reference_pressure_remap, s_field%mesh, "CompressibleReferencePressureRemap")
+    call remap_field(reference_pressure, reference_pressure_remap)
+
+    ! Extract temperature from state:
+    temperature => extract_scalar_field(state, "Temperature")
+    call allocate(temperature_remap, s_field%mesh, "TemperatureRemap")
+    call remap_field(temperature, temperature_remap)
+
+    call allocate(overpressure, s_field%mesh, "OverPressure")
+
+    call set(overpressure, temperature)
+    call addto(overpressure, -T0)
+    call scale(overpressure, gammac)
+    call addto(overpressure, p0)
+    call scale(overpressure, -1.0)
+    call addto(overpressure, reference_pressure_remap)
+    
+    do i = 1, node_count(s_field)
+      call set(s_field, i, 0.5*(1. + tanh(2.*node_val(overpressure, i)/w)))
+    end do
+
+    ewrite_minmax(s_field)
+
+    call deallocate(overpressure)
+    call deallocate(temperature_remap)
+    call deallocate(reference_pressure_remap)
+
+  end subroutine calculate_pressure_dependent_clapeyron_phase_change_indicator
+
   subroutine calculate_phase_change_latent_heating_absorption(state, s_field)
     type(state_type), intent(inout) :: state
     type(scalar_field), intent(inout) :: s_field
@@ -834,11 +884,11 @@ contains
     type(vector_field) :: velocity_remap
 
     real, dimension(:), allocatable :: delta_rhos, m_clapeyrons
-    character(len=OPTION_PATH_LEN) :: option_path, gamma_option_path
+    character(len=OPTION_PATH_LEN) :: option_path, gamma_option_path, eos_option_path
     character(len=FIELD_NAME_LEN) :: field_name
     integer :: i, ngammas, stat
     real :: dt, theta, T0
-    logical :: exclude_mass, have_surface_temperature, remaps_valid, have_linear_eos
+    logical :: exclude_mass, have_surface_temperature, remaps_valid
 
     ewrite(2,*) "Entering latent_heating."
 
@@ -846,6 +896,14 @@ contains
 
     option_path = trim(s_field%option_path) // "/diagnostic/algorithm[0]"
     
+    if (have_option(trim(state%option_path)//"/equation_of_state/fluids/linear")) then
+      eos_option_path = trim(state%option_path)//"/equation_of_state/fluids/linear"
+    else if (have_option(trim(state%option_path)//"/equation_of_state/fluids/linearised_mantle")) then
+      eos_option_path = trim(state%option_path)//"/equation_of_state/fluids/linearised_mantle"
+    else
+      FLAbort("Unknown latent heating eos.")
+    end if
+
     ngammas = option_count(trim(option_path) // &
                "/phase_change_indicator_field")
 
@@ -880,12 +938,12 @@ contains
       if (have_option(trim(gamma_option_path) // "/delta_rho_fraction")) then
         call get_option(trim(gamma_option_path) // "/delta_rho_fraction", delta_rhos(i))
       else
-        call get_option(trim(state%option_path) // "/equation_of_state/fluids/linear" // &
+        call get_option(trim(eos_option_path) // &
                        "/generic_scalar_field_dependency::"//trim(field_name)//"/expansion_coefficient", &
                        delta_rhos(i), stat=stat)
         if (stat /= 0) then
           ewrite(-1,*) "Couldn't find delta_rho_fraction: should be specified in diagnostic algorithm "
-          ewrite(-1,*) "or in a linear fluids equation of state"
+          ewrite(-1,*) "or in a linear/linearised_mantle fluids equation of state"
           FLExit("Unable to find delta_rho_fraction value when calculating the latent heating.")
         end if
         delta_rhos(i) = -delta_rhos(i)
@@ -895,11 +953,11 @@ contains
         call get_option(trim(gamma_option_path) // "/clapeyron_slope", m_clapeyrons(i))
       else
         call get_option(trim(state%option_path) // "/scalar_field::" // trim(field_name)// &
-                      "/diagnostic/algorithm::depth_dependent_clapeyron_phase_change_indicator/clapeyron_slope", &
+                      "/diagnostic/algorithm[0]/clapeyron_slope", &
                        m_clapeyrons(i), stat=stat)
         if (stat /= 0) then
           ewrite(-1,*) "Couldn't find clapeyron_slope: should be specified in this diagnostic algorithm "
-          ewrite(-1,* ) "or in the depth_dependent_clapeyron_phase_change_indicator diagnostic algorithm."
+          ewrite(-1,* ) "or in the pressure/depth_dependent_clapeyron_phase_change_indicator diagnostic algorithm."
           FLExit("Unable to find clapeyron_slope value when calculating the latent heating.")
         end if
       end if
@@ -911,12 +969,6 @@ contains
     exclude_mass = have_option(trim(option_path) // "/spatial_discretisation/mass_terms/exclude_mass")
     call get_option(trim(option_path) // "/temporal_discretisation/theta", theta)
     call get_option("/timestepping/timestep", dt)
-
-    have_linear_eos = have_option(trim(state%option_path)//"/equation_of_state/fluids/linear")
-
-    if (.not.have_linear_eos) then
-      FLExit("Latent heating currently assumes a linear eos.")
-    end if
 
     if (remaps_valid) then
       velocity  => extract_vector_field(state, "NonlinearVelocity")
@@ -1001,7 +1053,7 @@ contains
     call allocate(remapped, s_field%mesh, "Remapped")
 
     do i = 1, size(gammas)
-      ! This assumes we're using a linear eos
+      ! This assumes we have a constant reference density!
       coeff = m_clapeyrons(i)*delta_rhos(i)/(1.0+delta_rhos(i))
 
       if (.not. (gammas(i)%ptr%mesh%shape == gamma_shape)) then
@@ -1138,7 +1190,7 @@ contains
       velocity_quad = ele_val_at_quad(velocity, ele)
 
       do i = 1, size(gammas)
-        ! This assumes we're using a linear eos
+        ! This assumes we have a constant reference density!
         coeff = m_clapeyrons(i)*delta_rhos(i)/(1.0+delta_rhos(i))
         if (.not. exclude_mass) then
           rhs_addto = rhs_addto + shape_rhs(rhs_shape, coeff*detwei* &
