@@ -290,7 +290,10 @@ contains
     type(state_type), intent(inout) :: state
     type(scalar_field), intent(inout) :: s_field
 
+    type(scalar_field), pointer :: reference_temperature
     type(scalar_field) :: surface_field
+
+    integer :: stat
     
     ewrite(1,*) 'In calculate_viscous_dissipation_plus_surface_terms'
 
@@ -310,7 +313,12 @@ contains
     call zero(surface_field)
 
     ! Calculate surface latent heating term:
-    call latent_heating(state, surface_field)
+    reference_temperature => extract_scalar_field(state, "CompressibleReferenceTemperature", stat)
+    if (stat==0) then
+      call latent_heating(state, surface_field, reference_temperature=reference_temperature)
+    else
+      call latent_heating(state, surface_field)
+    end if
 
     ! Add surface latent heating to viscous dissipation and clean up:
     call addto(s_field, surface_field)
@@ -801,11 +809,11 @@ contains
     type(state_type), intent(inout) :: state
     type(scalar_field), intent(inout) :: s_field
 
-    type(scalar_field), pointer :: temperature, reference_pressure
-    type(scalar_field) :: temperature_remap, reference_pressure_remap, overpressure
+    type(scalar_field), pointer :: temperature, reference_temperature, reference_pressure
+    type(scalar_field) :: temperature_remap, reference_temperature_remap, reference_pressure_remap, overpressure
 
-    integer :: i
-    real :: p0, gammac, w, T0
+    integer :: i, stat
+    real :: p0, gammac, w, T0, Ta
 
     ewrite(2,*) "Entering calculate_pressure_dependent_clapeyron_phase_change_indicator"
 
@@ -813,6 +821,7 @@ contains
     call get_option(trim(s_field%option_path)//"/diagnostic/algorithm/clapeyron_slope", gammac)
     call get_option(trim(s_field%option_path)//"/diagnostic/algorithm/transition_width", w)
     call get_option(trim(s_field%option_path)//"/diagnostic/algorithm/reference_temperature", T0, default=0.0)
+    call get_option(trim(s_field%option_path)//"/diagnostic/algorithm/reference_temperature", Ta, default=0.0)
 
     reference_pressure => extract_scalar_field(state, "CompressibleReferencePressure")
     call allocate(reference_pressure_remap, s_field%mesh, "CompressibleReferencePressureRemap")
@@ -823,9 +832,21 @@ contains
     call allocate(temperature_remap, s_field%mesh, "TemperatureRemap")
     call remap_field(temperature, temperature_remap)
 
+    reference_temperature => extract_scalar_field(state, "CompressibleReferenceTemperature", stat)
+    if (stat==0) then
+      call allocate(reference_temperature_remap, s_field%mesh, "ReferenceTemperatureRemap")
+      call remap_field(reference_temperature, reference_temperature_remap)
+    else
+      call allocate(reference_temperature_remap, s_field%mesh, "ReferenceTemperatureRemap", &
+                    field_type=FIELD_TYPE_CONSTANT)
+      call zero(reference_temperature_remap)
+    end if
+
     call allocate(overpressure, s_field%mesh, "OverPressure")
 
-    call set(overpressure, temperature)
+    call set(overpressure, temperature_remap)
+    call addto(overpressure, reference_temperature_remap)
+    call addto(overpressure, Ta)
     call addto(overpressure, -T0)
     call scale(overpressure, gammac)
     call addto(overpressure, p0)
@@ -841,6 +862,7 @@ contains
     call deallocate(overpressure)
     call deallocate(temperature_remap)
     call deallocate(reference_pressure_remap)
+    call deallocate(reference_temperature_remap)
 
   end subroutine calculate_pressure_dependent_clapeyron_phase_change_indicator
 
@@ -859,20 +881,26 @@ contains
     type(state_type), intent(inout) :: state
     type(scalar_field), intent(inout) :: s_field
 
-    type(scalar_field), pointer :: temperature
+    type(scalar_field), pointer :: temperature, reference_temperature
+    integer :: stat
 
     ewrite(2,*) "Entering calculate_phase_change_latent_heating."
 
     temperature => extract_scalar_field(state, "Temperature")
 
-    call latent_heating(state, s_field, temperature)
+    reference_temperature => extract_scalar_field(state, "CompressibleReferenceTemperature", stat)
+    if (stat==0) then
+      call latent_heating(state, s_field, temperature, reference_temperature)
+    else 
+      call latent_heating(state, s_field, temperature)
+    endif
 
   end subroutine calculate_phase_change_latent_heating
 
-  subroutine latent_heating(state, s_field, temperature)
+  subroutine latent_heating(state, s_field, temperature, reference_temperature)
     type(state_type), intent(inout) :: state
     type(scalar_field), intent(inout) :: s_field
-    type(scalar_field), pointer, optional :: temperature
+    type(scalar_field), pointer, optional :: temperature, reference_temperature
 
     type(scalar_field_pointer), dimension(:), allocatable :: gammas, oldgammas
     type(vector_field), pointer :: velocity
@@ -986,20 +1014,28 @@ contains
       end if
     end if
 
+    if (present(reference_temperature)) then
+      ewrite_minmax(reference_temperature)
+      if (remaps_valid) then
+        call test_remap_validity(reference_temperature, s_field, stat=stat)
+        remaps_valid = stat==0
+      end if
+    end if
+
     if (remaps_valid) then
       call latent_heating_pointwise(state, s_field, &
                                     gammas, oldgammas, &
                                     delta_rhos, m_clapeyrons, &
                                     have_surface_temperature, T0, &
                                     exclude_mass, theta, dt, &
-                                    temperature)
+                                    temperature, reference_temperature)
     else
       call latent_heating_projection(state, s_field, &
                                      gammas, oldgammas, &
                                      delta_rhos, m_clapeyrons, &
                                      have_surface_temperature, T0, &
                                      exclude_mass, theta, dt, &
-                                     temperature)
+                                     temperature, reference_temperature)
     end if
     
     deallocate(gammas, oldgammas, delta_rhos, m_clapeyrons)
@@ -1011,14 +1047,14 @@ contains
                                       delta_rhos, m_clapeyrons, &
                                       have_surface_temperature, T0, &
                                       exclude_mass, theta, dt, &
-                                      temperature)
+                                      temperature, reference_temperature)
     type(state_type), intent(inout) :: state
     type(scalar_field), intent(inout) :: s_field
     type(scalar_field_pointer), dimension(:), intent(in) :: gammas, oldgammas
     real, dimension(:), intent(in) :: delta_rhos, m_clapeyrons
     logical, intent(in) :: have_surface_temperature, exclude_mass
     real, intent(in) :: T0, theta, dt
-    type(scalar_field), pointer, optional :: temperature
+    type(scalar_field), pointer, optional :: temperature, reference_temperature
 
     type(element_type) :: grad_gamma_shape
     type(element_type), pointer :: gamma_shape
@@ -1089,6 +1125,13 @@ contains
     if (present(temperature)) then
       call remap_field(temperature, remapped)
       call addto(remapped, T0)
+      if (present(reference_temperature)) then
+        call addto(remapped, reference_temperature)
+      end if
+      call scale(s_field, remapped)
+    else if (present(reference_temperature)) then
+      call remap_field(reference_temperature, remapped)
+      call addto(remapped, T0)
       call scale(s_field, remapped)
     else if (have_surface_temperature) then
       call scale(s_field, T0)
@@ -1106,14 +1149,14 @@ contains
                                        delta_rhos, m_clapeyrons, &
                                        have_surface_temperature, T0, &
                                        exclude_mass, theta, dt, &
-                                       temperature)
+                                       temperature, reference_temperature)
     type(state_type), intent(inout) :: state
     type(scalar_field), intent(inout) :: s_field
     type(scalar_field_pointer), dimension(:), intent(in) :: gammas, oldgammas
     real, dimension(:), intent(in) :: delta_rhos, m_clapeyrons
     logical, intent(in) :: have_surface_temperature, exclude_mass
     real, intent(in) :: T0, theta, dt
-    type(scalar_field), pointer, optional :: temperature
+    type(scalar_field), pointer, optional :: temperature, reference_temperature
 
     type(scalar_field), pointer :: masslump
     type(scalar_field) :: rhs_field
@@ -1181,8 +1224,12 @@ contains
       rhs_addto = 0.0
       rhs_shape => ele_shape(rhs_field, ele)
 
-      if (present(temperature)) then
+      if (present(temperature).and.present(reference_temperature)) then
+        detwei = detwei*(ele_val_at_quad(temperature, ele) + ele_val_at_quad(reference_temperature, ele) + T0)
+      else if (present(temperature)) then
         detwei = detwei*(ele_val_at_quad(temperature, ele) + T0)
+      else if (present(reference_temperature)) then
+        detwei = detwei*(ele_val_at_quad(reference_temperature, ele) + T0)
       else if (have_surface_temperature) then
         detwei = detwei*T0
       end if
