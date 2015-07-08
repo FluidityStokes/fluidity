@@ -2079,6 +2079,15 @@ This is zero if not activated.</a:documentation>
           <ref name="real"/>
         </element>
       </optional>
+      <optional>
+        <element name="surface_temperature">
+          <a:documentation>The surface temperature for the adiabat term (added to temperature along with
+the CompressibleReferenceTemperature, if present).
+
+This is zero if not activated.</a:documentation>
+          <ref name="real"/>
+        </element>
+      </optional>
     </element>
   </define>
   <define name="adiabatic_heating_coefficient_algorithm">

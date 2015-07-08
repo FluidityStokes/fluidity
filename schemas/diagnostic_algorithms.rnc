@@ -1568,6 +1568,13 @@ pressure_dependent_clapeyron_phase_change_indicator =
         ## This is zero if not activated.
         element reference_temperature {
           real
+        }?,
+        ## The surface temperature for the adiabat term (added to temperature along with
+        ## the CompressibleReferenceTemperature, if present).
+        ##
+        ## This is zero if not activated.
+        element surface_temperature {
+          real
         }?
       }
    )
