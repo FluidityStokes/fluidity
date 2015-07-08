@@ -821,7 +821,7 @@ contains
     call get_option(trim(s_field%option_path)//"/diagnostic/algorithm/clapeyron_slope", gammac)
     call get_option(trim(s_field%option_path)//"/diagnostic/algorithm/transition_width", w)
     call get_option(trim(s_field%option_path)//"/diagnostic/algorithm/reference_temperature", T0, default=0.0)
-    call get_option(trim(s_field%option_path)//"/diagnostic/algorithm/reference_temperature", Ta, default=0.0)
+    call get_option(trim(s_field%option_path)//"/diagnostic/algorithm/surface_temperature", Ta, default=0.0)
 
     reference_pressure => extract_scalar_field(state, "CompressibleReferencePressure")
     call allocate(reference_pressure_remap, s_field%mesh, "CompressibleReferencePressureRemap")
