@@ -1886,6 +1886,7 @@ The mesh must be directly extruded.</a:documentation>
         <a:documentation>The surface temperature for the adiabat term</a:documentation>
         <ref name="real"/>
       </element>
+      <ref name="adiabatic_options"/>
     </element>
   </define>
   <define name="viscous_dissipation_plus_surface_adiabat_and_latent_heating_algorithm">
@@ -1902,6 +1903,7 @@ The mesh must be directly extruded.</a:documentation>
         <a:documentation>The surface temperature for the adiabat term</a:documentation>
         <ref name="real"/>
       </element>
+      <ref name="adiabatic_options"/>
     </element>
   </define>
   <define name="phase_change_latent_heating_absorption">
@@ -1933,6 +1935,18 @@ The mesh must be directly extruded.</a:documentation>
         </element>
       </optional>
     </element>
+  </define>
+  <define name="adiabatic_options">
+    <optional>
+      <element name="radial_gravity_direction_at_gauss_points">
+        <a:documentation>Align the gravity opposite to the radial direction (-(x,y) in 2d, -(x,y,z) in 3d)
+and evaluate it at the gauss points.
+
+NOTE: this ignores whatever values are set under /physical_parameters/gravity/vector_field::GravityDirection 
+for adiabatic gravity terms.</a:documentation>
+        <ref name="comment"/>
+      </element>
+    </optional>
   </define>
   <define name="latent_heating_options">
     <oneOrMore>
@@ -2100,6 +2114,7 @@ needed when applying adiabatic heating absorption term.</a:documentation>
       <attribute name="material_phase_support">
         <value>single </value>
       </attribute>
+      <ref name="adiabatic_options"/>
     </element>
   </define>
   <define name="adiabatic_heating_absorption_algorithm">
@@ -2113,6 +2128,7 @@ This is thus the full absorption term:</a:documentation>
       <attribute name="material_phase_support">
         <value>single </value>
       </attribute>
+      <ref name="adiabatic_options"/>
     </element>
   </define>
   <define name="adiabatic_plus_latent_heating_algorithm">
@@ -2125,6 +2141,7 @@ needed when applying adiabatic heating absorption term.</a:documentation>
       <attribute name="material_phase_support">
         <value>single </value>
       </attribute>
+      <ref name="adiabatic_options"/>
       <ref name="latent_heating_options"/>
     </element>
   </define>

@@ -1401,7 +1401,8 @@ viscous_dissipation_plus_surface_adiabat_algorithm =
          ## The surface temperature for the adiabat term
          element surface_temperature {
            real
-         }
+         },
+         adiabatic_options
       }
    )
 
@@ -1415,7 +1416,8 @@ viscous_dissipation_plus_surface_adiabat_and_latent_heating_algorithm =
          ## The surface temperature for the adiabat term
          element surface_temperature {
            real
-         }
+         },
+         adiabatic_options
       }
    )
 
@@ -1441,6 +1443,18 @@ phase_change_latent_heating =
           real
         }?
       }
+   )
+
+adiabatic_options = 
+   (
+       ## Align the gravity opposite to the radial direction (-(x,y) in 2d, -(x,y,z) in 3d)
+       ## and evaluate it at the gauss points.
+       ##
+       ## NOTE: this ignores whatever values are set under /physical_parameters/gravity/vector_field::GravityDirection 
+       ## for adiabatic gravity terms.
+       element radial_gravity_direction_at_gauss_points {
+         comment
+       }?
    )
 
 latent_heating_options =
@@ -1585,7 +1599,8 @@ adiabatic_heating_coefficient_algorithm =
       ## needed when applying adiabatic heating absorption term.
        element algorithm {
          attribute name { "adiabatic_heating_coefficient" },
-         attribute material_phase_support { "single "}
+         attribute material_phase_support { "single "},
+         adiabatic_options
       }
    )
 
@@ -1596,7 +1611,8 @@ adiabatic_heating_absorption_algorithm =
       ## This is thus the full absorption term:
        element algorithm {
          attribute name { "adiabatic_heating_absorption" },
-         attribute material_phase_support { "single "}
+         attribute material_phase_support { "single "},
+         adiabatic_options
        }
    )
 
@@ -1607,6 +1623,7 @@ adiabatic_plus_latent_heating_algorithm =
        element algorithm {
          attribute name { "adiabatic_plus_latent_heating_coefficient" },
          attribute material_phase_support { "single "},
+         adiabatic_options,
          latent_heating_options
       }
    )

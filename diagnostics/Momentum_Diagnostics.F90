@@ -36,6 +36,7 @@ module momentum_diagnostics
   use field_options
   use fields
   use fldebug
+  use Coordinates
   use geostrophic_pressure
   use global_parameters, only : OPTION_PATH_LEN, domain_bbox
   use multimaterial_module
@@ -362,7 +363,7 @@ contains
 
     character(len=OPTION_PATH_LEN) :: eos_option_path
     character(len=FIELD_NAME_LEN) :: density_name
-    logical :: have_linear_eos, have_linearised_mantle_eos
+    logical :: have_linear_eos, have_linearised_mantle_eos, radial_gravity
 
     ewrite(1,*) 'In adiabatic_heating_coefficient'
 
@@ -409,13 +410,15 @@ contains
 
 
     ! Extract gravitational info from state:
-    gravity_direction => extract_vector_field(state, "GravityDirection")
     call get_option("/physical_parameters/gravity/magnitude", gravity_magnitude)
+    radial_gravity = have_option(trim(complete_field_path(trim(s_field%option_path))) // &
+            "/algorithm[0]/radial_gravity_at_gauss_points")
 
-    if(stat_vel == 0 .and. stat_gamma == 0 .and. stat_rho == 0 .and. stat_reft == 0) then
+    if(stat_vel == 0 .and. stat_gamma == 0 .and. stat_rho == 0 .and. stat_reft == 0 .and. .not. radial_gravity) then
 
        call allocate(velocity_component, s_field%mesh, "VerticalVelocityComponent")
        ! Take inner product of velocity and gravity to determine vertical component of velocity:
+       gravity_direction => extract_vector_field(state, "GravityDirection")
        call inner_product(velocity_component, velocity, gravity_direction)
        
        ! Determine which EOS is relevant:
@@ -517,7 +520,7 @@ contains
 
     else
 
-       ! Velocity cannot be remapped to the s_field%mesh. We therefore calculate the adiabatic heating coefficient
+       ! Something cannot be remapped to the s_field%mesh. We therefore calculate the adiabatic heating coefficient
        ! using a 'projection':
        call adiabatic_heating_coefficient_projection(state, s_field)
 
@@ -549,7 +552,7 @@ contains
 
     character(len=OPTION_PATH_LEN) eos_option_path
     character(len=FIELD_NAME_LEN) :: density_name
-    logical :: have_linear_eos, have_linearised_mantle_eos
+    logical :: have_linear_eos, have_linearised_mantle_eos, radial_gravity
 
     ewrite(1,*) 'In adiabatic_heating_coefficient_projection'
 
@@ -560,6 +563,8 @@ contains
     call zero(dummyscalar)
 
     ! Extract gravitational unit vector and velocity from state:
+    radial_gravity = have_option(trim(complete_field_path(trim(s_field%option_path))) // &
+            "/algorithm[0]/radial_gravity_at_gauss_points")
     call get_option("/physical_parameters/gravity/magnitude", gravity_magnitude)
     gravity_direction => extract_vector_field(state, "GravityDirection")
     velocity => extract_vector_field(state, "NonlinearVelocity")
@@ -662,7 +667,11 @@ contains
       call transform_to_physical(positions, ele, detwei = detwei)
       positions_quad              = ele_val_at_quad(positions, ele)
       velocity_quad               = ele_val_at_quad(velocity, ele)
-      gravity_direction_quad      = ele_val_at_quad(gravity_direction, ele)
+      if (radial_gravity) then
+        gravity_direction_quad    = radial_inward_normal_at_quad_ele(positions, ele)
+      else
+        gravity_direction_quad    = ele_val_at_quad(gravity_direction, ele)
+      end if
       density_quad                = ele_val_at_quad(density_local, ele)
       gamma_quad                  = ele_val_at_quad(thermal_expansion, ele)
 
