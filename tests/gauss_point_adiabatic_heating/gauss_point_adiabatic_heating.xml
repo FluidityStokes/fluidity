@@ -1,0 +1,37 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testproblem>
+  <name>Test of adiabatic heating with gravity at gauss points.</name>
+  <owner userid="cwilson"/>
+  <problem_definition length="short" nprocs="1">
+    <command_line>fluidity -v3 -l 2d_pointwise_radial.flml; fluidity -v3 -l 2d_pointwise_tangential.flml; fluidity -v3 -l 2d_projection_radial_nodal.flml; fluidity -v3 -l 2d_projection_radial_gauss.flml; fluidity -v3 -l 2d_projection_tangential_nodal.flml; fluidity -v3 -l 2d_projection_tangential_gauss.flml</command_line>
+  </problem_definition>
+  <variables>
+    <variable name="twod_pointwise_radial_error" language="python">from fluidity_tools import stat_parser
+stat = stat_parser("2d_pointwise_radial.stat")
+twod_pointwise_radial_error = stat["State"]["AbsoluteDifferenceAdiabaticHeating"]["l2norm"][-1]</variable>
+    <variable name="twod_pointwise_tangential_error" language="python">from fluidity_tools import stat_parser
+stat = stat_parser("2d_pointwise_tangential.stat")
+twod_pointwise_tangential_error = stat["State"]["AbsoluteDifferenceAdiabaticHeating"]["l2norm"][-1]</variable>
+    <variable name="twod_projection_radial_nodal_error" language="python">from fluidity_tools import stat_parser
+stat = stat_parser("2d_projection_radial_nodal.stat")
+twod_projection_radial_nodal_error = stat["State"]["AbsoluteDifferenceAdiabaticHeating"]["l2norm"][-1]</variable>
+    <variable name="twod_projection_radial_gauss_error" language="python">from fluidity_tools import stat_parser
+stat = stat_parser("2d_projection_radial_gauss.stat")
+twod_projection_radial_gauss_error = stat["State"]["AbsoluteDifferenceAdiabaticHeating"]["l2norm"][-1]</variable>
+    <variable name="twod_projection_tangential_nodal_error" language="python">from fluidity_tools import stat_parser
+stat = stat_parser("2d_projection_tangential_nodal.stat")
+twod_projection_tangential_nodal_error = stat["State"]["AbsoluteDifferenceAdiabaticHeating"]["l2norm"][-1]</variable>
+    <variable name="twod_projection_tangential_gauss_error" language="python">from fluidity_tools import stat_parser
+stat = stat_parser("2d_projection_tangential_gauss.stat")
+twod_projection_tangential_gauss_error = stat["State"]["AbsoluteDifferenceAdiabaticHeating"]["l2norm"][-1]</variable>
+  </variables>
+  <pass_tests>
+    <test name="twod_pointwise_radial_error" language="python">assert abs(twod_pointwise_radial_error) &lt; 1.e-9</test>
+    <test name="twod_pointwise_tangential_error" language="python">assert abs(twod_pointwise_tangential_error) &lt; 1.e-9</test>
+    <test name="twod_projection_radial_nodal_error" language="python">assert abs(twod_projection_radial_nodal_error) &lt; 1.e-1</test>
+    <test name="twod_projection_radial_gauss_error" language="python">assert abs(twod_projection_radial_gauss_error) &lt; 1.e-2</test>
+    <test name="twod_projection_tangential_nodal_error" language="python">assert abs(twod_projection_tangential_nodal_error) &lt; 1.e-3</test>
+    <test name="twod_projection_tangential_gauss_error" language="python">assert abs(twod_projection_tangential_gauss_error) &lt; 1.e-5</test>
+  </pass_tests>
+  <warn_tests/>
+</testproblem>

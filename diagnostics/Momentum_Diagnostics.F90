@@ -363,7 +363,7 @@ contains
 
     character(len=OPTION_PATH_LEN) :: eos_option_path
     character(len=FIELD_NAME_LEN) :: density_name
-    logical :: have_linear_eos, have_linearised_mantle_eos, radial_gravity
+    logical :: have_linear_eos, have_linearised_mantle_eos
 
     ewrite(1,*) 'In adiabatic_heating_coefficient'
 
@@ -411,10 +411,8 @@ contains
 
     ! Extract gravitational info from state:
     call get_option("/physical_parameters/gravity/magnitude", gravity_magnitude)
-    radial_gravity = have_option(trim(complete_field_path(trim(s_field%option_path))) // &
-            "/algorithm[0]/radial_gravity_at_gauss_points")
 
-    if(stat_vel == 0 .and. stat_gamma == 0 .and. stat_rho == 0 .and. stat_reft == 0 .and. .not. radial_gravity) then
+    if(stat_vel == 0 .and. stat_gamma == 0 .and. stat_rho == 0 .and. stat_reft == 0) then
 
        call allocate(velocity_component, s_field%mesh, "VerticalVelocityComponent")
        ! Take inner product of velocity and gravity to determine vertical component of velocity:
@@ -564,7 +562,7 @@ contains
 
     ! Extract gravitational unit vector and velocity from state:
     radial_gravity = have_option(trim(complete_field_path(trim(s_field%option_path))) // &
-            "/algorithm[0]/radial_gravity_at_gauss_points")
+            "/algorithm[0]/radial_gravity_direction_at_gauss_points")
     call get_option("/physical_parameters/gravity/magnitude", gravity_magnitude)
     gravity_direction => extract_vector_field(state, "GravityDirection")
     velocity => extract_vector_field(state, "NonlinearVelocity")
