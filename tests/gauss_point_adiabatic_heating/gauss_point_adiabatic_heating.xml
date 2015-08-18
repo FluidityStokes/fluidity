@@ -6,18 +6,27 @@
     <command_line>fluidity -v3 -l 2d_pointwise_radial.flml; fluidity -v3 -l 2d_pointwise_tangential.flml; fluidity -v3 -l 2d_projection_radial_nodal.flml; fluidity -v3 -l 2d_projection_radial_gauss.flml; fluidity -v3 -l 2d_projection_tangential_nodal.flml; fluidity -v3 -l 2d_projection_tangential_gauss.flml</command_line>
   </problem_definition>
   <variables>
+    <variable name="twod_pointwise_radial_val" language="python">from fluidity_tools import stat_parser
+stat = stat_parser("2d_pointwise_radial.stat")
+twod_pointwise_radial_val = stat["State"]["AnalyticalAdiabaticHeating"]["l2norm"][-1]</variable>
+    <variable name="twod_pointwise_tangential_val" language="python">from fluidity_tools import stat_parser
+stat = stat_parser("2d_pointwise_tangential.stat")
+twod_pointwise_tangential_val = stat["State"]["AnalyticalAdiabaticHeating"]["l2norm"][-1]</variable>
     <variable name="twod_pointwise_radial_error" language="python">from fluidity_tools import stat_parser
 stat = stat_parser("2d_pointwise_radial.stat")
-twod_pointwise_radial_error = stat["State"]["AbsoluteDifferenceAdiabaticHeating"]["l2norm"][-1]</variable>
+denom = stat["State"]["AnalyticalAdiabaticHeating"]["l2norm"][-1]
+twod_pointwise_radial_error = stat["State"]["AbsoluteDifferenceAdiabaticHeating"]["l2norm"][-1]/denom</variable>
     <variable name="twod_pointwise_tangential_error" language="python">from fluidity_tools import stat_parser
 stat = stat_parser("2d_pointwise_tangential.stat")
 twod_pointwise_tangential_error = stat["State"]["AbsoluteDifferenceAdiabaticHeating"]["l2norm"][-1]</variable>
     <variable name="twod_projection_radial_nodal_error" language="python">from fluidity_tools import stat_parser
 stat = stat_parser("2d_projection_radial_nodal.stat")
-twod_projection_radial_nodal_error = stat["State"]["AbsoluteDifferenceAdiabaticHeating"]["l2norm"][-1]</variable>
+denom = stat["State"]["AnalyticalAdiabaticHeating"]["l2norm"][-1]
+twod_projection_radial_nodal_error = stat["State"]["AbsoluteDifferenceAdiabaticHeating"]["l2norm"][-1]/denom</variable>
     <variable name="twod_projection_radial_gauss_error" language="python">from fluidity_tools import stat_parser
 stat = stat_parser("2d_projection_radial_gauss.stat")
-twod_projection_radial_gauss_error = stat["State"]["AbsoluteDifferenceAdiabaticHeating"]["l2norm"][-1]</variable>
+denom = stat["State"]["AnalyticalAdiabaticHeating"]["l2norm"][-1]
+twod_projection_radial_gauss_error = stat["State"]["AbsoluteDifferenceAdiabaticHeating"]["l2norm"][-1]/denom</variable>
     <variable name="twod_projection_tangential_nodal_error" language="python">from fluidity_tools import stat_parser
 stat = stat_parser("2d_projection_tangential_nodal.stat")
 twod_projection_tangential_nodal_error = stat["State"]["AbsoluteDifferenceAdiabaticHeating"]["l2norm"][-1]</variable>

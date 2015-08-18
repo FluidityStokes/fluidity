@@ -46,7 +46,7 @@ module momentum_diagnostics
   use spud
   use state_fields_module
   use state_module
-  use fefields, only : compute_cv_mass
+  use fefields, only : compute_cv_mass, compute_lumped_mass
   use sediment, only : get_n_sediment_fields, get_sediment_item
   
   implicit none
@@ -633,7 +633,7 @@ contains
 
     ! Compute inverse lumped mass matrix:
     call allocate(lumped_mass, s_field%mesh, name="Lumped_mass")
-    call compute_cv_mass(positions, lumped_mass)
+    call compute_lumped_mass(positions, lumped_mass)
     call invert(lumped_mass)
     
     ! Multiply RHS by inverse lumped mass matrix to determine final adiabatic_heating_coefficient:

@@ -92,6 +92,7 @@ module transform_elements
 
   integer, save :: analytical_spherical_position_id=-1
   logical, save :: analytical_spherical_mapping=.false.
+  logical, save :: analytical_spherical_mapping_warning_issued=.false.
 
 contains
 
@@ -118,6 +119,32 @@ contains
     end if
 
   end function
+
+  subroutine warn_analytical_spherical_mapping(X)
+    !!< Determine whether we are using analytical spherical mapping for this positions field
+    type(vector_field), intent(in) :: X
+    logical :: warn_now
+
+    if(.not.analytical_spherical_mapping_warning_issued) then
+      if (analytical_spherical_mapping) then
+        warn_now = .false.
+        if (X%refcount%id==analytical_spherical_position_id) then
+          warn_now = .true.
+        else
+          if (X%name=="Coordinate") then
+            analytical_spherical_position_id = X%refcount%id
+            warn_now = .true.
+          end if
+        end if
+
+        if (warn_now) then
+          ewrite(0,*) "WARNING: You're using analytical spherical mapping but calling a routine that doesn't support it yet!"
+          analytical_spherical_mapping_warning_issued=.true.
+        end if
+      end if
+    end if
+
+  end subroutine
 
   function retrieve_cached_transform_full(X, ele, J_local_T, invJ_local,&
        & detJ_local) result (cache_valid)
