@@ -151,6 +151,10 @@ module global_parameters
   ! (:, 2) are the maxima along each coordinate
   real, dimension(:, :), allocatable :: domain_bbox
 
+  !! the centroid of the domain (across all processes)
+  ! length = dimension
+  real, dimension(:), allocatable :: global_domain_centroid
+
   real :: domain_volume
 
   !! When on-the-sphere, the planet radius is needed.

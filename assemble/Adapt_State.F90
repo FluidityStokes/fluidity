@@ -107,7 +107,11 @@ contains
     logical, intent(in), optional :: allow_boundary_elements
     type(vector_field) :: expanded_positions
 
-    assert(.not. mesh_periodic(old_positions))
+#ifdef DDEBUG
+    if(.not.isparallel()) then
+      assert(.not. mesh_periodic(old_positions))
+    end if
+#endif
 
     if(isparallel()) then
       ! generate stripped versions of the position and metric fields
@@ -250,7 +254,7 @@ contains
 
     integer, save :: delete_me = 1
 
-    assert(mesh_periodic(metric))
+    assert(mesh_periodic(metric).and.(.not.isparallel()))
     assert(all(metric%dim == old_positions%dim))
     dim = metric%dim(1)
 
@@ -910,8 +914,8 @@ contains
     end if
 #endif
 
-    ! Periodic case
-    if (mesh_periodic(old_positions)) then
+    ! Serial periodic case
+    if (mesh_periodic(old_positions).and.(.not.isparallel())) then
       call adapt_mesh_periodic(old_positions, metric, new_positions, force_preserve_regions=force_preserve_regions)
     ! Nonperiodic case
     else
@@ -1156,6 +1160,8 @@ contains
       else
         call allocate(new_positions,old_positions%dim,old_positions%mesh,name=trim(old_positions%name))
         call set(new_positions,old_positions)
+        new_positions%option_path = old_positions%option_path
+        new_positions%multivalued_halo = old_positions%multivalued_halo
       end if
 
       ! Insert the new mesh field and linear mesh into all states
