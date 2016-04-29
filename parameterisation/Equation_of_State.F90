@@ -817,6 +817,7 @@ contains
           call remap_field(dep_local, depproducts(d))
           call addto(depproducts(d), -dep_0)
           call scale(depproducts(d), dep_gamma)
+          call scale(depproducts(d), referencedensity_remap)
        end do
        
        if(present(density).or.present(buoyancy_density)) then

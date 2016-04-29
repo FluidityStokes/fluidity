@@ -784,7 +784,7 @@ contains
 
     call allocate(overpressure, s_field%mesh, "OverPressure")
 
-    call set(overpressure, temperature)
+    call set(overpressure, temperature_remap)
     call addto(overpressure, -T0)
     call scale(overpressure, gammac)
     call addto(overpressure, vertical_position, scale=rho0*g)
