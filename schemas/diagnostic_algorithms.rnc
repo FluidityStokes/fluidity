@@ -1600,6 +1600,21 @@ adiabatic_heating_absorption_algorithm =
        }
    )
 
+adiabatic_heating_plus_surface_temperature_absorption_algorithm =
+   (
+      ## algorithm for calculating the adiabatic heating coefficient
+      ## which is subsequently multiplied by T for output purposes.
+      ## This is thus the full absorption term:
+       element algorithm {
+         attribute name { "adiabatic_heating_plus_surface_temperature_absorption" },
+         attribute material_phase_support { "single "},
+         ## The surface temperature for the adiabat term
+         element surface_temperature {
+           real
+         }
+       }
+   )
+
 adiabatic_plus_latent_heating_algorithm =
    (
       ## algorithm for calculating adiabatic and latent heating coefficient,
@@ -1780,6 +1795,7 @@ scalar_diagnostic_algorithms |= pressure_dependent_clapeyron_phase_change_indica
 scalar_diagnostic_algorithms |= curl_2d_algorithm
 scalar_diagnostic_algorithms |= column_id_algorithm
 scalar_diagnostic_algorithms |= adiabatic_heating_coefficient_algorithm
+scalar_diagnostic_algorithms |= adiabatic_heating_plus_surface_temperature_absorption_algorithm
 scalar_diagnostic_algorithms |= adiabatic_heating_absorption_algorithm
 scalar_diagnostic_algorithms |= finite_element_lumped_mass_matrix
 scalar_diagnostic_algorithms |= control_volume_mass_matrix

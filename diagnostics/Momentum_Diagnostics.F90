@@ -64,6 +64,7 @@ module momentum_diagnostics
             calculate_scalar_potential, calculate_projection_scalar_potential, &
             calculate_geostrophic_velocity, calculate_viscous_dissipation, & 
             calculate_adiabatic_heating_coefficient, calculate_adiabatic_heating_absorption, &
+            calculate_adiabatic_heating_plus_surface_temperature_absorption, &
             calculate_adiabatic_plus_latent_heating_coefficient, &
             calculate_viscous_dissipation_plus_surface_adiabat, &
             calculate_viscous_dissipation_plus_surface_terms, &
@@ -719,6 +720,37 @@ contains
     call deallocate(temperature_remap)
 
   end subroutine calculate_adiabatic_heating_absorption
+
+  subroutine calculate_adiabatic_heating_plus_surface_temperature_absorption(state, s_field)
+    ! Calculates adiabatic heating absorption term - i.e. the adiabatic heating
+    ! coefficient, multiplied by T:
+    type(state_type), intent(inout) :: state
+    type(scalar_field), intent(inout) :: s_field
+
+    type(scalar_field), pointer :: temperature
+    type(scalar_field) :: temperature_remap
+
+    real :: T0
+
+    ewrite(1,*) 'In calculate_adiabatic_heating_absorption'
+
+    call calculate_adiabatic_heating_coefficient(state,s_field)
+
+    ! Extract temperature from state:
+    temperature => extract_scalar_field(state, "Temperature")
+    call allocate(temperature_remap, s_field%mesh, "TemperatureRemap")
+    call remap_field(temperature, temperature_remap)
+
+    call get_option(trim(complete_field_path(trim(s_field%option_path))) // &
+         "/algorithm[0]/surface_temperature", T0)
+    call addto(temperature_remap, T0)
+
+    ! Multiply adiabatic coefficient by Temperature to attain full absorption term:
+    call scale(s_field, temperature_remap)
+
+    call deallocate(temperature_remap)
+
+  end subroutine calculate_adiabatic_heating_plus_surface_temperature_absorption
 
   subroutine calculate_adiabatic_plus_latent_heating_coefficient(state, s_field)
     type(state_type), intent(inout) :: state
