@@ -30,34 +30,55 @@
 module diagnostic_fields_wrapper
   !!< A module to link to diagnostic variable calculations.
 
+  use fldebug
   use global_parameters, only: FIELD_NAME_LEN, timestep
-  use fields
-  use sparse_matrices_fields
-  use field_derivatives
-  use state_module
+  use fldebug
+  use global_parameters, only: FIELD_NAME_LEN, timestep
   use futils
-  use fetools
   use spud
   use parallel_tools
+  use spud
+  use sparse_tools
+  use fetools
+  use fetools
+  use fields
+  use fields
+  use sparse_matrices_fields
+  use state_module
+  use state_module
+  use boundary_conditions
+  use field_derivatives
+  use field_options, only: do_not_recalculate
+  use field_options, only: do_not_recalculate
+  use field_derivatives
+  use solvers
+  use sparsity_patterns_meshes
+  use state_fields_module
   use diagnostic_fields, only: calculate_diagnostic_variable
   use diagnostic_fields_wrapper_new, only : &
     & calculate_diagnostic_variable_new => calculate_diagnostic_variable
+  use sediment, only : get_n_sediment_fields, get_sediment_item
+  use equation_of_state
+  use multiphase_module
+  use diagnostic_fields_matrices
   use multimaterial_module, only: calculate_material_mass, &
                                   calculate_bulk_material_pressure, &
                                   calculate_sum_material_volume_fractions, &
                                   calculate_material_volume
+  use tidal_module, only: calculate_diagnostic_equilibrium_pressure
   use free_surface_module, only: calculate_diagnostic_free_surface, &
                                  calculate_diagnostic_wettingdrying_alpha
-  use tidal_module, only: calculate_diagnostic_equilibrium_pressure
-  use field_options, only: do_not_recalculate
+  use coriolis_module, only : two_omega => coriolis
   use vorticity_diagnostics
-  use diagnostic_fields_matrices
-  use equation_of_state
+  use multimaterial_module, only: calculate_material_mass, &
+                                  calculate_bulk_material_pressure, &
+                                  calculate_sum_material_volume_fractions, &
+                                  calculate_material_volume
   use momentum_diagnostic_fields
   use spontaneous_potentials, only: calculate_formation_conductivity
   use sediment_diagnostics
   use geostrophic_pressure
-  use multiphase_module
+
   
   implicit none
 

@@ -29,25 +29,29 @@
 
 module momentum_diagnostics
 
+  use fldebug
+  use global_parameters, only : OPTION_PATH_LEN, FIELD_NAME_LEN, domain_bbox
+  use futils
+  use spud
+  use parallel_tools, only : allmax
+  use sparse_tools
+  use fetools
+  use fields
+  use state_module
+  use field_options
+  use sparse_matrices_fields
+  use fefields, only : compute_cv_mass
   use boundary_conditions
   use coriolis_module, only : two_omega => coriolis
   use diagnostic_source_fields
   use field_derivatives
-  use field_options
-  use fields
-  use fldebug
-  use geostrophic_pressure
-  use global_parameters, only : OPTION_PATH_LEN, domain_bbox
-  use multimaterial_module
   use solvers
-  use sparse_matrices_fields
   use sparsity_patterns_meshes
-  use spud
   use state_fields_module
-  use state_module
-  use fefields, only : compute_cv_mass
   use sediment, only : get_n_sediment_fields, get_sediment_item
-  
+  use geostrophic_pressure
+  use multimaterial_module
+
   implicit none
   
   private
