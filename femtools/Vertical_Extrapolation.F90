@@ -80,6 +80,8 @@ public vertical_element_ordering
 public VerticalProlongationOperator
 public vertical_extrapolation_module_check_options
 public compute_face_normal_gravity
+public map2horizontal_sphere
+public create_horizontal_positions_sphere
 
   real, parameter :: GNOMONIC_BOX_WIDTH = 10.0
 
