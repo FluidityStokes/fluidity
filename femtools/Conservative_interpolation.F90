@@ -5,35 +5,38 @@
 module conservative_interpolation_module
 
   use FLDebug
+  use vector_tools
+  use global_parameters, only : FIELD_NAME_LEN, OPTION_PATH_LEN
   use quadrature
-  use elements
-  use fields
-  use sparse_tools
-  use supermesh_construction
   use futils
+  use element_numbering, only: FAMILY_SIMPLEX
+  use elements
+  use spud
+  use data_structures
+  use sparse_tools
+  use tensors
   use transform_elements
+  use adjacency_lists
+  use unittest_tools
+  use linked_lists
+  use tetrahedron_intersection_module
+  use supermesh_construction
+  use fetools
+  use parallel_fields, only: node_owned
+  use intersection_finder_module
+  use fields
+  use state_module
+  use field_options, only: complete_field_path
   use meshdiagnostics
   use sparsity_patterns
-  use vector_tools
-  use tensors
-  use fetools
-  use sparse_tools
-  use interpolation_module
-  use solvers
-  use adjacency_lists
   use vtk_interfaces
-  use unittest_tools
-  use spud
-  use global_parameters, only : FIELD_NAME_LEN, OPTION_PATH_LEN
-  use intersection_finder_module
-  use linked_lists
-  use sparse_matrices_fields
-  use bound_field_module
   use halos
-  use diagnostic_fields
-  use tetrahedron_intersection_module
   use boundary_conditions
-  use data_structures
+  use interpolation_module
+  use sparse_matrices_fields
+  use solvers
+  use bound_field_module
+  use diagnostic_fields
   implicit none
 
   interface interpolation_galerkin
@@ -148,6 +151,10 @@ module conservative_interpolation_module
         end if
       else
         intersection = intersect_elements(old_position, ele_A, pos_B, supermesh_shape)
+        if (.not. has_references(intersection)) then
+           llnode => llnode%next
+           cycle
+        end if
       end if
 
 #ifdef DUMP_SUPERMESH_INTERSECTIONS
@@ -1052,6 +1059,11 @@ module conservative_interpolation_module
         end do
 
         intersection = intersect_elements(old_position, ele_A, pos_B, supermesh_shape)
+        if (.not. has_references(intersection)) then
+           llnode => llnode%next
+           cycle
+        end if
+
         do ele_C=1,ele_count(intersection)
           vol_C = simplex_volume(intersection, ele_C)
           do field=1,field_cnt
