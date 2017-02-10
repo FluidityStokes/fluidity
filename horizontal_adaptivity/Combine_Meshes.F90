@@ -7,12 +7,12 @@ module hadapt_combine_meshes
 
   use fldebug
   use global_parameters
+  use global_parameters
   use futils, only: present_and_true
+  use quadrature
   use quadrature
   use elements
   use spud
-  use quadrature
-  use global_parameters
   use data_structures
   use sparse_tools
   use linked_lists
