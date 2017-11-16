@@ -61,6 +61,8 @@ current_debug_level, FIELD_NAME_LEN
   use bulk_parameterisations, only: get_forcing_surface_element_list
   use k_epsilon, only: keps_bcs
   use sediment, only: set_sediment_reentrainment
+  use sparsity_patterns
+  use solvers
 
   implicit none
 
@@ -426,7 +428,7 @@ contains
           call deallocate(surface_field)
 
           if (have_smoothing) then
-            if (field%mesh%shape%degree/=1 .or. continuity(field)<0) then
+            if (continuity(field)<0) then
               ! if the mesh is not linear and continuous, we first evalutate
               ! the value on a linear continuous mesh, smooth it and then remap to the actual "value" field
               ! create linear inputs
@@ -938,7 +940,7 @@ contains
     character(len=OPTION_PATH_LEN) bc_path_i, bc_type_path, bc_component_path
     character(len=FIELD_NAME_LEN) bc_name, bc_type, parent_field_name
     logical applies(3), have_smoothing(3)
-    real:: time, theta, dt
+    real:: time, theta, dt, smoothing_diffusion
     integer, dimension(:), pointer:: surface_element_list
     integer i, j, k, nbcs, smoothing_iterations, stat
 
@@ -1081,7 +1083,8 @@ contains
                         bc_component_path, linear_bc_position, surface_element_list, j, time)
                     ! then smooth
                     call get_option(trim(bc_component_path)//"/smoothing/iterations", smoothing_iterations)
-                    call smoothing(smoothed_value_component, bc_position, smoothing_iterations)
+                    call get_option(trim(bc_component_path)//"/smoothing/diffusion_coefficient", smoothing_diffusion)
+                    call smoothing(smoothed_value_component, bc_position, smoothing_iterations, smoothing_diffusion)
                     if (.not. associated(surface_field, smoothed_value)) then
                       ! if surface field and smoothed_value are the same, we're done
                       ! otherwise, remap to the actual value component field
@@ -1292,54 +1295,74 @@ contains
 
   end subroutine initialise_vector_field_component
 
-  subroutine smoothing(field, position, iterations)
+  subroutine smoothing(field, position, iterations, diffusion)
     type(scalar_field), intent(inout) :: field
     type(vector_field), intent(in) :: position
     integer, intent(in) :: iterations
+    real, intent(in) :: diffusion
 
-    type(scalar_field) :: masslump, rhs
+    type(csr_matrix) :: matrix
+    type(csr_sparsity) :: fo_sparsity
+    type(scalar_field) :: rhs
     integer i, ele
 
     ewrite(1,*) "Inside smoothing"
 
     ewrite_minmax(field)
-    call allocate(masslump, field%mesh, trim(field%mesh%name)//"LumpedMass")
-    call allocate(rhs, field%mesh, "SmoothingRHS")
-    call zero(masslump)
+    call allocate(rhs, field%mesh, name="SmoothingRHS")
+    fo_sparsity = make_sparsity(field%mesh, field%mesh, name="SurfaceMeshSparsity")
+    call allocate(matrix, fo_sparsity, name="SurfaceMassMatrix")
+    call compute_mass(position, field%mesh, matrix)
+    do ele=1, element_count(field)
+      call matrix_ele(ele)
+    end do
+    call set_solver_options(field, ksptype='cg', pctype='gamg', rtol=1e-5, max_its=100, atol=0.0)
     do i=1, iterations
       call zero(rhs)
       do ele=1, element_count(field)
-        call smoothing_ele(ele, i)
+        call smoothing_ele(ele)
       end do
-      if (i==1) then
-        call invert(masslump)
-      end if
-      call set(field, rhs)
-      call scale(field, masslump)
-      call halo_update(field, verbose=.false.)
+      call petsc_solve(field, matrix, rhs) 
     end do
     ewrite_minmax(field)
 
-    call deallocate(masslump)
     call deallocate(rhs)
 
     ewrite(1,*) "Finished smoothing"
 
     contains
 
-    subroutine smoothing_ele(ele, i)
-      integer, intent(in):: ele, i
+    subroutine smoothing_ele(ele)
+      integer, intent(in):: ele
       type(element_type), pointer:: shape
       real, dimension(ele_ngi(field, ele)):: detwei
 
       shape => ele_shape(field, ele)
       call transform_to_physical(position, ele, detwei)
-      if (i==1) then
-        call addto(masslump, ele_nodes(field, ele), shape_rhs(shape, detwei))
-      end if
       call addto(rhs, ele_nodes(field, ele), shape_rhs(shape, detwei*ele_val_at_quad(field, ele)))
       
     end subroutine smoothing_ele
+
+    subroutine matrix_ele(ele)
+      integer, intent(in):: ele
+      type(element_type), pointer:: shape
+      real, dimension(ele_ngi(field, ele)):: detwei
+      real, dimension(ele_loc(field, ele), ele_ngi(field, ele), position%dim):: dshape
+      integer, dimension(:), pointer :: nodes
+      real, dimension(position%dim, position%dim, ele_ngi(field,ele)) :: J
+      integer :: gi
+
+      shape => ele_shape(field, ele)
+      call compute_jacobian(position, ele, J(1:mesh_dim(field),:,:), detwei)
+      do gi=1, size(J, 3)
+        J(3,:,gi) = cross_product(J(1,:,gi), J(2,:,gi))
+        call invert(J(:,:,gi))
+        dshape(:,gi,:) = matmul(shape%dn(:,gi,:),transpose(J(:,1:2,gi)))
+      end do
+      nodes => ele_nodes(field, ele)
+      call addto(matrix, nodes, nodes, diffusion * dshape_dot_dshape(dshape, dshape, detwei))
+      
+    end subroutine matrix_ele
 
   end subroutine smoothing
     

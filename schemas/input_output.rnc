@@ -130,10 +130,15 @@ input_choice_real_contents =
 
 bc_smoothing =
    (
-      ## Smoothing on mesh. This uses the lumped mass approach. When the mesh is not
-      ## linear and continuous, the boundary values are evaluated on a continuous
-      ## linear mesh first, then smoothed and then interpolated onto the actual mesh.
+      ## Smoothing on mesh. This solves a diffusion equation:
+      ##    u^{n+1} = u^n + \sigma \nabla^2 u^{n+1}
+      ## Note that the diffusion coefficient has the units of [L^2]
+      ## where L is a (diffusion) length scale.
       element smoothing {
+         ## Diffusion coefficient
+         element diffusion_coefficient {
+            real
+         },
          ## Number of smoothing iterations. More iterations means more smoothing
          element iterations {
              integer

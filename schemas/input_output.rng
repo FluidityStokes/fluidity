@@ -169,9 +169,14 @@ where X is a tuple of length geometry dimension.</a:documentation>
   <define name="bc_smoothing">
     <optional>
       <element name="smoothing">
-        <a:documentation>Smoothing on mesh. This uses the lumped mass approach. When the mesh is not
-linear and continuous, the boundary values are evaluated on a continuous
-linear mesh first, then smoothed and then interpolated onto the actual mesh.</a:documentation>
+        <a:documentation>Smoothing on mesh. This solves a diffusion equation:
+   u^{n+1} = u^n + \sigma \nabla^2 u^{n+1}
+Note that the diffusion coefficient has the units of [L^2]
+where L is a (diffusion) length scale.</a:documentation>
+        <element name="diffusion_coefficient">
+          <a:documentation>Diffusion coefficient</a:documentation>
+          <ref name="real"/>
+        </element>
         <element name="iterations">
           <a:documentation>Number of smoothing iterations. More iterations means more smoothing</a:documentation>
           <ref name="integer"/>
