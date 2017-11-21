@@ -1860,6 +1860,42 @@ module fields_manipulation
 
   end subroutine test_remap_validity_generic
 
+  function local_remap(from_shape, to_shape)
+    type(element_type), intent(in):: from_shape, to_shape
+    real, dimension(to_shape%loc, from_shape%loc) :: local_remap
+
+    real, dimension(to_shape%loc, from_shape%loc) :: coef2node
+    integer :: toloc, fromloc, tonode
+
+    ! By evaluating each from_field shape function fromloc, in the nodes tonode of to_field
+    ! we obtain a map from from_field coefficients to to_field nodal values
+    do tonode=1, size(local_remap,1)
+      do fromloc=1, size(local_remap,2)
+          local_remap(tonode,fromloc)=eval_shape(from_shape, fromloc, local_coords(tonode, to_shape))
+      end do
+    end do
+
+    if (.not. to_shape%nodal) then
+      ! This indicates that the basis functions do *not* have the property: 1 in associated node
+      ! 0 in other nodes. Therefore its nodal values of to_field do not immediately give its
+      ! coefficients. We do however assume that the coeffients of to_field are uniquely determined
+      ! by their node values.
+
+      ! first we evaluate shape function toloc in each node
+      do toloc=1,size(local_remap, 1)
+        do tonode=1,size(local_remap, 2)
+            coef2node(toloc,tonode)=eval_shape(to_shape, toloc, local_coords(tonode, to_shape))
+        end do
+      end do
+
+      ! the inverse provides a map from nodal values to coefficients
+      call invert(coef2node)
+
+      local_remap = matmul(coef2node, local_remap)
+    end if
+
+  end function local_remap
+
   subroutine remap_scalar_field(from_field, to_field, stat)
     !!< Remap the components of from_field onto the locations of to_field.
     !!< This is used to change the element type of a field.
@@ -1872,7 +1908,7 @@ module fields_manipulation
 
     real, dimension(to_field%mesh%shape%loc, from_field%mesh%shape%loc) :: locweight
 
-    integer :: fromloc, toloc, ele
+    integer :: ele
     integer, dimension(:), pointer :: from_ele, to_ele
     
     if(present(stat)) stat = 0
@@ -1888,14 +1924,8 @@ module fields_manipulation
 
         call test_remap_validity(from_field, to_field, stat=stat)
 
-        ! First construct remapping weights.
-        do toloc=1,size(locweight,1)
-          do fromloc=1,size(locweight,2)
-              locweight(toloc,fromloc)=eval_shape(from_field%mesh%shape, fromloc, &
-                  local_coords(toloc, to_field%mesh%shape))
-          end do
-        end do
-        
+        locweight = local_remap(from_field%mesh%shape, to_field%mesh%shape)
+
         ! Now loop over the elements.
         do ele=1,element_count(from_field)
           from_ele=>ele_nodes(from_field, ele)
@@ -1930,7 +1960,7 @@ module fields_manipulation
     real, dimension(to_field%mesh%shape%loc, from_field%mesh%shape%loc), optional :: locweight
     real, dimension(to_field%mesh%shape%loc, from_field%mesh%shape%loc) :: llocweight
 
-    integer :: fromloc, toloc, ele, i
+    integer :: ele, i
 
     if(present(stat)) stat = 0
 
@@ -1942,13 +1972,7 @@ module fields_manipulation
     call test_remap_validity(from_field, to_field, stat=stat)
 
     if (.not. present(locweight)) then
-      ! First construct remapping weights.
-      do toloc=1,size(llocweight,1)
-         do fromloc=1,size(llocweight,2)
-            llocweight(toloc,fromloc)=eval_shape(from_field%mesh%shape, fromloc, &
-                 local_coords(toloc, to_field%mesh%shape))
-         end do
-      end do
+      llocweight = local_remap(from_field%mesh%shape, to_field%mesh%shape)
     else
       llocweight = locweight
     end if
@@ -1958,6 +1982,7 @@ module fields_manipulation
       ele = elements(i)
       output(i, :)=matmul(llocweight,ele_val(from_field, ele))
     end do
+
   end subroutine remap_scalar_field_specific
 
   subroutine remap_vector_field(from_field, to_field, stat)
@@ -1971,7 +1996,7 @@ module fields_manipulation
 
     real, dimension(to_field%mesh%shape%loc, from_field%mesh%shape%loc) :: locweight
 
-    integer :: fromloc, toloc, ele, i
+    integer :: ele, i
     integer, dimension(:), pointer :: from_ele, to_ele
     
     if(present(stat)) stat = 0
@@ -1999,13 +2024,7 @@ module fields_manipulation
 
         call test_remap_validity(from_field, to_field, stat=stat)
 
-        ! First construct remapping weights.
-        do toloc=1,size(locweight,1)
-          do fromloc=1,size(locweight,2)
-              locweight(toloc,fromloc)=eval_shape(from_field%mesh%shape, fromloc, &
-                  local_coords(toloc, to_field%mesh%shape))
-          end do
-        end do
+        locweight = local_remap(from_field%mesh%shape, to_field%mesh%shape)
         
         ! Now loop over the elements.
         do ele=1,element_count(from_field)
@@ -2050,7 +2069,7 @@ module fields_manipulation
     real, dimension(to_field%mesh%shape%loc, from_field%mesh%shape%loc), optional :: locweight
     real, dimension(to_field%mesh%shape%loc, from_field%mesh%shape%loc) :: llocweight
 
-    integer :: fromloc, toloc, ele, i, j
+    integer :: ele, i, j
 
     if(present(stat)) stat = 0
 
@@ -2071,13 +2090,7 @@ module fields_manipulation
     call test_remap_validity(from_field, to_field, stat=stat)
 
     if (.not. present(locweight)) then
-      ! First construct remapping weights.
-      do toloc=1,size(llocweight,1)
-         do fromloc=1,size(llocweight,2)
-            llocweight(toloc,fromloc)=eval_shape(from_field%mesh%shape, fromloc, &
-                 local_coords(toloc, to_field%mesh%shape))
-         end do
-      end do
+      llocweight = local_remap(from_field%mesh%shape, to_field%mesh%shape)
     else
       llocweight = locweight
     end if
@@ -2102,7 +2115,7 @@ module fields_manipulation
 
     real, dimension(to_field%mesh%shape%loc, from_field%mesh%shape%loc) :: locweight
 
-    integer :: fromloc, toloc, ele, i, j
+    integer :: ele, i, j
     integer, dimension(:), pointer :: from_ele, to_ele
 
     if(present(stat)) stat = 0
@@ -2120,13 +2133,7 @@ module fields_manipulation
 
         call test_remap_validity(from_field, to_field, stat=stat)
 
-        ! First construct remapping weights.
-        do toloc=1,size(locweight,1)
-          do fromloc=1,size(locweight,2)
-              locweight(toloc,fromloc)=eval_shape(from_field%mesh%shape, fromloc, &
-                  local_coords(toloc, to_field%mesh%shape))
-          end do
-        end do
+        locweight = local_remap(from_field%mesh%shape, to_field%mesh%shape)
         
         ! Now loop over the elements.
         do ele=1,element_count(from_field)
@@ -2163,7 +2170,7 @@ module fields_manipulation
     type(element_type), pointer:: from_shape, to_shape
     real, dimension(face_loc(from_field,1)) :: from_val
     integer, dimension(:), pointer :: to_nodes
-    integer toloc, fromloc, ele, face
+    integer ele, face
 
     if (present(stat)) stat = 0
 
@@ -2177,12 +2184,7 @@ module fields_manipulation
       from_shape => face_shape(from_field, 1)
       to_shape => ele_shape(to_field, 1)
       ! First construct remapping weights.
-      do toloc=1,size(locweight,1)
-         do fromloc=1,size(locweight,2)
-            locweight(toloc,fromloc)=eval_shape(from_shape, fromloc, &
-                 local_coords(toloc, to_shape))
-         end do
-      end do
+      locweight = local_remap(from_shape, to_shape)
     
       ! Now loop over the surface elements.
       do ele=1, size(surface_element_list)
@@ -2218,7 +2220,7 @@ module fields_manipulation
     type(element_type), pointer:: from_shape, to_shape
     real, dimension(from_field%dim, face_loc(from_field,1)) :: from_val
     integer, dimension(:), pointer :: to_nodes
-    integer toloc, fromloc, ele, face, i
+    integer ele, face, i
 
     if(present(stat)) stat = 0
 
@@ -2234,12 +2236,7 @@ module fields_manipulation
       from_shape => face_shape(from_field, 1)
       to_shape => ele_shape(to_field, 1)
       ! First construct remapping weights.
-      do toloc=1,size(locweight,1)
-         do fromloc=1,size(locweight,2)
-            locweight(toloc,fromloc)=eval_shape(from_shape, fromloc, &
-                 local_coords(toloc, to_shape))
-         end do
-      end do
+      locweight = local_remap(from_shape, to_shape)
     
       ! Now loop over the surface elements.
       do ele=1, size(surface_element_list)
@@ -2284,7 +2281,7 @@ module fields_manipulation
     type(element_type), pointer:: from_shape, to_shape
     real, dimension(from_field%dim(1), from_field%dim(2), face_loc(from_field,1)) :: from_val
     integer, dimension(:), pointer :: to_nodes
-    integer toloc, fromloc, ele, face, i, j
+    integer ele, face, i, j
 
     if(present(stat)) stat = 0
 
@@ -2301,12 +2298,7 @@ module fields_manipulation
       from_shape => face_shape(from_field, 1)
       to_shape => ele_shape(to_field, 1)
       ! First construct remapping weights.
-      do toloc=1,size(locweight,1)
-         do fromloc=1,size(locweight,2)
-            locweight(toloc,fromloc)=eval_shape(from_shape, fromloc, &
-                 local_coords(toloc, to_shape))
-         end do
-      end do
+      locweight = local_remap(from_shape, to_shape)
     
       ! Now loop over the surface elements.
       do ele=1, size(surface_element_list)

@@ -59,6 +59,8 @@ module elements
      !! Pointer to constraints data for this element
      type(constraints_type), pointer :: constraints=>null()
      !! Reference count to prevent memory leaks.
+     !! If true, the basis functions are 1 in their associated node, and 0 elsewhere
+     logical :: nodal = .true.
      type(refcount_type), pointer :: refcount=>null()
      !! Dummy name to satisfy reference counting
      character(len=0) :: name

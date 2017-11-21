@@ -6,6 +6,7 @@ module fefields
   use data_structures
   use element_numbering
   use elements, only: element_type
+  use shape_functions, only: transformation_lagrangian_to_monotonic_p2, monotonic_p2_shape
   use parallel_tools
   use sparse_tools
   use transform_elements, only: transform_to_physical, element_volume
@@ -29,6 +30,7 @@ module fefields
   public :: compute_lumped_mass, compute_mass, compute_projection_matrix, add_source_to_rhs, &
             compute_lumped_mass_on_submesh, compute_cv_mass, project_field
   public :: create_subdomain_mesh
+  public :: lagrangian_to_monotonic_p2_mesh
 
 contains
   
@@ -782,28 +784,28 @@ contains
     call deallocate(face_ele_list)
     deallocate(sndglno)
     deallocate(boundary_ids)
+    deallocate(inverse_node_list)
 
     ! If parallel then set up node and element halos, by checking whether mesh halos
     ! exist on submesh:
 
     if(isparallel()) then
-       call generate_subdomain_halos(mesh, submesh, node_list, inverse_node_list)
+       call generate_subdomain_halos(mesh, submesh, node_list)
     end if
 
-    deallocate(inverse_node_list)
     call deallocate(submesh_node_set)
 
     ewrite(1,*) "Leaving create_subdomain_mesh"
 
   end subroutine create_subdomain_mesh
 
-  subroutine generate_subdomain_halos(external_mesh,subdomain_mesh,node_list,inverse_node_list)
+  subroutine generate_subdomain_halos(external_mesh,subdomain_mesh,node_list)
 
     type(mesh_type), intent(in) :: external_mesh
     type(mesh_type), intent(inout) :: subdomain_mesh
-    integer, dimension(:) :: node_list, inverse_node_list 
+    integer, dimension(:), intent(in) :: node_list
 
-    integer :: nhalos, communicator, nprocs, procno, ihalo, inode, iproc, nowned_nodes
+    integer :: nhalos, communicator, nprocs, procno, ihalo
 
     ewrite(1, *) "In generate_subdomain_halos"
 
@@ -830,7 +832,7 @@ contains
     ! Derive subdomain_mesh halos:
     do ihalo = 1, nhalos
 
-       subdomain_mesh%halos(ihalo) = derive_sub_halo(external_mesh%halos(ihalo),node_list)
+       subdomain_mesh%halos(ihalo) = derive_sub_halo(external_mesh%halos(ihalo), node_list)
        
        assert(trailing_receives_consistent(subdomain_mesh%halos(ihalo)))
       
@@ -851,5 +853,21 @@ contains
     end if
 
   end subroutine generate_subdomain_halos
+
+  function lagrangian_to_monotonic_p2_mesh(mesh_in) result (mesh_out)
+    !!< Given a standard lagrangian P2 mesh, return a copy
+    !!< of the mesh with its shape replaced by the monotonic
+    !!< P2 shape (see monotonic_p2_shape())
+    type(mesh_type), intent(in) :: mesh_in
+    type(mesh_type) :: mesh_out
+
+    type(element_type) :: shape_out
+
+    shape_out = monotonic_p2_shape(mesh_in%shape)
+
+    call allocate(mesh_out, node_count(mesh_in), element_count(mesh_in), shape_out, name="MonotonicP2"//trim(mesh_in%name))
+    mesh_out%ndglno = mesh_in%ndglno
+
+  end function lagrangian_to_monotonic_p2_mesh
 
 end module fefields

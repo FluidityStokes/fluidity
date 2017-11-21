@@ -386,4 +386,106 @@ contains
        
   end function nonconforming_polynomial
 
+  function transformation_lagrangian_to_monotonic_p2(ele_num) result (matrix)
+    !!< Returns a matrix that transforms coefficients with respect to the standard Lagrangian P2 basis
+    !!< to coefficients wrt the monotonic P2 basis. The transpose of this provides the linear combination
+    !!< of Lagrangian P2 basis functions that form the monotonic P2 basis
+    type(ele_numbering_type), intent(in) :: ele_num
+    real, dimension(ele_num%nodes, ele_num%nodes) :: matrix
+
+    integer, dimension(ele_num%vertices) :: vertices
+    integer, dimension(1) :: edge_node
+    integer :: i, j
+
+    matrix = 0.
+    vertices = local_vertices(ele_num)
+    do i=1, size(vertices)
+      ! the vertex shape function is the sum of the corr. nodal lagrangian shape function
+      ! (which isn't monotonic)
+      matrix(vertices(i), vertices(i)) = 1.0
+
+      ! plus a quarter of the adjacent edge shape functions to fix monotonicity
+      do j=1, size(vertices)
+        if (i==j) exit
+        edge_node = edge_local_num((/ i, j /), ele_num, interior=.true.)
+
+        matrix(edge_node(1), vertices(i)) = 0.25
+
+        ! the edge basis function itself is scaled such that the sum of all basis functions is still 1
+        matrix(edge_node(1), edge_node(1)) = 0.5
+      end do
+    end do
+
+  end function transformation_lagrangian_to_monotonic_p2
+
+  function monotonic_p2_shape(lagrangian_p2_shape) result (shape)
+    !!< Given the standard lagrangian P2 shape, creates a P2 shape 
+    !!< that uses a non-nodal basis which is monotonic. The basis 
+    !!< functions are still associated with the standard P2 nodes,
+    !!< in the sense that each basis function is 1 in the 
+    !!< associated P2 node - however the vertex basis functions is
+    !!< not zero in the adjacent edge P2 nodes. The basis functions are
+    !!< however still continuous between elements.
+    type(element_type), intent(in):: lagrangian_p2_shape
+    type(element_type) :: shape
+
+    type(ele_numbering_type), pointer :: ele_num
+    real, dimension(lagrangian_p2_shape%loc, lagrangian_p2_shape%loc) :: matrix
+    integer :: i, j, k
+
+    ele_num => lagrangian_p2_shape%numbering
+    assert(ele_num%type == FAMILY_SIMPLEX)
+    assert(ele_num%family == FAMILY_SIMPLEX)
+    assert(lagrangian_p2_shape%degree == 2)
+    assert(.not. associated(lagrangian_p2_shape%superconvergence))
+    assert(.not. associated(lagrangian_p2_shape%constraints))
+
+    ! This follows the same order of setting the shape attributes
+    ! as in make_element_shape: we first set numbering and quadrature
+    ! /before/ calling allocate (which is intent(inout)!) - yuck!
+    shape%numbering => ele_num
+    shape%quadrature = lagrangian_p2_shape%quadrature
+    call incref(shape%quadrature)
+
+    if (associated(lagrangian_p2_shape%surface_quadrature)) then
+      allocate(shape%surface_quadrature)
+      shape%surface_quadrature = lagrangian_p2_shape%surface_quadrature
+      call incref(shape%surface_quadrature)
+      call allocate(shape, ele_num, shape%quadrature%ngi, ngi_s=shape%surface_quadrature%ngi)
+    else
+      call allocate(shape, ele_num, shape%quadrature%ngi)
+    end if
+    shape%degree = 2
+
+    matrix = transpose(transformation_lagrangian_to_monotonic_p2(ele_num))
+
+    shape%n = matmul(matrix, lagrangian_p2_shape%n)
+    do i=1, size(shape%dn, 3)
+      shape%dn(:,:,i) = matmul(matrix, lagrangian_p2_shape%dn(:,:,i))
+    end do
+    do i=1, size(matrix, 1)
+      do j=1, size(shape%spoly, 1)
+        shape%spoly(j,i) = (/ 0. /)
+        do k=1, size(matrix, 2)
+          shape%spoly(j,i) = shape%spoly(j,i) + matrix(i, k) * lagrangian_p2_shape%spoly(j,k)
+          shape%dspoly(j,i) = shape%dspoly(j,i) + matrix(i, k) * lagrangian_p2_shape%dspoly(j,k)
+        end do
+      end do
+    end do
+
+    if (associated(shape%surface_quadrature)) then
+      shape%n_s = matmul(matrix, lagrangian_p2_shape%n_s)
+      do i=1, size(shape%dn_s, 3)
+        shape%dn_s(:,:,i) = matmul(matrix, lagrangian_p2_shape%dn_s(:,:,i))
+      end do
+    end if
+
+    ! This indicates that the basis functions do *not* have the property: 1 in associated node
+    ! 0 in other nodes. Thus we cannot equate "value in node" with coeffient. We do however assume
+    ! that any linear combination of basis functions is uniquely determined by the values in all
+    ! nodes of the element numbering
+    shape%nodal = .false.
+
+  end function monotonic_p2_shape
+
 end module shape_functions
