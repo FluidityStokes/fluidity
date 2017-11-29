@@ -447,6 +447,9 @@ contains
               ! but we do need halos on the surface mesh to make the smoothing work in parallel
               call get_boundary_condition(field, i+1, surface_node_list=surface_node_list)
               call generate_surface_mesh_halos(field%mesh, surface_mesh, surface_node_list)
+              ! ensure that halos are also available on the mesh of the copy of surface_field stored under the bc
+              surface_field%mesh = surface_mesh
+              call insert_surface_field(field, i+1, surface_field)
             end if
           end if
           
