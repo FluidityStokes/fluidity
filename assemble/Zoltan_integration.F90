@@ -293,7 +293,7 @@ module zoltan_integration
       call deallocate(zoltan_global_new_positions_m1d)
     end if
 
-    call finalise_transfer(states, metric, full_metric, new_metric)
+    call finalise_transfer(states, metric, full_metric, new_metric, flredecomp)
 
     call cleanup_basic_module_variables(zz)
     call cleanup_quality_module_variables
@@ -2257,19 +2257,23 @@ module zoltan_integration
     
   end subroutine transfer_fields
 
-  subroutine finalise_transfer(states, metric, full_metric, new_metric)
+  subroutine finalise_transfer(states, metric, full_metric, new_metric, flredecomp)
     type(state_type), dimension(:), intent(inout), target :: states
 
     type(tensor_field), intent(inout), optional :: metric
     type(tensor_field), intent(inout), optional :: full_metric
     type(tensor_field), intent(in) :: new_metric
+    ! if flredecomping, don't bother prescribing fields and populating bcs on the redecomped state
+    logical, intent(in) :: flredecomp
 
     integer :: i
-    call set_prescribed_field_values(states, exclude_interpolated = .true.)
-    call populate_boundary_conditions(states)
-    call set_boundary_conditions_values(states)
-    call set_dirichlet_consistent(states)
-    call alias_fields(states)
+    if (.not. flredecomp) then
+      call set_prescribed_field_values(states, exclude_interpolated = .true.)
+      call populate_boundary_conditions(states)
+      call set_boundary_conditions_values(states)
+      call set_dirichlet_consistent(states)
+      call alias_fields(states)
+    end if
     
     if (present(full_metric)) then
        full_metric = new_metric
