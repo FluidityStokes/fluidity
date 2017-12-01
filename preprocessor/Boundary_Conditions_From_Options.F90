@@ -369,7 +369,7 @@ contains
 
     type(mesh_type), pointer:: mesh, surface_mesh
     type(mesh_type) :: linear_surface_mesh
-    type(vector_field) surface_field, surface_field2, bc_position
+    type(vector_field) surface_field, surface_field2, bc_position, linear_surface_field
     type(vector_field):: normal, tangent_1, tangent_2
     type(scalar_field) :: scalar_surface_field
     character(len=OPTION_PATH_LEN) bc_path_i, bc_type_path, bc_component_path
@@ -424,9 +424,6 @@ contains
           call get_boundary_condition(field, i+1, surface_mesh=surface_mesh)
           call allocate(surface_field, field%dim, surface_mesh, name="value")
           
-          call insert_surface_field(field, i+1, surface_field)
-          call deallocate(surface_field)
-
           if (have_smoothing) then
             if (continuity(field)<0) then
               ! if the mesh is not linear and continuous, we first evalutate
@@ -437,9 +434,9 @@ contains
               call create_surface_mesh(linear_surface_mesh, surface_node_list, &
                 mesh, surface_element_list, name="Linear"//trim(surface_mesh%name))
               call generate_surface_mesh_halos(mesh, linear_surface_mesh, surface_node_list)
-              call allocate(surface_field, field%dim, linear_surface_mesh, name="smoothed_value")
-              call insert_surface_field(field, i+1, surface_field)
-              call deallocate(surface_field)
+              call allocate(linear_surface_field, field%dim, linear_surface_mesh, name="smoothed_value")
+              call insert_surface_field(field, i+1, linear_surface_field)
+              call deallocate(linear_surface_field)
               call deallocate(linear_surface_mesh)
               deallocate(surface_node_list)
             else
@@ -449,10 +446,12 @@ contains
               call generate_surface_mesh_halos(field%mesh, surface_mesh, surface_node_list)
               ! ensure that halos are also available on the mesh of the copy of surface_field stored under the bc
               surface_field%mesh = surface_mesh
-              call insert_surface_field(field, i+1, surface_field)
             end if
           end if
           
+          call insert_surface_field(field, i+1, surface_field)
+          call deallocate(surface_field)
+
           if (have_sem_bc) then
              call allocate(surface_field, field%dim, surface_mesh, name="TurbulenceLengthscale")
              call insert_surface_field(field, i+1, surface_field)
