@@ -65,8 +65,11 @@ module Petsc_Tools
   type petsc_numbering_type
      type(halo_type), pointer :: halo => null()
      integer nprivatenodes
-     ! length of a vector 
+     ! global length of Petsc vector 
      integer universal_length
+     ! block size as seen by petsc
+     integer group_size
+     ! start index of local part of petsc vector
      integer offset
      ! mapping between "global" (fludity numbering inside each local domain)
      ! and "universal" numbering (truly global numbering over all processes
@@ -119,11 +122,11 @@ module Petsc_Tools
   ! for unit-testing:
   logical, public, save :: petsc_test_error_handler_called = .false.
   public petsc_test_error_handler
-#if PETSC_VERSION_MINOR>=3
-  public MatCreateSeqAIJ, MatCreateMPIAIJ, MatCreateSeqBAIJ, MatCreateMPIBAIJ
-#endif
 #if PETSC_VERSION_MINOR<5
   public mykspgetoperators
+#endif
+#if PETSC_VERSION_MINOR<7
+  public NullPetscViewerAndFormatCreate
 #endif
 contains
 
@@ -145,7 +148,7 @@ contains
   ! as group to avoid confusion with the above definition.
   
   subroutine allocate_petsc_numbering(petsc_numbering, &
-       nnodes, nfields, halo, ghost_nodes)
+       nnodes, nfields, group_size, halo, ghost_nodes)
     !!< Set ups the 'universal'(what most people call global)
     !!< numbering used in PETSc. In serial this is trivial
     !!< but could still be used for reordering schemes.
@@ -155,13 +158,15 @@ contains
     !! (here nfields counts each scalar component of vector fields, so
     !!  e.g. for nphases velocity fields in 3 dimensions nfields=3*nphases)
     integer, intent(in):: nnodes, nfields
+    !! if present 'group_size' fields are grouped in the petsc numbering, i.e.
+    integer, intent(in), optional:: group_size
     !! for parallel: halo information
     type(halo_type), pointer, optional :: halo
     !! If supplied number these as -1, so they'll be skipped by Petsc
     integer, dimension(:), optional, intent(in):: ghost_nodes 
     integer, dimension(:), allocatable:: ghost_marker
-    integer i, g, f, start, offset
-    integer nuniversalnodes, ngroups, lgroup_size, ierr
+    integer i, g, f, start, offset, fpg
+    integer nuniversalnodes, ngroups, ierr
 
     allocate( petsc_numbering%gnn2unn(1:nnodes, 1:nfields) )
 
@@ -175,7 +180,15 @@ contains
        end if
     end if
 
-    ngroups=nfields
+    if (present(group_size)) then
+      fpg=group_size ! fields per group
+      ngroups=nfields/fpg
+      assert(nfields==fpg*ngroups)
+    else
+      fpg=1
+      ngroups=nfields
+    end if
+    petsc_numbering%group_size=fpg
 
     ! first we set up the petsc numbering for the first entry of each group only:
 
@@ -184,11 +197,13 @@ contains
        ! *** Serial case *or* parallel without halo
 
        ! standard, trivial numbering, starting at 0:
-       start=0 ! start of each field -1
-       do g=1, nfields
-          petsc_numbering%gnn2unn(:, g )= &
-               (/ ( start+i, i=0, nnodes-1 ) /)
-          start=start+nnodes
+       start=0 ! start of each group of fields
+       do g=0, ngroups-1
+          do f=0, fpg-1
+            petsc_numbering%gnn2unn(:, g*fpg+f+1 )= &
+               (/ ( start + fpg*i+f, i=0, nnodes-1 ) /)
+          end do
+          start=start+nnodes*fpg
        end do
 
        if (isParallel()) then
@@ -199,7 +214,7 @@ contains
           call mpi_scan(nnodes, offset, 1, MPI_INTEGER, &
                MPI_SUM, MPI_COMM_FEMTOOLS, ierr)
           offset=offset-nnodes
-          petsc_numbering%gnn2unn=petsc_numbering%gnn2unn+offset
+          petsc_numbering%gnn2unn=petsc_numbering%gnn2unn+offset*nfields
 
        end if
        
@@ -214,10 +229,22 @@ contains
 
        ! *** Parallel case with halo:
 
-       ! get 'universal' numbering
-       call get_universal_numbering(halo, petsc_numbering%gnn2unn)
+       ! the hard work is done inside get_universal_numbering() for the case fpg=1
+       ! for fpg>1 we just ask for a numbering for the groups and pad it out afterwards
+       call get_universal_numbering(halo, petsc_numbering%gnn2unn(:,1:ngroups))
        ! petsc uses base 0
-       petsc_numbering%gnn2unn = petsc_numbering%gnn2unn-1
+       petsc_numbering%gnn2unn(:,1:ngroups) = petsc_numbering%gnn2unn(:,1:ngroups)-1
+
+       if (fpg>1) then
+         ! the universal node number of the first node in each group is
+         ! simply the universal groups times fpg - as we know other processes
+         ! do the same we need no negotiation for the halo nodes
+         petsc_numbering%gnn2unn(:,1:nfields:fpg) = petsc_numbering%gnn2unn(:,1:ngroups)*fpg
+         ! as always the subsequent nodes in a group are number consequently:
+         do f=2, fpg
+           petsc_numbering%gnn2unn(:,f:nfields:fpg) = petsc_numbering%gnn2unn(:,1:nfields:fpg)+(f-1)
+         end do
+       end if
          
        petsc_numbering%nprivatenodes=halo_nowned_nodes(halo)
 
@@ -228,7 +255,7 @@ contains
     if (isParallel()) then
        ! work out the length of global(universal) vector
        call mpi_allreduce(petsc_numbering%nprivatenodes, nuniversalnodes, 1, MPI_INTEGER, &
-           MPI_SUM, MPI_COMM_FEMTOOLS, ierr)       
+           MPI_SUM, MPI_COMM_FEMTOOLS, ierr)
 
        petsc_numbering%universal_length=nuniversalnodes*nfields
     else
@@ -577,13 +604,8 @@ contains
 
     nnodp = petsc_numbering%nprivatenodes
 
-#if PETSC_VERSION_MINOR>=2
     call ISCreateGeneral(MPI_COMM_FEMTOOLS, nnodp, petsc_numbering%gnn2unn(:,dim), &
          PETSC_COPY_VALUES, index_set, ierr)
-#else
-    call ISCreateGeneral(MPI_COMM_FEMTOOLS, nnodp, petsc_numbering%gnn2unn(:,dim), &
-         index_set, ierr)
-#endif
        
   end function petsc_numbering_create_is_dim
   
@@ -1101,8 +1123,9 @@ contains
 
     end do
     
-    call MatCreateSeqAIJ(MPI_COMM_SELF, nprows, npcols, &
-      PETSC_NULL_INTEGER, nnz, M, ierr)
+    call MatCreateAIJ(MPI_COMM_SELF, nprows, npcols, nprows, npcols, &
+      PETSC_NULL_INTEGER, nnz, 0, PETSC_NULL_INTEGER, M, ierr)
+    call MatSetup(M, ierr)
       
     call MatSetOption(M, MAT_USE_INODES, PETSC_FALSE, ierr)
 
@@ -1184,12 +1207,17 @@ contains
       end do
     end do
       
-    call MatCreateSeqAIJ(MPI_COMM_SELF, nrows, ncols, PETSC_NULL_INTEGER, &
-      nnz, M, ierr)
+    call MatCreate(PETSC_COMM_SELF, M, ierr)
+    call MatSetSizes(M, nrows, ncols, PETSC_DETERMINE, PETSC_DETERMINE, ierr)
+    call MatSetBlockSizes(M, row_numbering%group_size, col_numbering%group_size, ierr)
+    call MatSetType(M, MATAIJ, ierr)
+    call MatSeqAIJSetPreallocation(M, PETSC_NULL_INTEGER, nnz, ierr)
       
     if (.not. present_and_true(use_inodes)) then
       call MatSetOption(M, MAT_USE_INODES, PETSC_FALSE, ierr)
     end if
+
+    call MatSetup(M, ierr)
 
     deallocate(nnz)
       
@@ -1270,8 +1298,9 @@ contains
       end do
     end do
 
-    call MatCreateMPIAIJ(MPI_COMM_FEMTOOLS, nrowsp, ncolsp, nrows, ncols, &
+    call MatCreateAIJ(MPI_COMM_FEMTOOLS, nrowsp, ncolsp, nrows, ncols, &
       PETSC_NULL_INTEGER, d_nnz, PETSC_NULL_INTEGER, o_nnz, M, ierr)
+    call MatSetup(M, ierr)
       
     if (.not. present_and_true(use_inodes)) then
       call MatSetOption(M, MAT_USE_INODES, PETSC_FALSE, ierr)
@@ -1437,7 +1466,7 @@ contains
     if (.not. IsParallel()) return
     
     call allocate(petsc_numbering, node_count(vfield), vfield%dim, &
-      halo)
+      halo=halo)
     vec=PetscNumberingCreateVec(petsc_numbering)
     ! assemble vfield into petsc Vec, this lets petsc do the adding up
     call field2petsc(vfield, petsc_numbering, vec)
@@ -1491,12 +1520,8 @@ contains
 
 ! Simple dummy error handler that just tracks whether it's been called or not
 ! Useful for unittesting to see that petsc gives error messages at the right moment
-#if PETSC_VERSION_MINOR>=2
 subroutine petsc_test_error_handler(comm,line, func, file, dir, n, p, mess, ctx, ierr)
   MPI_Comm:: comm
-#else
-subroutine petsc_test_error_handler(line, func, file, dir, n, p, mess, ctx, ierr)
-#endif
   PetscInt:: line
   character(len=*):: func, file, dir
   PetscErrorCode:: n
@@ -1509,68 +1534,6 @@ subroutine petsc_test_error_handler(line, func, file, dir, n, p, mess, ctx, ierr
   petsc_test_error_handler_called = .true.
   
 end subroutine petsc_test_error_handler
-
-! In petsc-3.3 the MatCreate[B]{Seq|MPI}() routines have changed to MatCreate[B]Aij
-! and MatSetup always needs to be called
-#if PETSC_VERSION_MINOR>=3
-  subroutine MatCreateSeqAIJ(MPI_Comm, nrows, ncols, &
-      nz, nnz, M, ierr)
-    integer, intent(in):: MPI_Comm
-    PetscInt, intent(in):: nrows, ncols, nz
-    PetscInt, dimension(:), intent(in):: nnz
-    Mat, intent(out):: M
-    PetscErrorCode, intent(out):: ierr
-
-    call MatCreateAij(MPI_Comm, nrows, ncols, nrows, ncols, &
-      nz, nnz, 0, PETSC_NULL_INTEGER, M, ierr)
-    call MatSetup(M, ierr)
-
-  end subroutine MatCreateSeqAIJ
-
-  subroutine MatCreateMPIAIJ(MPI_Comm, nprows, npcols, &
-      nrows, ncols, &
-      dnz, dnnz, onz, onnz, M, ierr)
-    integer, intent(in):: MPI_Comm
-    PetscInt, intent(in):: nprows, npcols,nrows, ncols, dnz, onz
-    PetscInt, dimension(:), intent(in):: dnnz, onnz
-    Mat, intent(out):: M
-    PetscErrorCode, intent(out):: ierr
-
-    call MatCreateAij(MPI_Comm, nprows, npcols, nrows, ncols, &
-      dnz, dnnz, onz, onnz, M, ierr)
-    call MatSetup(M, ierr)
-
-  end subroutine MatCreateMPIAIJ
-
-  subroutine MatCreateSeqBAIJ(MPI_Comm, bs, nrows, ncols, &
-      nz, nnz, M, ierr)
-    integer, intent(in):: MPI_Comm
-    PetscInt, intent(in):: bs, nrows, ncols, nz
-    PetscInt, dimension(:), intent(in):: nnz
-    Mat, intent(out):: M
-    PetscErrorCode, intent(out):: ierr
-
-    call MatCreateBAij(MPI_Comm, bs, nrows, ncols, nrows, ncols, &
-      nz, nnz, 0, PETSC_NULL_INTEGER, M, ierr)
-    call MatSetup(M, ierr)
-
-  end subroutine MatCreateSeqBAIJ
-
-  subroutine MatCreateMPIBAIJ(MPI_Comm, bs, nprows, npcols, &
-      nrows, ncols, &
-      dnz, dnnz, onz, onnz, M, ierr)
-    integer, intent(in):: MPI_Comm
-    PetscInt, intent(in):: bs, nprows, npcols,nrows, ncols, dnz, onz
-    PetscInt, dimension(:), intent(in):: dnnz, onnz
-    Mat, intent(out):: M
-    PetscErrorCode, intent(out):: ierr
-
-    call MatCreateBAij(MPI_Comm, bs, nprows, npcols, nrows, ncols, &
-      dnz, dnnz, onz, onnz, M, ierr)
-    call MatSetup(M, ierr)
-
-  end subroutine MatCreateMPIBAIJ
-#endif
 
 ! this is a wrapper around KSPGetOperators, that in petsc <3.5
 ! has an extra mat_structure flag. We need to wrap this because
@@ -1588,6 +1551,21 @@ subroutine mykspgetoperators(ksp, amat, pmat, ierr)
   call  kspgetoperators(ksp, amat, pmat, mat_structure, ierr)
 
 end subroutine mykspgetoperators
+#endif
+
+#if PETSC_VERSION_MINOR<7
+subroutine NullPetscViewerAndFormatCreate(viewer, format, vf, ierr)
+  PetscViewer, intent(in) :: viewer
+  PetscEnum, intent(in) :: format
+  PetscObject, intent(out) :: vf
+  PetscErrorCode, intent(out) :: ierr
+
+  assert(viewer==PETSC_VIEWER_STDOUT_WORLD)
+  assert(format==PETSC_VIEWER_DEFAULT)
+  vf = PETSC_NULL_OBJECT
+  ierr = 0
+
+end subroutine NullPetscViewerAndFormatCreate
 #endif
 
 #include "Reference_count_petsc_numbering_type.F90"

@@ -734,6 +734,7 @@ extern "C" {
     // Set to true binary format (not encoded as base 64)
     writer->SetDataModeToAppended();
     writer->EncodeAppendedDataOff();
+    writer->SetWriteSummaryFile((*rank)==0);
 
     
     writer->Write();
@@ -743,9 +744,11 @@ extern "C" {
     dataSet->Delete();
     dataSet = NULL;
   
-    if(is_pvtu && (*rank)==0){
-      rename(filename.c_str(), fl_vtkFileName.c_str());
-      pvtu_fix_path(fl_vtkFileName.c_str(), basename.c_str());
+    if(is_pvtu){
+      if((*rank)==0){
+        rename(filename.c_str(), fl_vtkFileName.c_str());
+        pvtu_fix_path(fl_vtkFileName.c_str(), basename.c_str());
+      }
     }
 
     return;

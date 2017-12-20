@@ -31,7 +31,7 @@ module bound_field_module
 
   use FLDebug
   use spud
-  use global_parameters, only : FIELD_NAME_LEN, real_8
+  use global_parameters, only : FIELD_NAME_LEN
   use quicksort
   use parallel_tools
   use sparse_tools
@@ -156,7 +156,7 @@ module bound_field_module
     call addto(diffused, deviation, -1.0)
     call addto(field, diffused, 2.0)
 
-    call halo_update(field, 1)
+    call halo_update(field, 1, verbose=.false.)
   end do iterloop
   
   ewrite(2,*) "Bounded interpolation for field ", trim(field%name), " took ", k, " iterations"
