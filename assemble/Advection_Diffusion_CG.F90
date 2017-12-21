@@ -589,6 +589,8 @@ contains
             ! developer error... out of sync options input and code
             FLAbort("Unknown equation type for velocity")
       end select
+      heatcap=>dummydensity
+      reftemp=>dummydensity
       ewrite_minmax(density)
 
     case default
