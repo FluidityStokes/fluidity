@@ -43,21 +43,19 @@
 
 
 module mesh_files
+  use fldebug
+  use global_parameters, only : OPTION_PATH_LEN
   use futils
   use elements
+  use spud
   use fields
   use state_module
-
-  use global_parameters, only : OPTION_PATH_LEN
-
   use gmsh_common
   use read_gmsh
   use read_triangle
   use read_exodusii
   use write_gmsh
   use write_triangle
-
-  use spud
 
   implicit none
 
@@ -103,22 +101,23 @@ contains
 
     select case( trim(format) )
     case("triangle")
-       field = read_triangle_files(filename, quad_degree=quad_degree, quad_ngi=quad_ngi, &
-            quad_family=quad_family, mdim=mdim)
+       ewrite(-1,*) "The Triangle mesh format reader is deprecated."
+       ewrite(-1,*) "Please convert your mesh to the Gmsh format."
+       FLAbort("Triangle mesh format is no longer supported")
+
+       ! field = read_triangle_files(filename, quad_degree=quad_degree, quad_ngi=quad_ngi, &
+       !      quad_family=quad_family, mdim=mdim)
 
     case("gmsh")
-       if (present(mdim)) then
-         FLExit("Cannot specify dimension for gmsh format")
-       end if
        field = read_gmsh_file(filename, quad_degree=quad_degree, quad_ngi=quad_ngi, &
-            quad_family=quad_family)
+            quad_family=quad_family, mdim=mdim)
 
     case("exodusii")
 #ifdef HAVE_LIBEXOIIV2C
        field = read_exodusii_file(filename, quad_degree=quad_degree, quad_ngi=quad_ngi, &
             quad_family=quad_family)
 #else
-  FLExit("Fluidity was not configured with exodusII, reconfigure with '--with-exodusII'!")
+  FLExit("Fluidity was not configured with exodusII, reconfigure with '--with-exodusii'!")
 #endif
 
 

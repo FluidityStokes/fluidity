@@ -45,14 +45,18 @@ extern "C"{
 
 void usage(){
   cerr<<"usage: gmsh2vtu <gmsh_file_name>\n"
-      <<"The gmsh file name should be without the .node suffix."<<endl;
+      <<"The gmsh file name should be without the .msh suffix."<<endl;
 }
 
 int main(int argc, char** argv){
 #ifdef HAVE_MPI
-  MPI::Init(argc, argv);
+  MPI_Init(&argc, &argv);
   // Undo some MPI init shenanigans
-  chdir(getenv("PWD"));
+  int ierr = chdir(getenv("PWD"));
+  if (ierr == -1) {
+        cerr << "Unable to switch to directory " << getenv("PWD");
+        abort();
+  }
 #endif
     
   if(argc<2){
@@ -66,7 +70,7 @@ int main(int argc, char** argv){
   gmsh2vtu(filename.c_str(), filename_len);
 
 #ifdef HAVE_MPI
-  MPI::Finalize();
+  MPI_Finalize();
 #endif
   return 0;
 }

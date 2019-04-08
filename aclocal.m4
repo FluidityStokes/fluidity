@@ -425,34 +425,32 @@ if test "x$PETSC_DIR" == "x"; then
 fi
 AC_MSG_NOTICE([Using PETSC_DIR=$PETSC_DIR])
 
-PETSC_LINK_LIBS=`make -s -f petsc_makefile getlinklibs`
+PETSC_LINK_LIBS=`make -s -f petsc_makefile_old getlinklibs 2> /dev/null || make -s -f petsc_makefile getlinklibs`
 LIBS="$PETSC_LINK_LIBS $LIBS"
 
-PETSC_INCLUDE_FLAGS=`make -s -f petsc_makefile getincludedirs`
-CPPFLAGS="$CPPFLAGS $PETSC_INCLUDE_FLAGS"
-FCFLAGS="$FCFLAGS $PETSC_INCLUDE_FLAGS"
+# need to add -I$PWD/include/ to what we get from petsc, so we can use our own petsc_legacy.h wrapper
+PETSC_INCLUDE_FLAGS=`make -s -f petsc_makefile_old getincludedirs 2> /dev/null || make -s -f petsc_makefile getincludedirs`
+CPPFLAGS="$CPPFLAGS $PETSC_INCLUDE_FLAGS -I$PWD/include/"
+FCFLAGS="$FCFLAGS $PETSC_INCLUDE_FLAGS -I$PWD/include/"
 
-# Horrible hacks needed for cx1
-# Somehow /apps/intel/ict/mpi/3.1.038/lib64 gets given as /apps/intel/ict/mpi/3.1.038/lib/64
-# maybe the directory got moved after building petsc? Anyhow next time we
-# request a new petsc package on cx1, this hack can be removed - and we
-# can check if the new packages passes the test without any hacks.
-fixedLIBS=`echo $LIBS |sed 's@/apps/intel/ict/mpi/3.1.038/lib/64@/apps/intel/ict/mpi/3.1.038/lib64@g'`
-
-if test ! "$LIBS" == "$fixedLIBS"; then
-  # more fixes needed:
-  # also -lmpichcxx got mangled to -lmpichxx
-  LIBS=`echo $fixedLIBS |sed 's@mpichxx@mpichcxx@g'`
-  # remove -lPEPCF90, -lpromfei and -lprometheus
-  LIBS=`echo $LIBS |sed 's@-lPEPCF90@@g'`
-  LIBS=`echo $LIBS |sed 's@-lpromfei@@g'`
-  LIBS=`echo $LIBS |sed 's@-lprometheus@@g'`
+# first check we have the right petsc version
+AC_COMPUTE_INT(PETSC_VERSION_MAJOR, "PETSC_VERSION_MAJOR", [#include "petscversion.h"], 
+  [AC_MSG_ERROR([Unknown petsc major version])])
+AC_COMPUTE_INT(PETSC_VERSION_MINOR, "PETSC_VERSION_MINOR", [#include "petscversion.h"], 
+  [AC_MSG_ERROR([Unknown petsc minor version])])
+AC_MSG_NOTICE([Detected PETSc version "$PETSC_VERSION_MAJOR"."$PETSC_VERSION_MINOR"])
+# if major<3 or minor<4
+if test "0$PETSC_VERSION_MAJOR" -lt 3 -o "0$PETSC_VERSION_MINOR" -lt 4; then
+  AC_MSG_ERROR([Fluidity needs PETSc version >=3.4])
 fi
 
 AC_LANG(Fortran)
 # F90 (capital F) to invoke preprocessing
-# it's only 20 years ago now!
 ac_ext=F90
+
+# may need some extra flags for testing that we don't want to use in the end
+SAVE_FCFLAGS="$FCFLAGS"
+
 if test "$enable_petsc_fortran_modules" != "no" ; then
   # now try if the petsc fortran modules work:
   AC_LINK_IFELSE(
@@ -465,13 +463,13 @@ if test "$enable_petsc_fortran_modules" != "no" ; then
           [
               AC_MSG_NOTICE([PETSc modules are working.])
               AC_DEFINE(HAVE_PETSC_MODULES,1,[Define if you have petsc fortran modules.] )
+              FCFLAGS="$FCFLAGS -DHAVE_PETSC_MODULES"
           ],
           [
               AC_MSG_NOTICE([PETSc modules don't work, using headers instead.])
-              unset HAVE_PETSC_MODULES
           ])
-else
-  unset HAVE_PETSC_MODULES
+elif test "0$PETSC_VERSION_MINOR" -ge 8; then
+  AC_MSG_ERROR([PETSc v3.8 and newer requires petsc fortran modules. Do not use the --disable-petsc-fortran-modules option])
 fi
 
 # now try a more realistic program, it's a stripped down
@@ -479,26 +477,19 @@ fi
 AC_LINK_IFELSE(
 [AC_LANG_SOURCE([
 program test_petsc
-#include "petscversion.h"
 #ifdef HAVE_PETSC_MODULES
   use petsc
 #endif
 implicit none
-#ifdef HAVE_PETSC_MODULES
-#include "finclude/petscdef.h"
-#else
-#include "finclude/petsc.h"
-#endif
+#include "petsc_legacy.h"
       double precision  norm
-      PetscInt  i,j,II,JJ,m,n,its
+      PetscInt  i,j,II0,m,n,its
+      PetscInt, dimension(1) ::  II, JJ
       PetscInt  Istart,Iend,ione
       PetscErrorCode ierr
-#if PETSC_VERSION_MINOR>=2
       PetscBool flg
-#else
-      PetscTruth  flg
-#endif
-      PetscScalar v,one,neg_one
+      PetscScalar, dimension(1) :: v
+      PetscScalar one,neg_one
       Vec         x,b,u
       Mat         A 
       KSP         ksp
@@ -509,8 +500,8 @@ implicit none
       one  = 1.0
       neg_one = -1.0
       ione    = 1
-      call PetscOptionsGetInt(PETSC_NULL_CHARACTER,'-m',m,flg,ierr)
-      call PetscOptionsGetInt(PETSC_NULL_CHARACTER,'-n',n,flg,ierr)
+      call PetscOptionsGetInt(PETSC_NULL_OPTIONS, PETSC_NULL_CHARACTER,'-m',m,flg,ierr)
+      call PetscOptionsGetInt(PETSC_NULL_OPTIONS, PETSC_NULL_CHARACTER,'-n',n,flg,ierr)
 
       call MatCreate(PETSC_COMM_WORLD,A,ierr)
       call MatSetSizes(A,PETSC_DECIDE,PETSC_DECIDE,m*n,m*n,ierr)
@@ -518,10 +509,11 @@ implicit none
 
       call MatGetOwnershipRange(A,Istart,Iend,ierr)
       
-      do 10, II=Istart,Iend-1
+      do 10, II0=Istart,Iend-1
+        II = II0
         v = -1.0
-        i = II/n
-        j = II - i*n  
+        i = II0/n
+        j = II0 - i*n  
         if (i.gt.0) then
           JJ = II - n
           call MatSetValues(A,ione,II,ione,JJ,v,INSERT_VALUES,ierr)
@@ -554,7 +546,7 @@ implicit none
       call MatMult(A,u,b,ierr)
 
       call KSPCreate(PETSC_COMM_WORLD,ksp,ierr)
-      call KSPSetOperators(ksp,A,A,DIFFERENT_NONZERO_PATTERN,ierr)
+      call KSPSetOperators(ksp,A,A,ierr)
       call KSPSetFromOptions(ksp,ierr)
 
       call KSPSolve(ksp,b,x,ierr)
@@ -579,29 +571,11 @@ AC_MSG_NOTICE([PETSc program succesfully compiled and linked.])
 cp conftest.F90 test_petsc.F90
 AC_MSG_FAILURE([Failed to compile and link PETSc program.])])
 
+FCFLAGS="$SAVE_FCFLAGS"
 AC_LANG_RESTORE
 
-# finally check we have the right petsc version
-AC_COMPUTE_INT(PETSC_VERSION_MAJOR, "PETSC_VERSION_MAJOR", [#include "petscversion.h"], 
-  [AC_MSG_ERROR([Unknown petsc major version])])
-AC_COMPUTE_INT(PETSC_VERSION_MINOR, "PETSC_VERSION_MINOR", [#include "petscversion.h"], 
-  [AC_MSG_ERROR([Unknown petsc minor version])])
-AC_MSG_NOTICE([Detected PETSc version "$PETSC_VERSION_MAJOR"."$PETSC_VERSION_MINOR"])
-# if major<3 or minor<1
-if test "0$PETSC_VERSION_MAJOR" -lt 3 -o "0$PETSC_VERSION_MINOR" -lt 1; then
-  AC_MSG_ERROR([Fluidity needs PETSc version >=3.1])
-fi
 
 AC_DEFINE(HAVE_PETSC,1,[Define if you have the PETSc library.])
-
-# define HAVE_PETSC33 for use in the Makefiles (including petsc's makefiles
-# would require having PETSC_DIR+PETSC_ARCH set correctly for every make)
-if test "0$PETSC_VERSION_MINOR" -ge 3; then
-  HAVE_PETSC33=yes
-else
-  HAVE_PETSC33=no
-fi
-AC_SUBST(HAVE_PETSC33)
 
 ])dnl ACX_PETSc
 
@@ -859,9 +833,8 @@ EOD`
 		else
 			# old way: use libpython from python_configdir
 			ac_python_libdir=`$PYTHON -c \
-			  "from distutils.sysconfig import get_python_lib as f; \
-			  import os; \
-			  print (os.path.join(f(plat_specific=1, standard_lib=1), 'config'));"`
+			  "from distutils.sysconfig import get_config_var; \
+			  print (get_config_var('LIBPL'));"`
 			PYTHON_LDFLAGS="-L$ac_python_libdir -lpython$ac_python_version"
 		fi
 
@@ -904,8 +877,8 @@ EOD`
 	AC_MSG_CHECKING(python extra linking flags)
 	if test -z "$PYTHON_EXTRA_LDFLAGS"; then
 		PYTHON_EXTRA_LDFLAGS=`$PYTHON -c "import distutils.sysconfig; \
-			conf = distutils.sysconfig.get_config_var; \
-			print (conf('LINKFORSHARED'))"`
+		conf = distutils.sysconfig.get_config_var; \
+		print ('' if conf('PYTHONFRAMEWORK') else conf('LINKFORSHARED'))"`
 	fi
 	AC_MSG_RESULT([$PYTHON_EXTRA_LDFLAGS])
 	AC_SUBST(PYTHON_EXTRA_LDFLAGS)
@@ -948,76 +921,6 @@ EOD`
 	# all done!
 	#
 ])
-
-AC_DEFUN([ACX_zoltan], [
-# Set variables...
-AC_ARG_WITH(
-	[zoltan],
-	[  --with-zoltan=prefix        Prefix where zoltan is installed],
-	[zoltan="$withval"],
-    [])
-
-tmpLIBS=$LIBS
-tmpCPPFLAGS=$CPPFLAGS
-if test $zoltan != no; then
-  if test $zoltan != yes; then
-    zoltan_LIBS_PATH="$zoltan/lib"
-    zoltan_INCLUDES_PATH="$zoltan/include"
-    # Ensure the comiler finds the library...
-    tmpLIBS="$tmpLIBS -L$zoltan_LIBS_PATH"
-    tmpCPPFLAGS="$tmpCPPFLAGS  -I/$zoltan_INCLUDES_PATH"
-  fi
-  tmpLIBS="$tmpLIBS -L/usr/lib -L/usr/local/lib/ -lzoltan -lparmetis -lmetis $ZOLTAN_DEPS"
-  tmpCPPFLAGS="$tmpCPPFLAGS -I/usr/include/ -I/usr/local/include/"
-fi
-LIBS=$tmpLIBS
-CPPFLAGS=$tmpCPPFLAGS
-# Check that the compiler uses the library we specified...
-if test -e $zoltan_LIBS_PATH/libzoltan.a; then
-  echo "note: using $zoltan_LIBS_PATH/libzoltan.a"
-fi 
-
-# Check that the compiler uses the include path we specified...
-if test -e $zoltan_INCLUDES_PATH/zoltan.mod; then
-	echo "note: using $zoltan_INCLUDES_PATH/zoltan.mod"
-fi 
-
-AC_LANG_SAVE
-AC_LANG_C
-AC_CHECK_LIB(
-	[zoltan],
-	[Zoltan_Initialize],
-	[AC_DEFINE(HAVE_ZOLTAN,1,[Define if you have zoltan library.])],
-	[AC_MSG_ERROR( [Could not link in the zoltan library... exiting] )] )
-
-# Small test for zoltan .mod files:
-AC_LANG(Fortran)
-ac_ext=F90
-# In fluidity's makefile we explicitly add CPPFLAGS, temporarily add it to
-# FCFLAGS here for this zoltan test:
-tmpFCFLAGS="$FCFLAGS"
-FCFLAGS="$FCFLAGS $CPPFLAGS"
-AC_LINK_IFELSE(
-[AC_LANG_SOURCE([
-program test_zoltan
- use zoltan
-end program test_zoltan
-])],
-[
-AC_MSG_NOTICE([Great success! Zoltan .mod files exist and are usable])
-],
-[
-cp conftest.F90 test_zoltan.F90
-AC_MSG_FAILURE([Failed to find zoltan.mod files])])
-# And now revert FCFLAGS
-FCFLAGS="$tmpFCFLAGS"
-AC_LANG_RESTORE
-
-ZOLTAN="yes"
-AC_SUBST(ZOLTAN)
-
-echo $LIBS
-])dnl ACX_zoltan
 
 AC_DEFUN([ACX_adjoint], [
 # Set variables...

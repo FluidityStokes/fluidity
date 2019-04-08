@@ -31,13 +31,16 @@ module read_gmsh
   ! This module reads GMSH files and results in a vector field of
   ! positions.
 
+  use fldebug
+  use global_parameters, only : OPTION_PATH_LEN
   use futils
+  use quadrature
   use elements
+  use spud
+  use parallel_tools
   use fields
   use state_module
-  use spud
   use gmsh_common
-  use global_parameters, only : OPTION_PATH_LEN
 
   implicit none
 
@@ -57,7 +60,7 @@ contains
   ! The main function for reading GMSH files
 
   function read_gmsh_simple( filename, quad_degree, &
-       quad_ngi, quad_family ) &
+       quad_ngi, quad_family, mdim ) &
        result (field)
     !!< Read a GMSH file into a coordinate field.
     !!< In parallel the filename must *not* include the process number.
@@ -69,6 +72,8 @@ contains
     integer, intent(in), optional, target :: quad_ngi
     !! What quadrature family to use
     integer, intent(in), optional :: quad_family
+    !! Dimension of mesh
+    integer, intent(in), optional :: mdim
     !! result: a coordinate field
     type(vector_field) :: field
 
@@ -83,7 +88,7 @@ contains
     integer :: loc, sloc
     integer :: numNodes, numElements, numFaces
     logical :: haveBounds, haveElementOwners, haveRegionIDs
-    integer :: dim, coordinate_dim
+    integer :: dim, coordinate_dim, gdim
     integer :: gmshFormat
     integer :: n, d, e, f, nodeID
 
@@ -169,10 +174,13 @@ contains
     
     end if
     
-    if(have_option("/geometry/spherical_earth/") ) then
-      ! on the sphere the input mesh may be 2d (extrusion), or 3d but
-      ! Coordinate is always 3-dimensional
-      coordinate_dim  = 3
+    if (present(mdim)) then
+       coordinate_dim = mdim
+    else if(have_option("/geometry/spherical_earth") ) then
+      ! on the n-sphere the input mesh may be 1/2d (extrusion), or 3d but
+      ! Coordinate is always geometry dimensional
+      call get_option('/geometry/dimension', gdim)
+      coordinate_dim  = gdim
     else
       coordinate_dim  = dim
     end if
@@ -327,7 +335,7 @@ contains
     ! Done with error checking... set format (ie. ascii or binary)
     gmshFormat = gmshFileType
 
-#ifdef __INTEL_COMPILER
+#ifdef IO_ADVANCE_BUG
 !   for intel the call to ascii_formatting causes the first read after it to have advance='no'
 !   therefore forcing it to jump to a newline here
     if(gmshFormat == binaryFormat) read(fd, *) charBuf
@@ -379,7 +387,7 @@ contains
 
     ! Skip newline character when in binary mode
     if( gmshFormat == binaryFormat ) then
-       read(fd), newlineChar
+       read(fd) newlineChar
        call ascii_formatting(fd, filename, "read")
     end if
 
@@ -388,7 +396,7 @@ contains
     if( trim(charBuf) .ne. "$EndNodes" ) then
        FLExit("Error: can't find '$EndNodes' in GMSH file '"//trim(filename)//"'")
     end if
-#ifdef __INTEL_COMPILER
+#ifdef IO_ADVANCE_BUG
 !   for intel the call to ascii_formatting causes the first read after it to have advance='no'
 !   therefore forcing it to jump to a newline here
     if(gmshFormat == binaryFormat) read(fd, *) charBuf
@@ -469,7 +477,7 @@ contains
 
     ! Skip newline character when in binary mode
     if( gmshFormat == binaryFormat ) then
-      read(fd), newlineChar
+      read(fd) newlineChar
       call ascii_formatting(fd, filename, "read")
     end if
 
@@ -479,7 +487,7 @@ contains
        FLExit("Error: cannot find '$EndNodeData' in GMSH mesh file")
     end if
 
-#ifdef __INTEL_COMPILER
+#ifdef IO_ADVANCE_BUG
 !   for intel the call to ascii_formatting causes the first read after it to have advance='no'
 !   therefore forcing it to jump to a newline here
     if(gmshFormat == binaryFormat) read(fd, *) charBuf
@@ -504,7 +512,7 @@ contains
     integer :: numAllElements
     character(len=longStringLen) :: charBuf
     character :: newlineChar
-    integer :: numEdges, numTriangles, numQuads, numTets, numHexes
+    integer :: numEdges, numTriangles, numQuads, numTets, numHexes, numVertices
     integer :: numFaces, faceType, numElements, elementType
     integer :: e, i, numLocNodes, tmp1, tmp2, tmp3
     integer :: groupType, groupElems, groupTags
@@ -594,7 +602,7 @@ contains
        FLExit("Error: cannot find '$EndElements' in GMSH mesh file")
     end if
 
-#ifdef __INTEL_COMPILER
+#ifdef IO_ADVANCE_BUG
 !   for intel the call to ascii_formatting causes the first read after it to have advance='no'
 !   therefore forcing it to jump to a newline here
     if(gmshFormat == binaryFormat) read(fd, *) charBuf
@@ -606,6 +614,7 @@ contains
     numTets = 0
     numQuads = 0
     numHexes = 0
+    numVertices = 0
 
 
     ! Now we've got all our elements in memory, do some housekeeping.
@@ -626,7 +635,7 @@ contains
        case (GMSH_HEX)
           numHexes = numHexes+1
        case (GMSH_NODE)
-          ! Do nothing
+          numVertices = numVertices+1
        case default
           ewrite(0,*) "element id,type: ", allElements(e)%elementID, allElements(e)%type
           FLExit("Unsupported element type in gmsh .msh file")
@@ -660,19 +669,26 @@ contains
          FLExit("Cannot combine hexes or quads with triangles in one gmsh .msh file")
        end if
 
-    elseif (numHexes .gt. 0) then
+    elseif (numHexes > 0) then
        numElements = numHexes
        elementType = GMSH_HEX
        numFaces = numQuads
        faceType = GMSH_QUAD
        dim = 3
 
-    elseif (numQuads .gt. 0) then
+    elseif (numQuads > 0) then
        numElements = numQuads
        elementType = GMSH_QUAD
        numFaces = numEdges
        faceType = GMSH_LINE
        dim = 2
+
+    elseif (numEdges > 0) then
+       numElements = numEdges
+       elementType = GMSH_LINE
+       numFaces = numVertices
+       faceType = GMSH_NODE
+       dim = 1
 
     else
        FLExit("Unsupported mixture of face/element types")

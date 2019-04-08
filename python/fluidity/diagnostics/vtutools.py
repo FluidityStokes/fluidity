@@ -509,7 +509,10 @@ def VtuFieldGradient(inputVtu, fieldName):
   tempVtu.ugrid.GetPointData().SetActiveScalars(fieldName)
     
   gradientFilter = vtk.vtkCellDerivatives()
-  gradientFilter.SetInput(tempVtu.ugrid)
+  if vtk.vtkVersion.GetVTKMajorVersion() <= 5:
+    gradientFilter.SetInput(tempVtu.ugrid)
+  else:
+    gradientFilter.SetInputData(tempVtu.ugrid)
   gradientFilter.Update()
   
   projectionFilter = vtk.vtkCellDataToPointData()
@@ -555,7 +558,10 @@ def ImplicitFunctionVtuCut(inputVtu, implicitFunction):
   # The cutter
   cutter = vtk.vtkCutter()
   cutter.SetCutFunction(implicitFunction)
-  cutter.SetInput(inputVtu.ugrid)
+  if vtk.vtkVersion.GetVTKMajorVersion() <= 5:
+    cutter.SetInput(inputVtu.ugrid)
+  else:
+    cutter.SetInputData(inputVtu.ugrid)
   # Cut
   cutter.Update()
   cutUPoly = cutter.GetOutput()
@@ -722,7 +728,10 @@ def IsosurfaceVtuCut(inputVtu, scalarField, value):
   inputVtu.ugrid.GetPointData().SetActiveScalars(scalarField)
   
   filter = vtk.vtkContourFilter()
-  filter.SetInput(inputVtu.ugrid)
+  if vtk.vtkVersion.GetVTKMajorVersion() <= 5:
+    filter.SetInput(inputVtu.ugrid)
+  else:
+    filter.SetInputData(inputVtu.ugrid)
   filter.SetNumberOfContours(1)
   filter.SetValue(0, value)
   filter.Update()
@@ -740,7 +749,10 @@ def ExtractVtuGeometry(inputVtu):
   """
   
   filter = vtk.vtkGeometryFilter()
-  filter.SetInput(inputVtu.ugrid)
+  if vtk.vtkVersion.GetVTKMajorVersion() <= 5:
+    filter.SetInput(inputVtu.ugrid)
+  else:
+    filter.SetInputData(inputVtu.ugrid)
   filter.Update()
   surfacePoly = filter.GetOutput()
   
@@ -816,8 +828,12 @@ def RemappedVtu(inputVtu, targetVtu):
   polydata = vtk.vtkPolyData()
   polydata.SetPoints(points)
   probe = vtk.vtkProbeFilter()
-  probe.SetInput(polydata)
-  probe.SetSource(inputVtu.ugrid)
+  if vtk.vtkVersion.GetVTKMajorVersion() <= 5:
+    probe.SetInput(polydata)
+    probe.SetSource(inputVtu.ugrid)
+  else:
+    probe.SetInputData(polydata)
+    probe.SetSourceData(inputVtu.ugrid)
   probe.Update()
 
   # Generate a list invalidNodes, containing a map from invalid nodes in the
@@ -1074,7 +1090,7 @@ def VtuBoundingBox(vtu):
   """
   
   vtuBounds = vtu.ugrid.GetBounds()
-  lbound, ubound = [vtuBounds[2 * i] for i in range(len(vtuBounds) / 2)], [vtuBounds[2 * i + 1] for i in range(len(vtuBounds) / 2)]
+  lbound, ubound = [vtuBounds[2 * i] for i in range(int(len(vtuBounds) / 2))], [vtuBounds[2 * i + 1] for i in range(int(len(vtuBounds) / 2))]
   if len(lbound) > 0 and lbound[0] > ubound[0]:
     if optimise.DebuggingEnabled():
       for i in range(1, len(lbound)):
