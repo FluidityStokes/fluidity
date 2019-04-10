@@ -101,9 +101,6 @@ endif
 ifneq (@HAVE_EXODUSII@,yes)
 	EXCLUDE_TAGS := $(EXCLUDE_TAGS) -e exodusii
 endif
-ifneq (@HAVE_PETSC33@,yes)
-	EXCLUDE_TAGS := $(EXCLUDE_TAGS) -e petsc33
-endif
 
 .SUFFIXES: .f90 .F90 .c .cpp .o .a
 
@@ -146,7 +143,7 @@ lib/libvtkfortran.a:
 ifeq (@SPUD_ONLY@,yes)
 	echo '    MAKE libspud'; $(MAKE) -C libspud && $(MAKE) -C libspud install-libspud
 else
-	echo '    MAKE libspud'; $(MAKE) -C libspud &&  $(MAKE) -C libspud install-libspud && cd libspud/python && python setup.py build && cd ../.. && cp libspud/python/build/lib*/libspud.so python/
+	echo '    MAKE libspud'; $(MAKE) -C libspud &&  $(MAKE) -C libspud install-libspud && cd libspud/python && python setup.py build && cd ../.. && cp libspud/python/build/lib*/libspud*.so python/
 endif
 
 libfemtools: sub_system
