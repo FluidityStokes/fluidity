@@ -9,9 +9,7 @@
 #include <string.h>
 #include <sstream>
 
-#ifdef HAVE_MPI
-#include <mpi.h>
-#endif
+#include "flmpi.h"
 
 #ifdef HAVE_PETSC
 #include <petsc.h>
@@ -89,8 +87,10 @@ void usage(int argc, char **argv){
   if (flg) {
     int rank = 0;
 #ifdef HAVE_MPI
-    if(MPI::Is_initialized()){
-      rank = MPI::COMM_WORLD.Get_rank();
+    int init_flag;
+    MPI_Initialized(&init_flag);
+    if(init_flag){
+      MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     }
 #endif
     ostringstream buffer;
@@ -113,10 +113,14 @@ int main(int argc, char **argv){
 
 #ifdef HAVE_MPI
   // This must be called before we process any arguments
-  MPI::Init(argc,argv);
+  MPI_Init(&argc,&argv);
 
   // Undo some MPI init shenanigans
-  chdir(getenv("PWD"));
+  int cderr = chdir(getenv("PWD"));
+  if (cderr == -1) {
+        cerr << "Unable to switch to directory " << getenv("PWD");
+        abort();
+  }
 #endif
 
 #ifdef HAVE_PETSC
@@ -141,7 +145,7 @@ int main(int argc, char **argv){
 
   PetscFinalize();
 #ifdef HAVE_MPI
-  MPI::Finalize();
+  MPI_Finalize();
 #endif
  
   return 0;
