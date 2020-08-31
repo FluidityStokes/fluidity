@@ -22,7 +22,7 @@
             </bottom_depth>
             <sizing_function>
               <list>
-                <real_value shape="1" rank="1">0.5</real_value>
+                <real_value rank="1" shape="1">0.5</real_value>
               </list>
             </sizing_function>
             <top_surface_id>
@@ -64,9 +64,7 @@
         <integer_value rank="0">5</integer_value>
       </degree>
     </quadrature>
-    <spherical_earth>
-      <linear_mapping/>
-    </spherical_earth>
+    <spherical_earth/>
   </geometry>
   <io>
     <dump_format>
@@ -93,12 +91,12 @@
     </finish_time>
   </timestepping>
   <material_phase name="Mantle">
-    <vector_field name="Velocity" rank="1">
+    <vector_field rank="1" name="Velocity">
       <prescribed>
         <mesh name="VelocityMesh"/>
         <value name="WholeMesh">
           <python>
-            <string_value lines="20" type="code" language="python">def val(X,t):
+            <string_value type="code" language="python" lines="20">def val(X,t):
   import get_surface_boundary_info
   get_surface_boundary_info.gplates_interpolator.set_time(t)
   velocity = get_surface_boundary_info.gplates_interpolator.get_velocities(X)
@@ -112,14 +110,17 @@
         <detectors>
           <exclude_from_detectors/>
         </detectors>
+        <particles>
+          <exclude_from_particles/>
+        </particles>
       </prescribed>
     </vector_field>
-    <scalar_field name="Plate_ID" rank="0">
+    <scalar_field rank="0" name="Plate_ID">
       <prescribed>
         <mesh name="VelocityMesh"/>
         <value name="WholeMesh">
           <python>
-            <string_value lines="20" type="code" language="python">def val(X,t):
+            <string_value type="code" language="python" lines="20">def val(X,t):
   import get_surface_boundary_info
   get_surface_boundary_info.gplates_interpolator.set_time(t)
   plate_ID = get_surface_boundary_info.gplates_interpolator.get_plate_ID(X)
@@ -131,12 +132,15 @@
         <detectors>
           <exclude_from_detectors/>
         </detectors>
+        <particles>
+          <exclude_from_particles/>
+        </particles>
       </prescribed>
     </scalar_field>
-    <vector_field name="Surface_Velocity" rank="1">
+    <vector_field rank="1" name="Surface_Velocity">
       <diagnostic>
         <algorithm name="vector_python_diagnostic" material_phase_support="single">
-          <string_value lines="20" type="code" language="python">import numpy, math
+          <string_value type="code" language="python" lines="20">import numpy, math
 
 # Define outer radius of domain. Aside from nodes at this radius, nodal velocities will be set to zero:
 outer_radius = 2.22
@@ -176,12 +180,15 @@ for node in range(field.node_count):
         <detectors>
           <include_in_detectors/>
         </detectors>
+        <particles>
+          <exclude_from_particles/>
+        </particles>
         <steady_state>
           <include_in_steady_state/>
         </steady_state>
       </diagnostic>
     </vector_field>
-    <vector_field name="DiagnosticCoordinate" rank="1">
+    <vector_field rank="1" name="DiagnosticCoordinate">
       <diagnostic>
         <algorithm name="Internal" material_phase_support="multiple"/>
         <mesh name="VelocityMesh"/>
@@ -195,6 +202,9 @@ for node in range(field.node_count):
         <detectors>
           <include_in_detectors/>
         </detectors>
+        <particles>
+          <exclude_from_particles/>
+        </particles>
         <steady_state>
           <include_in_steady_state/>
         </steady_state>

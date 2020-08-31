@@ -35,7 +35,7 @@ class Gplates_Interpolator(object):
       return
     self.current_time = t * time_dim_factor
     self.stage_time   = self.current_time % gplates_stage_time
-    print 'GPlates: Stage time (s):',self.stage_time,'of:',gplates_stage_time
+    print('GPlates: Stage time (s):',self.stage_time,'of:',gplates_stage_time,flush=True)
 
     # Opens the GPlates data file appropriate for the current simulation time (stage):
     total_stage_time = gplates_stage_time * (1. / plate_scaling_factor)
@@ -47,11 +47,11 @@ class Gplates_Interpolator(object):
 
     # If appropriate, read GPlates file:
     if(self.stage != 200):
-      print "GPlates *** Plate Stage Has Changed *** "
-    print 'GPlates: Current dimensional time (s):',self.current_time
-    print "GPlates *** Reading from file: velocity_%s.00Ma.nc *** " % str(self.stage) 
+      print("GPlates *** Plate Stage Has Changed *** ",flush=True)
+    print('GPlates: Current dimensional time (s):',self.current_time,flush=True)
+    print("GPlates *** Reading from file: velocity_%s.00Ma.nc *** " % str(self.stage),flush=True)
 
-    nc = netcdf_file('velocity_%s.00Ma.nc' % str(self.stage), 'r')
+    nc = netcdf_file('gplates_data/velocity_%s.00Ma.nc' % str(self.stage), 'r')
 
     # As lats and lons do not change between files, only store these once:
     if self.lats is None:

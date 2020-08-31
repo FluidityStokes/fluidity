@@ -63,11 +63,11 @@ RMS_Surface_Velocity_0Ma = stat("gplates_test.stat")["Mantle"]["Surface_Velocity
 </test>
 
 <test name="Correct RMS surface velocity at 2Ma (4.29777146 cm/yr)" language="python">
-  assert(abs(RMS_Surface_Velocity_2Ma - 4.29777146) &lt; 1.0e-6)
+  assert(abs(RMS_Surface_Velocity_2Ma - 4.31507428) &lt; 1.0e-6)
 </test>
 
 <test name="Correct RMS surface velocity at 0Ma (4.28925907 cm/yr)" language="python">
-  assert(abs(RMS_Surface_Velocity_0Ma - 4.28925907) &lt; 1.0e-6)
+  assert(abs(RMS_Surface_Velocity_0Ma - 4.30494881) &lt; 1.0e-6)
 </test>
 
 <test name="RMS surface velocity at 2Ma > RMS surface velocity at 0Ma" language="python">
