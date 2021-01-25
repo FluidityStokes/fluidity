@@ -198,36 +198,6 @@ start =
                      (
                         element location {
                            real_dim_vector
-                     }|
-                        ## File containing the detectors positions in binary form
-                        element from_checkpoint_file {
-                           attribute file_name { xsd:string },
-                           ## The format of the input file containing field data.
-                           element format {
-                             element string_value {
-                                 "binary"
-                             }
-                           }
-                        }
-                     )
-                  }|
-                  ## A single lagrangian detector
-                  element lagrangian_detector {
-                     attribute name { xsd:string },
-                     (
-                     ## This is the initial location of a detector that moves with the fluid velocity.
-                        element location {
-                           real_dim_vector
-                     }|
-                        ## File containing the detectors positions in binary form
-                        element from_checkpoint_file {
-                           attribute file_name { xsd:string },
-                           ## The format of the input file containing field data.
-                           element format {
-                             element string_value {
-                                 "binary"
-                             }
-                           }
                         }
                      )
                   }|
@@ -241,10 +211,6 @@ start =
                      (
                         ## Create fixed detectors.
                         element static {
-                           empty
-                        }|
-                        ## Create detectors which move with the fluid velocity.
-                        element lagrangian {
                            empty
                         }
                      ),
@@ -272,39 +238,14 @@ start =
                                  "binary"
                              }
                            }
-                        }|
-                        ## File containing the detectors positions in binary form
-                        element from_checkpoint_file {
-                           attribute file_name { xsd:string },
-                           ## The format of the input file containing field data.
-                           element format {
-                              element string_value {
-                                 "binary"
-                              }
-                           }
                         }
                      )
                   }
                )*,
-               (
-                  ## By default Fluidity will fail if a detector has left the domain.
-                  element fail_outside_domain {
-                     empty
-                  }|
-                  ## Enable to write NaN values to detector output if a detector has left the domain.
-                  element write_nan_outside_domain {
-                     empty
-                  }
-               ),
-               ## Enable to write detector output in ascii format. This output format will not work in parallel, if not enabled format defaults to binary.
-               element ascii_output {
-                  comment
-               }?,
                ## Enable to let detectors move with the domain if mesh_movement is enabled.
                element move_with_mesh {
                   empty
-               }?,
-               lagrangian_timestepping?
+               }?
             }?, 
             ## Options to create even more output in the logs:
             ##
@@ -325,6 +266,257 @@ start =
                }?
             }?
          },
+         ## Options for particles, Lagrangian particles which move with a specified velocity field.
+         ## In addition, particles can carry attributes, being properties of the particles. These attributes
+         ## can be constant, or based on a python expression that depends on other attribute values, at the end
+         ## of the previous timestep, or field values interpolated at the particle location. Attributes values
+         ## can be interpolated back onto the (Eulerian) mesh through the diagnostic algorithm from_particles.
+         ## Options can also be set to spawn and delete particles when the number of particles within a control
+         ## volume either exceeds or falls below a specified threshold value.
+         element particles {
+            (
+               ## Particle groups containing multiple particle arrays or subgroups. The particle group specifies
+               ## particle IO options, as well as common attributes carried per particle subgroup for diagnostic
+               ## calculations and spawning and deleting options.
+               element particle_group {
+                  attribute name { xsd:string },
+                  element particle_io {
+                     (
+                          ## Period between dumps in time units.
+                          element dump_period {
+                              (
+                                  element constant {
+                                      real
+                                  }|
+                                  ## Python function prescribing real input. Functions should be of the form:
+                                  ##
+                                  ##  def val(t):
+                                  ##     # Function code
+                                  ##     return # Return value
+                                  ##
+                                  element python {
+                                      python_code
+                                  }
+                              )
+                          }|
+                          ## Dump period, in timesteps.
+                          element dump_period_in_timesteps {
+                              (
+                                  element constant {
+                                      integer
+                                  }|
+                                  ## Python function prescribing integer input. Functions should be of the form:
+                                  ##
+                                  ##  def val(t):
+                                  ##     # Function code
+                                  ##     return # Return value
+                                  ##
+                                  element python {
+                                      python_code
+                                  }
+                              )
+                          }
+                      )?,
+                      # every CPUDUM seconds write results to disc.
+                      ## This is usually disabled.
+                      element cpu_dump_period {
+                          real
+                      }?,
+                      ## The period between dumps in walltime seconds. This is usually disabled.
+                      element wall_time_dump_period {
+                          real
+                      }?
+                  }?,
+                  ## Options for spawning and deleting particles based on the minimum and maximum limits of
+                  ## particles per control volume. Also contains options for the location of spawned particles,
+                  ## the calculation of their attribute values, and spawning caps per particle subgroup.
+                  ## Defined per particle_group.
+                  element particle_spawning {
+                     ## Set the mesh which will be used for particle spawning. Currently only works for a P1CV mesh!
+                     mesh_choice,
+                     ## Minimum threshold number of particles per control volume.
+                     element min_cv_threshhold {
+                        integer
+                     },
+                     ## Maximum threshold number of particles per control volume (recommended to be at least
+                     ## four times the minimum threshold).
+                     element max_cv_threshhold {
+                       integer
+                     },
+                     ## Options for setting where particles will be spawned within the control volume.
+                    element spawn_location {
+                        ## Particles will spawn within a local_coordinate radius of the parent particle
+                        ## (ensuring they remain within the current element and control volume).
+                        ## Value is in local coordinates (recommended value 0.3).
+                        element radius {
+                           real
+                        }|
+                        ## Particles will spawn randomly within the control volume, prioritizing
+                        ## elements with the least number of particles.
+                        element random {
+                           empty
+                        }
+                     },
+                     ## Options for setting particle attributes when spawned.
+                     element spawn_attributes {
+                        ## Particles will spawn with attributes copied from the parent particle.
+                        ## Used when attributes are identical across the particle_subgroup.
+                        element copy_parent_attributes {
+                           empty
+                        }|
+                        ## Particles will spawn with attributes calculated from the average of
+                        ## particle_attributes within the control volume.
+                        element calculate_average {
+                           empty
+                        }
+                     },
+                     ## Option to set spawning caps for specific particle subgroups if one is dominant in a control volume.
+                     ## Allows the user to define the minimum percentage a particle subgroup must make up in a control volume
+                     ## in order for spawning of that subgroup to occur (recommended value 99%).
+                     ## Only ONE subgroup can be spawned per control volume when this option is set.
+                     element subgroup_spawning_caps {
+                        ## Percentage of single subgroup required to be present for only that subgroup to spawn within
+                        ## a specific control volume.
+                        element percentage {
+                           real
+                        }
+                     }?
+                  }?,
+                  ## Particle subgroup arrays specified within a particle group. Particle attribute values are specified per
+                  ## subgroup, although all subgroups should be set to carry the same attribute names if it is desired to calculate
+                  ## a diagnostic field from_particles. Subgroups can have different initial positions specified via a python
+                  ## function or from a file.
+                  element particle_subgroup {
+                     attribute name { xsd:string },
+                     (
+                        ##Initial position of particles
+                        element initial_position {
+                           ## Python function prescribing dimensional vector input. Functions should be of the form:
+                           ##
+                           ##  def val(t):
+                           ##     # Function code
+                           ##     return # Return value
+                           ##
+                           ## The return value must have length number_of_particles.
+                           ##
+                           ## *** IMPORTANT NOTE ***
+                           ##
+                           ## The t argument is not used here. To spawn with t dependence use initialise_during_simulation option below.
+                           element python {
+                              python_code
+                           }|
+                           ## File containing the particle positions in binary form
+                           element from_file {
+                              attribute file_name { xsd:string },
+                              element number_of_particles {
+                                 integer
+                              }
+                           }
+                        },
+                        element initialise_during_simulation {
+                           ## Python function prescribing dimensional vector input. Functions should be of the form:
+                           ##
+                           ##  def val(t):
+                           ##     # Function code
+                           ##     return # Return value
+                           ##
+                           ## The return value must have length number_of_particles.
+                           ##
+                           ## *** IMPORTANT NOTE ***
+                           ##
+                           ## This function will only be called after simulation start. To initialise starting positions use the initial_position option above.
+                           element python {
+                              python_code
+                           }
+                        }?
+                     ),
+                     (
+                        ##Define particle attributes.
+                        element attributes {
+                           (
+                              ##Scalar particle attribute.
+                              element scalar_attribute {
+                                 attribute name { xsd:string },
+                                 ## Do not output this attribute to file
+                                 element exclude_from_output {
+                                    empty
+                                  }?,
+                                 generic_scalar_particle_attribute_choice
+                              }|
+                              ##Scalar particle attribute array.
+                              element scalar_attribute_array {
+                                 attribute name { xsd:string },
+                                 element dimension {
+                                    integer
+                                 },
+                                 ## Do not output this attribute to file
+                                 element exclude_from_output {
+                                    empty
+                                  }?,
+                                 generic_scalar_particle_attribute_array
+                              }|
+                              ##Vector particle attribute.
+                              element vector_attribute {
+                                 attribute name { xsd:string },
+                                 ## Do not output this attribute to file
+                                 element exclude_from_output {
+                                    empty
+                                 }?,
+                                 generic_vector_particle_attribute_choice
+                              }|
+                              ##Vector particle attribute array.
+                              element vector_attribute_array {
+                                 attribute name { xsd:string },
+                                 element dimension {
+                                    integer
+                                 },
+                                 ## Do not output this attribute to file
+                                 element exclude_from_output {
+                                    empty
+                                 }?,
+                                 generic_vector_particle_attribute_array
+                              }|
+                              ##Tensor particle attribute.
+                              element tensor_attribute {
+                                 attribute name { xsd:string },
+                                 ## Do not output this attribute to file
+                                 element exclude_from_output {
+                                    empty
+                                 }?,
+                                 generic_tensor_particle_attribute_choice
+                              }|
+                              ##Tensor particle attribute array.
+                              element tensor_attribute_array {
+                                 attribute name { xsd:string },
+                                 element dimension {
+                                    integer
+                                 },
+                                 ## Do not output this attribute to file
+                                 element exclude_from_output {
+                                    empty
+                                 }?,
+                                 generic_tensor_particle_attribute_array
+                              }
+                           )+
+                        }?
+                     )
+                  }+
+               }+
+            )*,
+            ## Options for particles being advected outside the computational domain.
+            element moving_outside_domain {
+               ## By default Fluidity will delete particles if they move outside the domain.
+               element delete_outside_domain {
+                  empty
+               }
+            },
+            ## Enable to let particles move with the domain if mesh_movement is enabled.
+            element move_with_mesh {
+               empty
+            }?,
+            ## Lagrangian timestepping options for particle advection.
+            lagrangian_timestepping
+         }?,
          ## Options dealing with time discretisation
          element timestepping {
             ## Current simulation time. At the start of the simulation this
@@ -1480,7 +1672,7 @@ start =
             element multiphase_properties {
                comment,
                (element particle_diameter { real }|
-       	       element particle_diameter_use_scalar_field { anystring })?,
+               element particle_diameter_use_scalar_field { anystring })?,
                element apply_diameter_cap {
                   # default value 1.0E-12
                   element lower_cap { real }
@@ -2432,6 +2624,7 @@ prognostic_density_field =
       prognostic_scalar_stat_options,
       scalar_convergence_options,
       prognostic_detector_options,
+      prognostic_particle_options,
       scalar_steady_state_options,
       adaptivity_options_prognostic_scalar_field,
       interpolation_algorithm_scalar,
@@ -2653,6 +2846,7 @@ diagnostic_scalar_field =
       diagnostic_scalar_stat_options,
       scalar_convergence_options,
       diagnostic_detector_options,
+      diagnostic_particle_options,
       scalar_steady_state_options,
       adaptivity_options_scalar_field,
       recalculation_options?,
@@ -2664,7 +2858,8 @@ diagnostic_scalar_field_no_adapt =
    (
       diagnostic_output_options,
       diagnostic_scalar_stat_options,
-      diagnostic_detector_options
+      diagnostic_detector_options,
+      diagnostic_particle_options
    )
 
 # Default child of diagnostic scalar field
@@ -2690,6 +2885,7 @@ diagnostic_vector_field =
       diagnostic_vector_stat_options,
       vector_convergence_options,      
       diagnostic_detector_options,
+      diagnostic_particle_options,
       vector_steady_state_options,      
       adaptivity_options_vector_field,
       recalculation_options?,
@@ -2720,6 +2916,7 @@ diagnostic_vector_field_bed_shear_stress =
       diagnostic_output_options,
       diagnostic_vector_stat_options,
       diagnostic_detector_options,
+      diagnostic_particle_options,
       adaptivity_options_vector_field
    )
 
@@ -2731,6 +2928,7 @@ diagnostic_tensor_field =
    (
       diagnostic_output_options,
       diagnostic_tensor_stat_options,
+      diagnostic_particle_options,
       adaptivity_options_tensor_field,
       interpolation_algorithm_vector?
    )
@@ -2806,6 +3004,7 @@ diagnostic_cv_gradient_vector_field =
       diagnostic_vector_stat_options,
       vector_convergence_options,
       diagnostic_detector_options,
+      diagnostic_particle_options,
       vector_steady_state_options,
       adaptivity_options_vector_field,
       recalculation_options?
@@ -2821,6 +3020,7 @@ diagnostic_gradient_vector_field =
       diagnostic_vector_stat_options,
       vector_convergence_options,
       diagnostic_detector_options,
+      diagnostic_particle_options,
       vector_steady_state_options,
       adaptivity_options_vector_field,
       recalculation_options?
@@ -2833,6 +3033,7 @@ diagnostic_cv_divergence_scalar_field =
       diagnostic_scalar_stat_options,
       scalar_convergence_options,
       diagnostic_detector_options,
+      diagnostic_particle_options,
       scalar_steady_state_options,
       adaptivity_options_scalar_field,
       recalculation_options?
@@ -2848,6 +3049,7 @@ diagnostic_fe_divergence_scalar_field =
       diagnostic_scalar_stat_options,
       scalar_convergence_options,
       diagnostic_detector_options,
+      diagnostic_particle_options,
       scalar_steady_state_options,
       adaptivity_options_scalar_field,
       recalculation_options?
@@ -2979,6 +3181,14 @@ velocity_boundary_conditions =
                  ##
                  ## Requires a prognostic FreeSurface field.
                  element explicit {
+                   empty
+                 }?,
+                 ## Force the normals used in the free surface boundary condition to be purely in the
+                 ## radial direction (up or down), instead of using the facet normals. This option is
+                 ## recommended in idealised cylindrical and spherical domains (only) when a surface-aligned
+                 ## strong Dirichlet boundary condition is used to prescribe the tangential velocities. In
+                 ## this case we need the normals to be orthogonal to the prescribed tangential direction.
+                 element radial_normals {
                    empty
                  }?
               }?,
@@ -3319,6 +3529,7 @@ prognostic_scalar_stat_no_old_or_nonlinear_options.stat =
       exclude_stat?,
       cv_stats?,
       surface_integral_stats_scalar*,
+      surface_l2norm_stats*,
       mixing_stats*
    )   
    
@@ -3417,7 +3628,8 @@ prognostic_velocity_stat_options.stat &=
 prognostic_vector_stat_no_old_or_nonlinear_options.stat =
    (
       vector_field_stat_options_enabled_default,
-      surface_integral_stats_vector*
+      surface_integral_stats_vector*,
+      surface_l2norm_stats*
    )
 
 # Combining of stat elements for tensor fields
@@ -3586,10 +3798,368 @@ prognostic_detector_options = detector_options_enabled_default
 diagnostic_detector_options = detector_options_enabled_default
 prescribed_detector_options = detector_options_disabled_default
 
+# Specify whether or not values for this field are interpolated to particle locations..
+particle_options_disabled_default = 
+   (
+      ## Specify what is added to particles
+      element particles {
+         (
+            ## Field value is not interpolated to particle locations.
+            element exclude_from_particles {
+               comment
+            }|
+            ## Field value is interpolated to each particle location.
+            element include_in_particles {
+               ## Store values of field at previous timestep/non-linear iteration, for use when updating particle attributes.
+               element store_old_field {
+                  comment
+               }?
+            }
+         )
+      }
+   )
+
+# Particle defaults off for prognostic, diagnostic and prescribed fields
+prognostic_particle_options = particle_options_disabled_default
+diagnostic_particle_options = particle_options_disabled_default
+prescribed_particle_options = particle_options_disabled_default
+
 generic_aliased_field =
    (
       attribute material_phase_name { xsd:string },
       attribute field_name { xsd:string }
+   )
+
+generic_scalar_particle_attribute_choice =
+   (
+      ## Constant value
+      element constant {
+         real
+      }|
+      ## Python function prescribing real input. Functions should be of the form:
+      ##
+      ##  def val(X, t, dt):
+      ##     # Function code
+      ##     return # Return value
+      ##
+      ## where X is a tuple of length geometry dimension.
+      element python {
+         python_code
+      }|
+      ## Python function prescribing real input. Functions should be of the form:
+      ##
+      ##  def val (X, t, dt, fields):
+      ##     # Function code
+      ##     return # Return value
+      ##
+      ##  where X is a tuple of length geometry dimension.
+      ##
+      ##  E.g. if Temperature field and x position are required
+      ##  def val (X, t, dt, fields):
+      ##    x = X[0]
+      ##    y = x + fields["Temperature"]
+      ##    return y
+      ##
+      ## Note: fields must contain the option particles/include_in_particles
+      ## to be accessible.
+      ## Old field or attribute values can be accessed with the prefix old%
+      ## if the store_old_attribute or store_old_field options are enabled.
+      element python_fields {
+         python_code,
+         ## Store attribute values from previous timestep on particles.
+         element store_old_attribute {
+            comment
+         }?
+      }|
+      ## File containing the particle attributes in binary form
+      element from_checkpoint_file {
+         attribute file_name { xsd:string }
+      }
+   )
+
+generic_vector_particle_attribute_choice =
+   (
+      ## Constant value
+      element constant {
+         real_dim_vector
+      }|
+      ## Python function prescribing real input. Functions should be of the form:
+      ##
+      ##  def val(X, t, dt):
+      ##     # Function code
+      ##     return # Return value
+      ##
+      ## where X and the return value are tuples of length geometry dimension.
+      element python {
+         python_code
+      }|
+      ## Python function prescribing real input. Functions should be of the form:
+      ##
+      ##  def val (X, t, dt, fields):
+      ##     # Function code
+      ##     return # Return value
+      ##
+      ##  where X and the return value are tuples of length geometry dimension.
+      ##
+      ##  E.g. if Velocity field and positions vector are required
+      ##  def val (X, t, dt, fields):
+      ##    from numpy import zeros
+      ##    y = zeros(2,float)
+      ##    for i in range(0,2):
+      ##       y[i] = X[i] + fields["Velocity"][i]
+      ##    return y
+      ##
+      ## Note: fields must contain the option particles/include_in_particles
+      ## to be accessible.
+      ## Old field or attribute values can be accessed with the prefix old%
+      ## if the store_old_attribute or store_old_field options are enabled.
+      element python_fields {
+         python_code,
+         ## Store attribute values from previous timestep on particles.
+         element store_old_attribute {
+            comment
+         }?
+      }|
+      ## File containing the particle attributes in binary form
+      element from_checkpoint_file {
+         attribute file_name { xsd:string },
+         ## The format of the input file containing field data.
+         element format {
+            element string_value {
+               "binary"
+            }
+         }
+      }
+   )
+
+generic_tensor_particle_attribute_choice =
+   (
+      ## Constant value
+      element constant {
+         real_dim_tensor
+      }|
+      ## Python function prescribing real input. Functions should be of the form:
+      ##
+      ##  def val(X, t, dt):
+      ##     # Function code
+      ##     return # Return value
+      ##
+      ## where X is a tuple of length geometry dimension and the return value
+      ## is a (dim x dim) numpy array or list of lists.
+      element python {
+         python_code
+      }|
+      ## Python function prescribing real input. Functions should be of the form:
+      ##
+      ##  def val (X, t, dt, fields):
+      ##     # Function code
+      ##     return # Return value
+      ##
+      ##  where X is a tuple of length geometry dimension and the return value
+      ##  is a (dim x dim) numpy array or list of lists.
+      ##
+      ##  E.g. to calculate a tensor based off position and velocity:
+      ##  def val (X, t, dt, fields):
+      ##    from numpy import zeros
+      ##    dum = zeros((2,2),float)
+      ##    for i in range(0,2):
+      ##       for j in range(0,2):
+      ##          dum[i,j] = X[i]+fields["Velocity"][j]
+      ##    return dum
+      ##
+      ## Note: fields must contain the option particles/include_in_particles
+      ## to be accessible.
+      ## Old field or attribute values can be accessed with the prefix old%
+      ## if the store_old_attribute or store_old_field options are enabled.
+      element python_fields {
+         python_code,
+         ## Store attribute values from previous timestep on particles.
+         element store_old_attribute {
+            comment
+         }?
+      }|
+      ## File containing the particle attributes in binary form
+      element from_checkpoint_file {
+         attribute file_name { xsd:string },
+         ## The format of the input file containing field data.
+         element format {
+            element string_value {
+               "binary"
+            }
+         }
+      }
+   )
+
+generic_scalar_particle_attribute_array =
+   (
+      ## Constant value
+      element constant {
+         real
+      }|
+      ## Python function prescribing real input. Functions should be of the form:
+      ##
+      ##  def val(X, t, dt, n):
+      ##     # Function code
+      ##     return # Return value
+      ##
+      ## where X is a tuple of length geometry dimension and n is the dimension
+      ## of the attribute array.
+      element python {
+         python_code
+      }|
+      ## Python function prescribing real input. Functions should be of the form:
+      ##
+      ##  def val (X, t, dt, fields, n):
+      ##     # Function code
+      ##     return # Return value
+      ##
+      ##  where X is a tuple of length geometry dimension and n is the dimension
+      ##  of the attribute array.
+      ##
+      ##  E.g. if a function of the Temperature field and x position are required
+      ##
+      ##  def val (X, t, dt, fields, n):
+      ##    for i in range(0,n):
+      ##        x = X[0]
+      ##        y = (x + fields["Temperature"])*(n+1)
+      ##    return y
+      ##
+      ## Note: fields must contain the option particles/include_in_particles
+      ## to be accessible.
+      ## Old field or attribute values can be accessed with the prefix old%
+      ## if the store_old_attribute or store_old_field options are enabled.
+      element python_fields {
+         python_code,
+         ## Store attribute values from previous timestep on particles.
+         element store_old_attribute {
+            comment
+         }?
+      }|
+      ## File containing the particle attributes in binary form
+      element from_checkpoint_file {
+         attribute file_name { xsd:string }
+      }
+   )
+
+generic_vector_particle_attribute_array =
+   (
+      ## Constant value
+      element constant {
+         real_dim_vector
+      }|
+      ## Python function prescribing real input. Functions should be of the form:
+      ##
+      ##  def val(X, t, dt):
+      ##     # Function code
+      ##     return # Return value
+      ##
+      ##  where X is a tuple of length geometry dimension, n is the dimension
+      ##  of the attribute array, and the return value is a (n x dim) numpy array
+      element python {
+         python_code
+      }|
+      ## Python function prescribing real input. Functions should be of the form:
+      ##
+      ##  def val (X, t, dt, fields, n):
+      ##     # Function code
+      ##     return # Return value
+      ##
+      ##  where X is a tuple of length geometry dimension, n is the dimension
+      ##  of the attribute array, and the return value is a (n x dim) numpy array
+      ##
+      ##  E.g. if Velocity field and positions vector are required
+      ##
+      ##  def val (X, t, dt, fields, n):
+      ##    from numpy import zeros
+      ##    y = zeros(2,float)
+      ##    for i in range(0,2):
+      ##        for j in range(0,n):
+      ##            y[j,i] = (X[i] + fields["Velocity"][i])*(1+k)
+      ##    return y
+      ##
+      ## Note: fields must contain the option particles/include_in_particles
+      ## to be accessible.
+      ## Old field or attribute values can be accessed with the prefix old%
+      ## if the store_old_attribute or store_old_field options are enabled.
+      element python_fields {
+         python_code,
+         ## Store attribute values from previous timestep on particles.
+         element store_old_attribute {
+            comment
+         }?
+      }|
+      ## File containing the particle attributes in binary form
+      element from_checkpoint_file {
+         attribute file_name { xsd:string },
+         ## The format of the input file containing field data.
+         element format {
+            element string_value {
+               "binary"
+            }
+         }
+      }
+   )
+
+generic_tensor_particle_attribute_array =
+   (
+      ## Constant value
+      element constant {
+         real_dim_tensor
+      }|
+      ## Python function prescribing real input. Functions should be of the form:
+      ##
+      ##  def val(X, t, dt, n):
+      ##     # Function code
+      ##     return # Return value
+      ##
+      ## where X is a tuple of length geometry dimension, n is the dimension of
+      ## the attribute array, and the return value is a (n x dim x dim) numpy array
+      ## or list of lists.
+      element python {
+         python_code
+      }|
+      ## Python function prescribing real input. Functions should be of the form:
+      ##
+      ##  def val (X, t, dt, fields, n):
+      ##     # Function code
+      ##     return # Return value
+      ##
+      ##  where X is a tuple of length geometry dimension, n is the dimension of
+      ##  the attribute array, and the return value is a (dim x dim) numpy array
+      ##  or list of lists.
+      ##
+      ##  E.g. to calculate a tensor based off position and velocity:
+      ##
+      ##  def val (X, t, dt, fields, n):
+      ##    from numpy import zeros
+      ##    dum = zeros((2,2),float)
+      ##    for i in range(0,2):
+      ##       for j in range(0,2):
+      ##           for k in range(0,n):
+      ##               dum[k,i,j] = (X[i]+fields["Velocity"][j])*(1+k)
+      ##    return dum
+      ##
+      ## Note: fields must contain the option particles/include_in_particles
+      ## to be accessible.
+      ## Old field or attribute values can be accessed with the prefix old%
+      ## if the store_old_attribute or store_old_field options are enabled.
+      element python_fields {
+         python_code,
+         ## Store attribute values from previous timestep on particles.
+         element store_old_attribute {
+            comment
+         }?
+      }|
+      ## File containing the particle attributes in binary form
+      element from_checkpoint_file {
+         attribute file_name { xsd:string },
+         ## The format of the input file containing field data.
+         element format {
+            element string_value {
+               "binary"
+            }
+         }
+      }
    )
 
 # This is the choice of additional scalar field to be solved for
@@ -3759,6 +4329,7 @@ scalar_field_choice =
                   prognostic_scalar_stat_options,
                   scalar_convergence_options,
                   prognostic_detector_options,
+                  prognostic_particle_options,
                   scalar_steady_state_options,
                   adaptivity_options_prognostic_scalar_field,
                   interpolation_algorithm_scalar
@@ -6400,6 +6971,13 @@ surface_integral_stats_vector.surface_integral &=
       attribute type { "normal" }
    )
 
+surface_l2norm_stats =
+   (
+      ## Calculate L2-norm of field over the specified surface
+      element surface_l2norm {
+         surface_integral_stats_base.surface_integral
+      }
+   )
 
 forcing =
   (
