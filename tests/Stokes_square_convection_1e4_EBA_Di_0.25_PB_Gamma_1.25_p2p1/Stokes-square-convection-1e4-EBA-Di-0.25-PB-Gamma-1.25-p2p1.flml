@@ -150,7 +150,7 @@
           <mesh name="CoordinateMesh"/>
           <value name="WholeMesh">
             <constant>
-              <real_value shape="2" dim1="dim" rank="1">0.0 -1.0</real_value>
+              <real_value rank="1" dim1="dim" shape="2">0.0 -1.0</real_value>
             </constant>
           </value>
           <output>
@@ -162,6 +162,9 @@
           <detectors>
             <exclude_from_detectors/>
           </detectors>
+          <particles>
+            <exclude_from_particles/>
+          </particles>
         </prescribed>
       </vector_field>
     </gravity>
@@ -196,7 +199,7 @@ epsilon = 3.e-2</comment>
         </linear>
       </fluids>
     </equation_of_state>
-    <scalar_field name="Pressure" rank="0">
+    <scalar_field rank="0" name="Pressure">
       <prognostic>
         <mesh name="CoordinateMesh"/>
         <spatial_discretisation>
@@ -274,13 +277,16 @@ epsilon = 3.e-2</comment>
         <detectors>
           <exclude_from_detectors/>
         </detectors>
+        <particles>
+          <exclude_from_particles/>
+        </particles>
         <steady_state>
           <exclude_from_steady_state/>
         </steady_state>
         <consistent_interpolation/>
       </prognostic>
     </scalar_field>
-    <scalar_field name="Density" rank="0">
+    <scalar_field rank="0" name="Density">
       <diagnostic>
         <algorithm name="Internal" material_phase_support="multiple"/>
         <mesh name="VelocityMesh"/>
@@ -292,12 +298,15 @@ epsilon = 3.e-2</comment>
         <detectors>
           <include_in_detectors/>
         </detectors>
+        <particles>
+          <exclude_from_particles/>
+        </particles>
         <steady_state>
           <include_in_steady_state/>
         </steady_state>
       </diagnostic>
     </scalar_field>
-    <vector_field name="Velocity" rank="1">
+    <vector_field rank="1" name="Velocity">
       <prognostic>
         <mesh name="VelocityMesh"/>
         <equation name="LinearMomentum"/>
@@ -347,12 +356,12 @@ epsilon = 3.e-2</comment>
         </solver>
         <initial_condition name="WholeMesh">
           <constant>
-            <real_value shape="2" dim1="dim" rank="1">0.01 0.05</real_value>
+            <real_value rank="1" dim1="dim" shape="2">0.01 0.05</real_value>
           </constant>
         </initial_condition>
         <boundary_conditions name="FreeSlipX">
           <surface_ids>
-            <integer_value shape="2" rank="1">1 2</integer_value>
+            <integer_value rank="1" shape="2">1 2</integer_value>
           </surface_ids>
           <type name="dirichlet">
             <align_bc_with_cartesian>
@@ -366,7 +375,7 @@ epsilon = 3.e-2</comment>
         </boundary_conditions>
         <boundary_conditions name="FreeSlipY">
           <surface_ids>
-            <integer_value shape="2" rank="1">3 4</integer_value>
+            <integer_value rank="1" shape="2">3 4</integer_value>
           </surface_ids>
           <type name="dirichlet">
             <align_bc_with_cartesian>
@@ -383,7 +392,7 @@ epsilon = 3.e-2</comment>
             <value name="WholeMesh">
               <anisotropic_symmetric>
                 <python>
-                  <string_value lines="20" type="code" language="python">def val(X, t):
+                  <string_value type="code" language="python" lines="20">def val(X, t):
   from constants import *
   mu = Di / Ra
   visc = numpy.zeros((2,2))
@@ -395,6 +404,9 @@ epsilon = 3.e-2</comment>
               </anisotropic_symmetric>
             </value>
             <output/>
+            <particles>
+              <exclude_from_particles/>
+            </particles>
           </prescribed>
         </tensor_field>
         <output/>
@@ -413,13 +425,16 @@ epsilon = 3.e-2</comment>
         <detectors>
           <include_in_detectors/>
         </detectors>
+        <particles>
+          <exclude_from_particles/>
+        </particles>
         <steady_state>
           <include_in_steady_state/>
         </steady_state>
         <consistent_interpolation/>
       </prognostic>
     </vector_field>
-    <scalar_field name="Temperature" rank="0">
+    <scalar_field rank="0" name="Temperature">
       <prognostic>
         <mesh name="VelocityMesh"/>
         <equation name="AdvectionDiffusion"/>
@@ -462,7 +477,7 @@ epsilon = 3.e-2</comment>
         </solver>
         <initial_condition name="WholeMesh">
           <python>
-            <string_value lines="20" type="code" language="python">def val(x, t):
+            <string_value type="code" language="python" lines="20">def val(x, t):
   from math import pi, cos, sin
   amp = 0.25
   return ((1.-x[1])+ amp*cos(pi*x[0])*sin(pi*x[1]))</string_value>
@@ -470,7 +485,7 @@ epsilon = 3.e-2</comment>
         </initial_condition>
         <boundary_conditions name="HotBase">
           <surface_ids>
-            <integer_value shape="1" rank="1">4</integer_value>
+            <integer_value rank="1" shape="1">4</integer_value>
           </surface_ids>
           <type name="dirichlet">
             <constant>
@@ -480,7 +495,7 @@ epsilon = 3.e-2</comment>
         </boundary_conditions>
         <boundary_conditions name="ColdTop">
           <surface_ids>
-            <integer_value shape="1" rank="1">3</integer_value>
+            <integer_value rank="1" shape="1">3</integer_value>
           </surface_ids>
           <type name="dirichlet">
             <constant>
@@ -490,7 +505,7 @@ epsilon = 3.e-2</comment>
         </boundary_conditions>
         <boundary_conditions name="Insulating">
           <surface_ids>
-            <integer_value shape="2" rank="1">1 2</integer_value>
+            <integer_value rank="1" shape="2">1 2</integer_value>
           </surface_ids>
           <type name="neumann">
             <constant>
@@ -508,6 +523,9 @@ epsilon = 3.e-2</comment>
               </isotropic>
             </value>
             <output/>
+            <particles>
+              <exclude_from_particles/>
+            </particles>
           </prescribed>
         </tensor_field>
         <scalar_field name="Source" rank="0">
@@ -541,6 +559,9 @@ epsilon = 3.e-2</comment>
             <detectors>
               <include_in_detectors/>
             </detectors>
+            <particles>
+              <exclude_from_particles/>
+            </particles>
           </diagnostic>
         </scalar_field>
         <scalar_field name="Absorption" rank="0">
@@ -571,28 +592,31 @@ epsilon = 3.e-2</comment>
             <detectors>
               <include_in_detectors/>
             </detectors>
+            <particles>
+              <exclude_from_particles/>
+            </particles>
           </diagnostic>
         </scalar_field>
         <output/>
         <stat>
-          <surface_integral type="gradient_normal" name="LeftH">
+          <surface_integral name="LeftH" type="gradient_normal">
             <surface_ids>
-              <integer_value shape="1" rank="1">1</integer_value>
+              <integer_value rank="1" shape="1">1</integer_value>
             </surface_ids>
           </surface_integral>
-          <surface_integral type="gradient_normal" name="RightH">
+          <surface_integral name="RightH" type="gradient_normal">
             <surface_ids>
-              <integer_value shape="1" rank="1">2</integer_value>
+              <integer_value rank="1" shape="1">2</integer_value>
             </surface_ids>
           </surface_integral>
-          <surface_integral type="gradient_normal" name="TopH">
+          <surface_integral name="TopH" type="gradient_normal">
             <surface_ids>
-              <integer_value shape="1" rank="1">3</integer_value>
+              <integer_value rank="1" shape="1">3</integer_value>
             </surface_ids>
           </surface_integral>
-          <surface_integral type="gradient_normal" name="BottomH">
+          <surface_integral name="BottomH" type="gradient_normal">
             <surface_ids>
-              <integer_value shape="1" rank="1">4</integer_value>
+              <integer_value rank="1" shape="1">4</integer_value>
             </surface_ids>
           </surface_integral>
         </stat>
@@ -602,15 +626,18 @@ epsilon = 3.e-2</comment>
         <detectors>
           <include_in_detectors/>
         </detectors>
+        <particles>
+          <exclude_from_particles/>
+        </particles>
         <steady_state>
           <include_in_steady_state/>
         </steady_state>
         <consistent_interpolation/>
       </prognostic>
     </scalar_field>
-    <scalar_field name="FiniteElementDivergence" rank="0">
+    <scalar_field rank="0" name="FiniteElementDivergence">
       <diagnostic field_name="Velocity">
-        <algorithm legacy="true" name="Internal" material_phase_support="multiple"/>
+        <algorithm name="Internal" material_phase_support="multiple" legacy="true"/>
         <mesh name="CoordinateMesh"/>
         <solver>
           <iterative_method name="preonly"/>
@@ -636,12 +663,15 @@ epsilon = 3.e-2</comment>
         <detectors>
           <include_in_detectors/>
         </detectors>
+        <particles>
+          <exclude_from_particles/>
+        </particles>
         <steady_state>
           <exclude_from_steady_state/>
         </steady_state>
       </diagnostic>
     </scalar_field>
-    <scalar_field name="Adiabatic_Absorption" rank="0">
+    <scalar_field rank="0" name="Adiabatic_Absorption">
       <diagnostic>
         <algorithm name="adiabatic_heating_absorption" material_phase_support="single "/>
         <mesh name="P4Mesh"/>
@@ -653,12 +683,15 @@ epsilon = 3.e-2</comment>
         <detectors>
           <include_in_detectors/>
         </detectors>
+        <particles>
+          <exclude_from_particles/>
+        </particles>
         <steady_state>
           <include_in_steady_state/>
         </steady_state>
       </diagnostic>
     </scalar_field>
-    <scalar_field name="CompressibleReferenceDensity" rank="0">
+    <scalar_field rank="0" name="CompressibleReferenceDensity">
       <prescribed>
         <mesh name="VelocityMesh"/>
         <value name="WholeMesh">
@@ -671,9 +704,12 @@ epsilon = 3.e-2</comment>
         <detectors>
           <exclude_from_detectors/>
         </detectors>
+        <particles>
+          <exclude_from_particles/>
+        </particles>
       </prescribed>
     </scalar_field>
-    <scalar_field name="CompressibleReferenceTemperature" rank="0">
+    <scalar_field rank="0" name="CompressibleReferenceTemperature">
       <prescribed>
         <mesh name="VelocityMesh"/>
         <value name="WholeMesh">
@@ -686,9 +722,12 @@ epsilon = 3.e-2</comment>
         <detectors>
           <exclude_from_detectors/>
         </detectors>
+        <particles>
+          <exclude_from_particles/>
+        </particles>
       </prescribed>
     </scalar_field>
-    <scalar_field name="IsobaricSpecificHeatCapacity" rank="0">
+    <scalar_field rank="0" name="IsobaricSpecificHeatCapacity">
       <prescribed>
         <mesh name="VelocityMesh"/>
         <value name="WholeMesh">
@@ -701,9 +740,12 @@ epsilon = 3.e-2</comment>
         <detectors>
           <exclude_from_detectors/>
         </detectors>
+        <particles>
+          <exclude_from_particles/>
+        </particles>
       </prescribed>
     </scalar_field>
-    <scalar_field name="PhaseChangeIndicator" rank="0">
+    <scalar_field rank="0" name="PhaseChangeIndicator">
       <diagnostic>
         <algorithm name="depth_dependent_clapeyron_phase_change_indicator" material_phase_support="single">
           <reference_depth>
@@ -736,12 +778,15 @@ epsilon = 3.e-2</comment>
         <detectors>
           <include_in_detectors/>
         </detectors>
+        <particles>
+          <exclude_from_particles/>
+        </particles>
         <steady_state>
           <include_in_steady_state/>
         </steady_state>
       </diagnostic>
     </scalar_field>
-    <scalar_field name="LatentHeating" rank="0">
+    <scalar_field rank="0" name="LatentHeating">
       <diagnostic>
         <algorithm name="phase_change_latent_heating" material_phase_support="single">
           <phase_change_indicator_field name="PhaseChangeIndicator">
@@ -775,6 +820,9 @@ epsilon = 3.e-2</comment>
         <detectors>
           <include_in_detectors/>
         </detectors>
+        <particles>
+          <exclude_from_particles/>
+        </particles>
         <steady_state>
           <include_in_steady_state/>
         </steady_state>
