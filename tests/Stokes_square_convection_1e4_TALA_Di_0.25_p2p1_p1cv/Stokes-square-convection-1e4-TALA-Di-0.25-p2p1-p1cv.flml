@@ -248,9 +248,9 @@
             <string_value type="code" language="python" lines="20">def val(X,t):
 
   import math
-  from constants import *
+  import constants as c
   depth = 1.0 - X[1]
-  rho_ref = rho_0 * math.exp((depth*Di)/gamma)
+  rho_ref = c.rho_0 * math.exp((depth*c.Di)/c.gamma)
   return rho_ref</string_value>
           </python>
         </initial_condition>
@@ -359,8 +359,8 @@
               <anisotropic_symmetric>
                 <python>
                   <string_value type="code" language="python" lines="20">def val(X, t):
-  from constants import *
-  mu = Di / Ra
+  import constants as c
+  mu = c.Di / c.Ra
   visc = numpy.zeros((2,2))
   for i in range(2):
     for j in range(2):
@@ -478,8 +478,8 @@
           <python>
             <string_value type="code" language="python" lines="20">def val(X,t):
   import math
-  from constants import *
-  T_CMB  = 1.0 - (T_s*math.exp(Di) - T_s)
+  import constants as c
+  T_CMB  = 1.0 - (c.T_s*math.exp(c.Di) - c.T_s)
   T = (1 - X[0])*T_CMB
   return T</string_value>
           </python>
@@ -492,8 +492,8 @@
             <python>
               <string_value type="code" language="python" lines="20">def val(X,t):
   import math
-  from constants import *
-  T_CMB  = 1.0 - (T_s*math.exp(Di) - T_s)
+  import constants as c
+  T_CMB  = 1.0 - (c.T_s*math.exp(c.Di) - c.T_s)
   return T_CMB</string_value>
             </python>
           </type>
@@ -607,10 +607,10 @@
             <string_value type="code" language="python" lines="20">def val(X,t):
 
   import math
-  from constants import *
+  import constants as c
  
   depth = 1.0 - X[1]
-  rho_ref = rho_0 * math.exp((depth*Di)/gamma)
+  rho_ref = c.rho_0 * math.exp((depth*c.Di)/c.gamma)
   return rho_ref</string_value>
           </python>
         </value>
@@ -670,10 +670,10 @@
             <string_value type="code" language="python" lines="20">def val(X,t):
 
   import math
-  from constants import *  
+  import constants as c  
   depth = 1.0 - X[1]
   # Note - to ensure full T field lies between 0 and 1, we subtract (T_Surf/Delta_T) here:
-  temp_ref =  T_s*math.exp(depth*Di) - T_s
+  temp_ref =  c.T_s*math.exp(depth*c.Di) - c.T_s
   return temp_ref</string_value>
           </python>
         </value>

@@ -47,27 +47,27 @@ viscous_dissipation= stat("stokes-1e4-p2p1-EBA-Di-0.25-PB-Gamma--1.66.stat")["Fl
 <pass_tests>
 
 <test name="Temperature integral Validity:" language="python">
-print abs(T_int-0.4934)/0.4934
+print(abs(T_int-0.4934)/0.4934)
 assert(abs(T_int-0.4934)/0.4934 &lt; 1.e-3)
 </test>
 
 <test name="Surface Nusselt Number Validity:" language="python">
-print abs(nu_top-3.6886)/3.6886
+print(abs(nu_top-3.6886)/3.6886)
 assert(abs(nu_top-3.6886)/3.6886 &lt; 1.e-3)
 </test>
 
 <test name="RMS Velocity Validity:" language="python">
-print abs(rms_vel-24.977)/24.977
+print(abs(rms_vel-24.977)/24.977)
 assert(abs(rms_vel-24.977)/24.977 &lt; 1.e-3)
 </test>
 
 <test name="Adiabatic_Absorption Validity:" language="python">
-print abs(adiabatic_absorption-0.6639)/0.6639
+print(abs(adiabatic_absorption-0.6639)/0.6639)
 assert(abs(adiabatic_absorption-0.6639)/0.6639 &lt; 1.e-3)
 </test>
 
 <test name="Viscous_Dissipation Validity:" language="python">
-print abs(viscous_dissipation-0.3527)/0.3527
+print(abs(viscous_dissipation-0.3527)/0.3527)
 assert(abs(viscous_dissipation-0.3527)/0.3527 &lt; 1.e-3)
 </test>
 

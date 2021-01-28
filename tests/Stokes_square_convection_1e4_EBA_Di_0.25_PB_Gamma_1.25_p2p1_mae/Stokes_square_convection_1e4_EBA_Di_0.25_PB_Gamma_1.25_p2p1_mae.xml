@@ -52,32 +52,32 @@ latent_heating = stat("stokes-1e4-p2p1-EBA-Di-0.25-PB-Gamma-1.25.stat")["Fluid"]
 <pass_tests>
 
 <test name="Temperature integral Validity:" language="python">
-print abs(T_int-0.49006)/0.49006
+print(abs(T_int-0.49006)/0.49006)
 assert(abs(T_int-0.49006)/0.49006 &lt; 1.e-3)
 </test>
 
 <test name="Surface Nusselt Number Validity:" language="python">
-print abs(nu_top-4.12316)/4.12316
+print(abs(nu_top-4.12316)/4.12316)
 assert(abs(nu_top-4.12316)/4.12316 &lt; 1.e-3)
 </test>
 
 <test name="RMS Velocity Validity:" language="python">
-print abs(rms_vel-43.64416)/43.64416
+print(abs(rms_vel-43.64416)/43.64416)
 assert(abs(rms_vel-43.64416)/43.64416 &lt; 1.e-3)
 </test>
 
 <test name="Adiabatic_Absorption Validity:" language="python">
-print abs(adiabatic_absorption-0.77165)/0.77165
+print(abs(adiabatic_absorption-0.77165)/0.77165)
 assert(abs(adiabatic_absorption-0.77165)/0.77165 &lt; 1.e-3)
 </test>
 
 <test name="Viscous_Dissipation Validity:" language="python">
-print abs(viscous_dissipation-1.02599)/1.02599
+print(abs(viscous_dissipation-1.02599)/1.02599)
 assert(abs(viscous_dissipation-1.02599)/1.02599 &lt; 1.e-3)
 </test>
 
 <test name="Latent Heating Validity:" language="python">
-print abs(latent_heating+0.242176)/0.242176
+print(abs(latent_heating+0.242176)/0.242176)
 assert(abs(latent_heating+0.242176)/0.242176 &lt; 1.e-3)
 </test>
 

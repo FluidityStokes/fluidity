@@ -376,7 +376,7 @@ for n in range(field.node_count):
         visc[0,1] = nu
         visc[1,0] = nu
         visc[1,1] = nu
-	field.set(n,visc)</string_value>
+        field.set(n,visc)</string_value>
             </algorithm>
             <output/>
             <stat>

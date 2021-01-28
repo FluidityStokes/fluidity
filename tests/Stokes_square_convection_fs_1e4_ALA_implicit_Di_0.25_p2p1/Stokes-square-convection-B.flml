@@ -254,9 +254,9 @@
             <string_value type="code" language="python" lines="20">def val(X,t):
 
   import math
-  from constants import *
+  import constants as c
   depth = 1.0 - X[1]
-  rho_ref = rho_0 * math.exp((depth*Di)/gamma)
+  rho_ref = c.rho_0 * math.exp((depth*c.Di)/c.gamma)
   return rho_ref</string_value>
           </python>
         </initial_condition>
@@ -372,8 +372,8 @@
               <anisotropic_symmetric>
                 <python>
                   <string_value type="code" language="python" lines="20">def val(X, t):
-  from constants import *
-  mu = Di / Ra
+  import constants as c
+  mu = c.Di / c.Ra
   visc = numpy.zeros((2,2))
   for i in range(2):
     for j in range(2):
@@ -456,8 +456,8 @@
           <python>
             <string_value type="code" language="python" lines="20">def val(X,t):
   import math
-  from constants import *
-  T_CMB  = 1.0 - (T_s*math.exp(Di) - T_s)
+  import constants as c
+  T_CMB  = 1.0 - (c.T_s*math.exp(c.Di) - c.T_s)
   T = (1 - X[0])*T_CMB
   return T</string_value>
           </python>
@@ -470,8 +470,8 @@
             <python>
               <string_value type="code" language="python" lines="20">def val(X,t):
   import math
-  from constants import *
-  T_CMB  = 1.0 - (T_s*math.exp(Di) - T_s)
+  import constants as c
+  T_CMB  = 1.0 - (c.T_s*math.exp(c.Di) - c.T_s)
   return T_CMB</string_value>
             </python>
           </type>
@@ -585,10 +585,10 @@
             <string_value type="code" language="python" lines="20">def val(X,t):
 
   import math
-  from constants import *
+  import constants as c
  
   depth = 1.0 - X[1]
-  rho_ref = rho_0 * math.exp((depth*Di)/gamma)
+  rho_ref = c.rho_0 * math.exp((depth*c.Di)/c.gamma)
   return rho_ref</string_value>
           </python>
         </value>
@@ -666,10 +666,10 @@
             <string_value type="code" language="python" lines="20">def val(X,t):
 
   import math
-  from constants import *  
+  import constants as c  
   depth = 1.0 - X[1]
   # Note - to ensure full T field lies between 0 and 1, we subtract (T_Surf/Delta_T) here:
-  temp_ref =  T_s*math.exp(depth*Di) - T_s
+  temp_ref =  c.T_s*math.exp(depth*c.Di) - c.T_s
   return temp_ref</string_value>
           </python>
         </value>
@@ -750,8 +750,9 @@
     <scalar_field rank="0" name="SteadyStateFreeSurface">
       <diagnostic>
         <algorithm name="scalar_python_diagnostic" material_phase_support="single">
-          <string_value type="code" language="python" lines="20">from constants import *
-mu = Di / Ra
+          <string_value type="code" language="python" lines="20">
+import constants as c
+mu = c.Di / c.Ra
 
 x = state.vector_fields["Coordinate"]
 assert(x.node_count==field.node_count)
@@ -764,9 +765,9 @@ assert(p.node_count==field.node_count)
 rho0 = state.scalar_fields["CompressibleReferenceDensity"]
 assert(rho0.node_count==field.node_count)
 
-for n in xrange(field.node_count):
+for n in range(field.node_count):
   if x.node_val(n)[1] &gt; 1. - 1.e-6:
-    field.set(n, -(mu*(2.*epsdot.node_val(n)[1,1]-2.*div.node_val(n)/3.)-p.node_val(n))/(Di*rho0.node_val(n)))
+    field.set(n, -(mu*(2.*epsdot.node_val(n)[1,1]-2.*div.node_val(n)/3.)-p.node_val(n))/(c.Di*rho0.node_val(n)))
   else:
     field.set(n, 0.0)</string_value>
           <depends>

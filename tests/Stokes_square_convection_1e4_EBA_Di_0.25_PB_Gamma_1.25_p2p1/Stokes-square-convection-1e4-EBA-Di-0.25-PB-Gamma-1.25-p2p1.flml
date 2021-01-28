@@ -393,8 +393,8 @@ epsilon = 3.e-2</comment>
               <anisotropic_symmetric>
                 <python>
                   <string_value type="code" language="python" lines="20">def val(X, t):
-  from constants import *
-  mu = Di / Ra
+  import constants as c
+  mu = c.Di / c.Ra
   visc = numpy.zeros((2,2))
   for i in range(2):
     for j in range(2):
