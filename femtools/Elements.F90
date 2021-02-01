@@ -28,11 +28,11 @@
 #include "fdebug.h"
 module elements
   !!< This module provides derived types for finite elements and associated functions.
-  use element_numbering
-  use quadrature
   use FLDebug
-  use polynomials
+  use element_numbering
   use reference_counting
+  use quadrature
+  use polynomials
   implicit none
 
   type element_type
@@ -43,9 +43,10 @@ module elements
      integer :: degree !! Polynomial degree of element.
      !! Shape functions: n is for the primitive function, dn is for partial derivatives, dn_s is for partial derivatives on surfaces. 
      !! n is loc x ngi, dn is loc x ngi x dim
-     !! dn_s is loc x ngi x face x dim 
+     !! n_s is loc x sngi, dn_s is loc x sngi x dim
+     !! NOTE that both n_s and dn_s need to be reoriented before use so that they align with the arbitrary facet node ordering.
      real, pointer :: n(:,:)=>null(), dn(:,:,:)=>null()
-     real, pointer :: n_s(:,:,:)=>null(), dn_s(:,:,:,:)=>null()
+     real, pointer :: n_s(:,:)=>null(), dn_s(:,:,:)=>null()
      !! Polynomials defining shape functions and their derivatives.
      type(polynomial), dimension(:,:), pointer :: spoly=>null(), dspoly=>null()
      !! Link back to the node numbering used for this element.
@@ -105,11 +106,11 @@ module elements
      real, pointer :: orthogonal(:,:,:)=> null()
   end type constraints_type
 
-  integer, parameter :: CONSTRAINT_NONE =0, CONSTRAINT_BDFM = 1,&
+  integer, parameter, public :: CONSTRAINT_NONE =0, CONSTRAINT_BDFM = 1,&
        & CONSTRAINT_RT = 2, CONSTRAINT_BDM = 3
 
   interface allocate
-     module procedure allocate_element, allocate_element_with_surface
+     module procedure allocate_element
      module procedure allocate_constraints_type
   end interface
 
@@ -148,9 +149,20 @@ module elements
 
 #include "Reference_count_interface_element_type.F90"
 
+  private
+
+  public :: element_type, superconvergence_type, constraints_type,&
+       allocate, deallocate, local_coords, local_coord_count,&
+       local_vertices, boundary_numbering, operator(==), eval_shape,&
+       eval_dshape, make_constraints, eval_dshape_transformed
+
+!! public objects from the reference counting
+
+  public :: new_refcount, incref, decref
+
 contains
 
-  subroutine allocate_element(element, ele_num, ngi, type, stat)
+  subroutine allocate_element(element, ele_num, ngi, ngi_s, type, stat)
     !!< Allocate memory for an element_type. 
     type(element_type), intent(inout) :: element
     !! Number of quadrature points
@@ -158,6 +170,7 @@ contains
     !! Element numbering
     type(ele_numbering_type), intent(in) :: ele_num
     !! Stat returns zero for success and nonzero otherwise.
+    integer, intent(in), optional :: ngi_s
     integer, intent(in), optional :: type
     integer, intent(out), optional :: stat
     !
@@ -223,13 +236,17 @@ contains
     element%ngi=ngi
     element%dim=ele_num%dimension
 
+    if (present(ngi_s)) then
+      allocate(element%n_s(ele_num%nodes,ngi_s), &
+               element%dn_s(ele_num%nodes,ngi_s,ele_num%dimension), stat=lstat)
+    else
+      nullify(element%n_s)
+      nullify(element%dn_s)
+    end if
 
     nullify(element%refcount) ! Hack for gfortran component initialisation
     !                         bug.
     call addref(element)
-    
-    nullify(element%n_s)
-    nullify(element%dn_s)
 
     if (present(stat)) then
        stat=lstat
@@ -238,42 +255,6 @@ contains
     end if
 
   end subroutine allocate_element
-
-  subroutine allocate_element_with_surface(element, dim, loc,&
-       ngi,faces, ngi_s, coords,surface_present,type, stat)
-    !!< Allocate memory for an element_type. 
-    type(element_type), intent(inout) :: element
-    !! Dim is the dimension of the element, loc is number of nodes, ngi is
-    !! number of gauss points. 
-    integer, intent(in) :: dim,loc,ngi,faces,ngi_s    
-    !! Number of local coordinates.
-    integer, intent(in) :: coords
-    logical, intent(in) :: surface_present
-    !! Stat returns zero for success and nonzero otherwise.
-    integer, intent(in), optional :: type
-    integer, intent(out), optional :: stat
-
-    integer :: lstat
-
-    allocate(element%n(loc,ngi),element%dn(loc,ngi,dim), &
-         element%n_s(loc,ngi_s,faces),element%dn_s(loc,ngi_s,faces,dim),&
-         element%spoly(coords,loc), element%dspoly(coords,loc), stat=lstat)
-    
-    element%loc=loc
-    element%ngi=ngi
-    element%dim=dim
-
-    if (present(stat)) then
-       stat=lstat
-    else if (lstat/=0) then
-       FLAbort("Unable to allocate element.")
-    end if
-    
-    nullify(element%refcount) ! Hack for gfortran component initialisation
-    !                         bug.
-    call addref(element)
-
-  end subroutine allocate_element_with_surface
 
   subroutine allocate_constraints_type(constraint, element, type, stat)
     !!< Allocate memory for a constraints type
@@ -365,6 +346,12 @@ contains
     end if
 
     call deallocate(element%quadrature)
+
+    if (associated(element%surface_quadrature)) then
+      call deallocate(element%surface_quadrature)
+      deallocate(element%surface_quadrature, stat=tstat)
+    end if
+    lstat=max(lstat,tstat)
 
     if(associated(element%spoly)) then
       do i=1,size(element%spoly,1)
@@ -484,31 +471,6 @@ contains
     
   end function element_equal
 
-  subroutine extract_old_element(element, N, NLX, NLY, NLZ)
-    !!< Extract the shape function values from an old element.
-    type(element_type), intent(in) :: element
-    real, dimension(element%loc, element%ngi), intent(out) :: N, NLX, NLY
-    real, dimension(element%loc, element%ngi), intent(out), optional :: NLZ
-    
-    N=element%n
-    NLX=element%dn(:,:,1)
-    if (size(element%dn,3)>1) then
-       NLY=element%dn(:,:,2)
-    else
-       NLY=0.0
-    end if
-
-    if (present(NLZ)) then
-       if (size(element%dn,3)>2) then
-          NLZ=element%dn(:,:,3)
-       else
-          NLZ=0.0
-       end if
-    end if
-
-
-  end subroutine extract_old_element
-
   pure function eval_shape_node(shape, node,  l) result(eval_shape)
     ! Evaluate the shape function for node node local coordinates l
     real :: eval_shape
@@ -519,32 +481,76 @@ contains
     integer :: i
 
     eval_shape=1.0
-          
+
     do i=1,size(shape%spoly,1)
-       
-       ! Raw shape function
-       eval_shape=eval_shape*eval(shape%spoly(i,node), l(i))
-             
+
+      ! Raw shape function
+      eval_shape=eval_shape*eval(shape%spoly(i,node), l(i))
+
     end do
 
   end function eval_shape_node
 
-  pure function eval_shape_all_nodes(shape, l) result(eval_shape)
+  pure function eval_shape_all_nodes(shape, l) result(n)
     ! Evaluate the shape function for all locations at local coordinates l
     type(element_type), intent(in) :: shape
     real, dimension(size(shape%spoly,1)), intent(in) :: l
-    real, dimension(shape%loc) :: eval_shape
+    real, dimension(shape%loc) :: n
 
     integer :: i,j
 
-    eval_shape=1.0
+    ! for P0,P1 and P2 simplices we use explicitly written out
+    ! formulas for speed, all other cases are handled below
+
+    if (shape%numbering%family==FAMILY_SIMPLEX .and. &
+      shape%numbering%type==ELEMENT_LAGRANGIAN) then
+      select case (shape%degree)
+      case (0) ! P0 case
+        n(1) = 1.
+        return
+      case (1) ! P1 case
+        n = l
+        return
+      case (2) ! P2 case
+        select case (shape%dim)
+        case (1)
+          n(1) = l(1)*(2*l(1)-1)
+          n(2) = 4*l(1)*l(2)
+          n(3) = l(2)*(2*l(2)-1)
+        case (2)
+          n(1) = l(1)*(2*l(1)-1)
+          n(2) = 4*l(1)*l(2)
+          n(3) = l(2)*(2*l(2)-1)
+          n(4) = 4*l(1)*l(3)
+          n(5) = 4*l(2)*l(3)
+          n(6) = l(3)*(2*l(3)-1)
+        case (3)
+          n(1) = l(1)*(2*l(1)-1)
+          n(2) = 4*l(1)*l(2)
+          n(3) = l(2)*(2*l(2)-1)
+          n(4) = 4*l(1)*l(3)
+          n(5) = 4*l(2)*l(3)
+          n(6) = l(3)*(2*l(3)-1)
+          n(7) = 4*l(1)*l(4)
+          n(8) = 4*l(2)*l(4)
+          n(9) = 4*l(3)*l(4)
+          n(10) = l(4)*(2*l(4)-1)
+        end select
+        return
+      case default
+        ! fall through to slow case
+      end select
+    end if
+
+    ! generic slow case using polynomials
+    n=1.0
 
     do j=1,shape%loc
 
       do i=1,size(shape%spoly,1)
 
         ! Raw shape function
-        eval_shape(j)=eval_shape(j)*eval(shape%spoly(i,j), l(i))
+        n(j)=n(j)*eval(shape%spoly(i,j), l(i))
 
       end do
 
@@ -605,38 +611,6 @@ contains
       transformed_dshape(loc, :) = matmul(invJ, untransformed_dshape(loc, :))
     end do
   end function eval_dshape_transformed
-
-  function eval_volume_dshape_at_face_quad(shape, local_face_number, invJ) result(output)
-    ! Compute the derivatives of the volume basis functions at the quadrature points
-    ! of a given surface element. Useful for strain tensors and such
-
-    ! If this segfaults on entry, it's probably because
-    ! shape%surface_quadrature is unassociated. You need to augment the shape
-    ! function with the quadrature information. See the drag calculation
-    ! in MeshDiagnostics.F90 for an example (search for augmented_shape).
-    type(element_type), intent(in) :: shape ! NOT the face shape! The volume shape!
-    integer, intent(in) :: local_face_number ! which face are we on
-    real, dimension(:, :, :), intent(in) :: invJ
-    real, dimension(shape%loc, shape%surface_quadrature%ngi, shape%dim) :: output
-    integer :: loc, gi
-
-    assert(associated(shape%dn_s))
-    assert(size(invJ, 1) == shape%dim)
-    assert(size(invJ, 2) == shape%dim)
-    assert(size(invJ, 3) == shape%surface_quadrature%ngi)
-    assert(shape%dim == size(shape%dn_s, 4))
-    assert(shape%loc == size(shape%dn_s, 1))
-    assert(shape%surface_quadrature%ngi == size(shape%dn_s, 2))
-    assert(local_face_number <= size(shape%dn_s, 3))
-    assert(shape%dim == size(shape%dn_s, 4))
-
-    ! You can probably do this with some fancy-pants tensor contraction.
-    do loc=1,shape%loc
-      do gi=1,shape%surface_quadrature%ngi
-        output(loc, gi, :) = matmul(invJ(:, :, gi), shape%dn_s(loc, gi, local_face_number, :))
-      end do
-    end do
-  end function eval_volume_dshape_at_face_quad
 
   pure function eval_dshape_simplex(shape, loc,  l) result (eval_dshape)
     !!< Evaluate the derivatives of the shape function for location loc at local

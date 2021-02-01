@@ -58,8 +58,10 @@ value).</a:documentation>
           <zeroOrMore>
             <element name="generic_scalar_field_dependency">
               <a:documentation>Enable to add a generic scalar field
-dependency to the equation of state.</a:documentation>
-              <attribute name="scalar_field_name">
+dependency to the equation of state.
+
+The name of this dependency must correspond to a scalar field in this material_phase.</a:documentation>
+              <attribute name="name">
                 <data type="string"/>
               </attribute>
               <element name="reference_value">
@@ -89,6 +91,48 @@ approximation</a:documentation>
           <optional>
             <element name="include_depth_below_surface">
               <empty/>
+            </element>
+          </optional>
+        </element>
+        <element name="linearised_mantle">
+          <a:documentation>This equation linearises the temperature dependence
+around a reference state.  It depends on the prescribed/diagnostic fields:
+ - CompressibleReferenceDensity
+ - IsobaricThermalExpansivity
+which should vary in at most depth.
+It also requires the prognostic fields:
+ - Temperature
+ - Pressure
+ - Density.
+
+It is intended to be used in combination with a MantleAnelasticEnergy equation type for Temperature.</a:documentation>
+          <ref name="comment"/>
+          <zeroOrMore>
+            <element name="generic_scalar_field_dependency">
+              <a:documentation>Enable to add a generic scalar field
+dependency to the equation of state.
+
+The name of this dependency must correspond to a scalar field in this material_phase.</a:documentation>
+              <attribute name="name">
+                <data type="string"/>
+              </attribute>
+              <element name="reference_value">
+                <a:documentation>The reference or background value 
+for the generic scalar field.</a:documentation>
+                <ref name="real"/>
+              </element>
+              <element name="expansion_coefficient">
+                <a:documentation>The expansion coefficient associated 
+with this generic scalar field.</a:documentation>
+                <ref name="real"/>
+              </element>
+            </element>
+          </zeroOrMore>
+          <optional>
+            <element name="subtract_out_hydrostatic_level">
+              <a:documentation>Enable this option to subtract out
+the hydrostatic level</a:documentation>
+              <ref name="comment"/>
             </element>
           </optional>
         </element>

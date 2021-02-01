@@ -91,9 +91,9 @@ module mpi_interfaces
     end subroutine mpi_iprobe
     
     function mpi_tick()
-      use global_parameters, only : real_8
+      use iso_c_binding, only: c_double
       implicit none
-      real(kind = real_8) :: mpi_tick
+      real(kind = c_double) :: mpi_tick
     end function mpi_tick
 
     subroutine mpi_type_commit(type, ierr)
@@ -178,6 +178,8 @@ module mpi_interfaces
   !  integer, intent(in) :: communicator
   !  integer, intent(out) :: ierr
   !end subroutine mpi_gather
+
+  external :: mpi_allgather
   
   external :: mpi_irecv
   !subroutine mpi_irecv(buffer, buffer_size, type, source, tag, communicator, request, ierr)

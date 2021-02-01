@@ -27,18 +27,21 @@
 #include "fdebug.h"
 module fields_calculations
 
+use fldebug
+use futils
+use vector_tools
+use quadrature
 use elements
-use fields_allocates
+use parallel_tools
 use fields_data_types
 use fields_base
+use linked_lists
+use fields_allocates
 use fields_manipulation
 use fetools
 use parallel_fields
-use parallel_tools
-use vector_tools
 use supermesh_construction
 use intersection_finder_module
-use linked_lists
 
 implicit none
     
@@ -87,7 +90,7 @@ implicit none
   end interface
 
   interface dot_product
-    module procedure dot_product_scalar, dot_product_vector
+    module procedure dot_product_vector
   end interface dot_product
 
   interface outer_product
@@ -97,6 +100,14 @@ implicit none
   interface norm2_difference
     module procedure norm2_difference_single, norm2_difference_multiple
   end interface
+
+  private
+
+  public :: mean, maxval, minval, sum, norm2, field_stats, field_cv_stats,&
+	 field_integral, fields_integral, function_val_at_quad,&
+         dot_product, outer_product, norm2_difference, magnitude,&
+	 magnitude_tensor, merge_meshes, distance, divergence_field_stats,&
+	 field_con_stats, function_val_at_quad_scalar, trace, mesh_integral
     
   integer, parameter, public :: CONVERGENCE_INFINITY_NORM=0, CONVERGENCE_L2_NORM=1, CONVERGENCE_CV_L2_NORM=2
   
@@ -360,16 +371,16 @@ implicit none
     type(vector_field), intent(in) :: X
 
     integer :: ele
-    real, dimension(X%mesh%shape%loc) :: ones
 
     integral=0
-    
-    ones = 1.0
-
     do ele=1, element_count(X)
-       integral=integral &
-            +element_volume(X, ele)
+       if (element_owned(X, ele)) then
+         integral = integral + element_volume(X, ele)
+        end if
     end do
+
+    call allsum(integral)
+
   end function mesh_integral
 
   subroutine field_stats_scalar(field, X, min, max, norm2, integral)
@@ -490,24 +501,29 @@ implicit none
   end subroutine field_stats_tensor
 
   subroutine field_con_stats_scalar(field, nlfield, error, &
-                                    norm, coordinates, cv_mass)
+                                    norm, relative, coordinates, cv_mass)
     !!< Return scalar convergence informaion about field.
     type(scalar_field), intent(inout) :: field, nlfield
     !! error in the field.
     real, intent(out) :: error
     !! what norm are we working out
     integer, intent(in), optional :: norm
+    logical, intent(in), optional :: relative
     type(vector_field), intent(in), optional :: coordinates
     type(scalar_field), intent(in), optional :: cv_mass
     
     type(scalar_field) :: difference
     integer :: l_norm
+    logical :: l_relative
+    real :: relerror
     
     if(present(norm)) then
       l_norm = norm
     else
       l_norm = CONVERGENCE_INFINITY_NORM
     end if
+
+    l_relative = present_and_true(relative)
     
     assert(field%mesh==nlfield%mesh)
     
@@ -520,11 +536,24 @@ implicit none
     case(CONVERGENCE_INFINITY_NORM)
       error = maxval(difference%val)
       call allmax(error)
+      if (l_relative) then
+        relerror = maxval(abs(nlfield%val))
+        call allmax(relerror)
+        error = error/max(relerror, epsilon(0.0))
+      end if
     case(CONVERGENCE_L2_NORM)
       call field_stats(difference, X=coordinates, norm2=error)
+      if (l_relative) then
+        call field_stats(nlfield, X=coordinates, norm2=relerror)
+        error = error/max(relerror, epsilon(0.0))
+      end if
     case(CONVERGENCE_CV_L2_NORM)
       if (present(cv_mass)) then
         call field_cv_stats(difference, cv_mass=cv_mass, norm2=error)
+        if (l_relative) then
+          call field_cv_stats(nlfield, cv_mass=cv_mass, norm2=relerror)
+          error = error/max(relerror, epsilon(0.0))
+        end if
       else
         FLAbort('Require cv_mass to calculate field_cv_stats')
       end if
@@ -537,13 +566,14 @@ implicit none
   end subroutine field_con_stats_scalar
 
   subroutine field_con_stats_vector(field, nlfield, error, &
-                                    norm, coordinates)
+                                    norm, relative, coordinates)
     !!< Return scalar convergence information about field. For a vector
     !!< field the statistics are calculated on the magnitude of the field.
     type(vector_field) :: field, nlfield
     !! error in the field.
     real, intent(out) :: error
     integer, intent(in), optional :: norm
+    logical, intent(in), optional :: relative
     type(vector_field), intent(in), optional :: coordinates
 
     type(scalar_field) :: mag, nlmag
@@ -552,7 +582,7 @@ implicit none
     nlmag=magnitude(nlfield)
 
     call field_con_stats(mag, nlmag, error, &
-                         norm, coordinates)
+                         norm, relative, coordinates)
 
     call deallocate(mag)
     call deallocate(nlmag)
@@ -657,35 +687,11 @@ implicit none
     end do
   end subroutine trace
 
-  function dot_product_scalar(fieldA, fieldB) result(val)
-    type(scalar_field), intent(in) :: fieldA, fieldB
+  function dot_product_vector(fieldA, fieldB, X) result(val)
+    type(vector_field), intent(in) :: fieldA, fieldB, X
     real :: val
-    integer :: i
 
-    if (.not. associated(fieldA%mesh%refcount, fieldB%mesh%refcount)) then
-      ewrite(-1,*) "Hello! dot_product_scalar here."
-      ewrite(-1,*) "I couldn't be bothered remapping the fields,"
-      ewrite(-1,*) "even though this is perfectly possible."
-      ewrite(-1,*) "Code this up to remap the fields to continue!"
-      FLAbort("Programmmer laziness detected")
-    end if
-
-    if (fieldA%field_type == FIELD_TYPE_NORMAL .and. fieldB%field_type == FIELD_TYPE_NORMAL) then
-      val = dot_product(fieldA%val, fieldB%val)
-    else if (fieldA%field_type == FIELD_TYPE_CONSTANT .and. fieldB%field_type == FIELD_TYPE_CONSTANT) then
-      val = fieldA%val(1) * fieldB%val(1) * node_count(fieldA)
-    else
-      val = 0.0
-      do i=1,node_count(fieldA)
-        val = val + node_val(fieldA, i) * node_val(fieldB, i)
-      end do
-    end if
-  end function dot_product_scalar
-
-  function dot_product_vector(fieldA, fieldB) result(val)
-    type(vector_field), intent(in) :: fieldA, fieldB
-    real, dimension(fieldA%dim) :: val
-    integer :: i, d
+    integer :: ele
 
     assert(fieldA%dim==fieldB%dim)
 
@@ -697,19 +703,19 @@ implicit none
       FLAbort("Programmmer laziness detected")
     end if
 
-    if (fieldA%field_type == FIELD_TYPE_NORMAL .and. fieldB%field_type == FIELD_TYPE_NORMAL) then
-       do d=1,fieldA%dim
-          val(d) = dot_product(fieldA%val(d,:), fieldB%val(d,:))
-       end do
-    else if (fieldA%field_type == FIELD_TYPE_CONSTANT .and. fieldB%field_type == FIELD_TYPE_CONSTANT) then
-       do d=1,fieldA%dim
-          val(d) = fieldA%val(d,1) * fieldB%val(d,1) * node_count(fieldA)
-       end do
+    if (fieldA%field_type == FIELD_TYPE_CONSTANT .and. fieldB%field_type == FIELD_TYPE_CONSTANT) then
+       val = dot_product(fieldA%val(:,1), fieldB%val(:,1)) * mesh_integral(X)
     else
-       val = 0.0
-       do i=1,node_count(fieldA)
-          val = val + node_val(fieldA, i) * node_val(fieldB, i)
+       val = 0
+
+       do ele=1, element_count(fieldA)
+         if(element_owned(fieldA, ele)) then
+           val = val + dot_integral_element(fieldA, fieldB, X, ele)
+         end if
        end do
+
+       call allsum(val)
+
     end if
   end function dot_product_vector
 
@@ -728,7 +734,8 @@ implicit none
       FLAbort("Programmmer laziness detected")
     end if
 
-    if (fieldA%field_type == FIELD_TYPE_NORMAL .and. fieldB%field_type == FIELD_TYPE_NORMAL) then
+    if ((fieldA%field_type == FIELD_TYPE_NORMAL) .and. &
+        (fieldB%field_type == FIELD_TYPE_NORMAL)) then
        do d1=1,fieldA%dim
           do d2=1,fieldB%dim
              val(d1,d2) = dot_product(fieldA%val(d1,:), fieldB%val(d2,:))

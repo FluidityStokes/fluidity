@@ -30,32 +30,55 @@
 module diagnostic_fields_wrapper
   !!< A module to link to diagnostic variable calculations.
 
+  use fldebug
   use global_parameters, only: FIELD_NAME_LEN, timestep
-  use fields
-  use sparse_matrices_fields
-  use field_derivatives
-  use state_module
+  use fldebug
+  use global_parameters, only: FIELD_NAME_LEN, timestep
   use futils
-  use fetools
   use spud
   use parallel_tools
+  use spud
+  use sparse_tools
+  use fetools
+  use fetools
+  use fields
+  use fields
+  use sparse_matrices_fields
+  use state_module
+  use state_module
+  use boundary_conditions
+  use field_derivatives
+  use field_options, only: do_not_recalculate
+  use field_options, only: do_not_recalculate
+  use field_derivatives
+  use solvers
+  use sparsity_patterns_meshes
+  use state_fields_module
   use diagnostic_fields, only: calculate_diagnostic_variable
+  use diagnostic_fields_wrapper_new, only : &
+    & calculate_diagnostic_variable_new => calculate_diagnostic_variable
+  use sediment, only : get_n_sediment_fields, get_sediment_item
+  use equation_of_state
+  use multiphase_module
+  use diagnostic_fields_matrices
   use multimaterial_module, only: calculate_material_mass, &
                                   calculate_bulk_material_pressure, &
                                   calculate_sum_material_volume_fractions, &
                                   calculate_material_volume
+  use tidal_module, only: calculate_diagnostic_equilibrium_pressure
   use free_surface_module, only: calculate_diagnostic_free_surface, &
                                  calculate_diagnostic_wettingdrying_alpha
-  use tidal_module, only: calculate_diagnostic_equilibrium_pressure
-  use field_options, only: do_not_recalculate
+  use coriolis_module, only : two_omega => coriolis
   use vorticity_diagnostics
-  use diagnostic_fields_matrices
-  use equation_of_state
+  use multimaterial_module, only: calculate_material_mass, &
+                                  calculate_bulk_material_pressure, &
+                                  calculate_sum_material_volume_fractions, &
+                                  calculate_material_volume
   use momentum_diagnostic_fields
-  use spontaneous_potentials, only: calculate_formation_conductivity
   use sediment_diagnostics
+  use dqmom
   use geostrophic_pressure
-  use multiphase_module
+
   
   implicit none
 
@@ -71,10 +94,12 @@ contains
     type(state_type), dimension(:) :: state
     logical, intent(in), optional :: exclude_nonrecalculated
 
-    integer :: i,stat
-    type(scalar_field), pointer :: s_field
+    character(len=FIELD_NAME_LEN) :: gsfield_name
+    integer :: i,stat, n_generic_scalar_fields, j
+    type(scalar_field), pointer :: s_field, gs_field
     type(vector_field), pointer :: v_field
     logical :: diagnostic
+    integer :: diagnostic_particles
 
     ! An array of submaterials of the current phase in state(istate).
     type(state_type), dimension(:), pointer :: submaterials
@@ -130,30 +155,6 @@ contains
        if(stat == 0) then
          if(recalculate(trim(s_field%option_path))) then
            call calculate_diagnostic_variable(state(i), "CVMaterialDensityCFLNumber", &
-             & s_field)
-         end if
-       end if
-
-       s_field => extract_scalar_field(state(i), "InterstitialVelocityCGCourantNumber", stat)
-       if(stat == 0) then
-         if(recalculate(trim(s_field%option_path))) then
-           call calculate_diagnostic_variable(state(i), "InterstitialVelocityCGCourantNumber", &
-             & s_field)
-         end if
-       end if
-
-       s_field => extract_scalar_field(state(i), "InterstitialVelocityDGCourantNumber", stat)
-       if(stat == 0) then
-         if(recalculate(trim(s_field%option_path))) then
-           call calculate_diagnostic_variable(state(i), "InterstitialVelocityDGCourantNumber", &
-             & s_field)
-         end if
-       end if
-
-       s_field => extract_scalar_field(state(i), "InterstitialVelocityCVCourantNumber", stat)
-       if(stat == 0) then
-         if(recalculate(trim(s_field%option_path))) then
-           call calculate_diagnostic_variable(state(i), "InterstitialVelocityCVCourantNumber", &
              & s_field)
          end if
        end if
@@ -282,14 +283,6 @@ contains
          end if
        end if
        
-       s_field => extract_scalar_field(state(i), "ViscousDissipation", stat)
-       if(stat == 0) then
-         if(recalculate(trim(s_field%option_path))) then
-           call calculate_diagnostic_variable(state(i), "ViscousDissipation", &
-             & s_field)
-         end if
-       end if
-
        s_field => extract_scalar_field(state(i), "RichardsonNumber", stat)
        if(stat == 0) then
          if(recalculate(trim(s_field%option_path))) then
@@ -392,8 +385,10 @@ contains
 
        s_field => extract_scalar_field(state(i), "MaterialVolumeFraction", stat)
        if(stat == 0) then
-         diagnostic = have_option(trim(s_field%option_path)//"/diagnostic")
-         if(diagnostic .and. .not.(aliased(s_field))) then
+         diagnostic = have_option(trim(s_field%option_path)//"/diagnostic/algorithm::Internal")
+         !Check if any other MaterialVolumeFraction field is set from particles, if so don't calculate internal MVF here
+         diagnostic_particles = option_count("material_phase/scalar_field::MaterialVolumeFraction/diagnostic/algorithm::from_particles")
+         if(diagnostic .and. .not. aliased(s_field) .and. diagnostic_particles == 0) then
            if(recalculate(trim(s_field%option_path))) then
              call calculate_sum_material_volume_fractions(state, s_field)
              call scale(s_field, -1.0)
@@ -431,6 +426,33 @@ contains
          diagnostic = have_option(trim(s_field%option_path)//"/diagnostic")
          if(diagnostic .and. .not.(aliased(s_field))) then
            if(recalculate(trim(s_field%option_path))) then
+             ! before calculating the Density update any diagnostic generic scalar fields in this state
+             ! this has to be done here because it requires all states to be passed into calculate_diagnostic_variable
+             ! and we may only be passing in the submaterials array further down...
+             n_generic_scalar_fields = option_count(trim(state(i)%option_path) // "/equation_of_state/fluids/linear" &
+                                                                               //"/generic_scalar_field_dependency")
+             do j = 1, n_generic_scalar_fields
+               call get_option(trim(state(i)%option_path) // "/equation_of_state/fluids/linear" &
+                                                          // "/generic_scalar_field_dependency[" // int2str(j-1) // "]/name", &
+                               gsfield_name)
+               gs_field => extract_scalar_field(state(i), gsfield_name)
+               if (have_option(trim(gs_field%option_path) // "/diagnostic")) then
+                 call calculate_diagnostic_variable_new(state, i, gs_field)
+               end if
+             end do
+
+             n_generic_scalar_fields = option_count(trim(state(i)%option_path) // "/equation_of_state/fluids/linearised_mantle" &
+                                                                               //"/generic_scalar_field_dependency")
+             do j = 1, n_generic_scalar_fields
+               call get_option(trim(state(i)%option_path) // "/equation_of_state/fluids/linearised_mantle" &
+                                                          // "/generic_scalar_field_dependency[" // int2str(j-1) // "]/name", &
+                               gsfield_name)
+               gs_field => extract_scalar_field(state(i), gsfield_name)
+               if (have_option(trim(gs_field%option_path) // "/diagnostic")) then
+                 call calculate_diagnostic_variable_new(state, i, gs_field)
+               end if
+             end do
+
              if(option_count("/material_phase/vector_field::Velocity/prognostic") > 1) then 
                call get_phase_submaterials(state, i, submaterials)
                call calculate_densities(submaterials, bulk_density=s_field)
@@ -549,18 +571,6 @@ contains
        end if
        ! End of vorticity diagnostics
 
-       ! Start of spontaneous potentials diagnostics
-       if(i == 1) then
-         s_field => extract_scalar_field(state(i), "ElectricalConductivity", stat)
-         if(stat == 0) then
-           diagnostic = have_option(trim(s_field%option_path)//"/diagnostic/algorithm::Internal")
-           if(diagnostic .and. recalculate(trim(s_field%option_path))) then
-             call calculate_formation_conductivity(state(i), i, s_field, stat)
-           end if
-         end if
-       end if
-       ! End of spontaneous potentials diagnostics
-
        ! Start of sediment diagnostics.
        if (have_option("/material_phase[0]/sediment")) then
           call calculate_sediment_sinking_velocity(state(i))
@@ -569,6 +579,11 @@ contains
           call calculate_sediment_active_layer_volume_fractions(state(i))
        end if
        ! End of sediment diagnostics.
+       
+       ! Start of population balance diagnostics.
+       call dqmom_calculate_moments(state(i))
+       call dqmom_calculate_statistics(state(i))
+       ! End of population balance diagnostics.
 
        ! Multiphase-related diagnostic fields
        s_field => extract_scalar_field(state(i), "PhaseVolumeFraction", stat)

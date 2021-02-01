@@ -133,17 +133,84 @@ Otherwise, uses a scalar field as a source field.</a:documentation>
     </optional>
   </define>
   <define name="internal_algorithm">
-    <element name="algorithm">
-      <a:documentation>This diagnostic is internal - i.e. it is calculated somewhere within
+    <choice>
+      <element name="algorithm">
+        <a:documentation>This diagnostic is internal - i.e. it is calculated somewhere within
 the main code, and is not wrapped by the automatic diagnostics
 wrappers.</a:documentation>
-      <attribute name="name">
-        <value>Internal</value>
-      </attribute>
-      <attribute name="material_phase_support">
-        <value>multiple</value>
-      </attribute>
-    </element>
+        <attribute name="name">
+          <value>Internal</value>
+        </attribute>
+        <attribute name="material_phase_support">
+          <value>multiple</value>
+        </attribute>
+      </element>
+      <element name="algorithm">
+        <a:documentation>This diagnostic is derived from particle attributes, it is calculated
+within the Particle_Diagnostics.F90 routine, and set via the ratio method.</a:documentation>
+        <attribute name="name">
+          <value>from_particles</value>
+        </attribute>
+        <attribute name="material_phase_support">
+          <value>multiple</value>
+        </attribute>
+        <group>
+          <element name="particle_group">
+            <a:documentation>Particle group used for calculation of diagnostic field.</a:documentation>
+            <attribute name="name">
+              <data type="string"/>
+            </attribute>
+            <choice>
+              <element name="particle_attribute">
+                <a:documentation>Particle attribute used for calculation of diagnostic field.</a:documentation>
+                <attribute name="name">
+                  <data type="string"/>
+                </attribute>
+              </element>
+              <element name="particle_attribute_array">
+                <a:documentation>Particle attribute_array used for calculation of diagnostic field.</a:documentation>
+                <attribute name="name">
+                  <data type="string"/>
+                </attribute>
+                <element name="attribute_index">
+                  <a:documentation>Integer value corresponding to attribute position in array (starts from 1).</a:documentation>
+                  <ref name="integer"/>
+                </element>
+              </element>
+            </choice>
+          </element>
+          <element name="interpolation">
+            <a:documentation>Function used to interpolate particle values onto nodes.</a:documentation>
+            <choice>
+              <element name="weighted_distance">
+                <a:documentation>Weighted distribution of particle values between all nodes of the current particle element.</a:documentation>
+                <empty/>
+              </element>
+              <element name="nearest_neighbour">
+                <a:documentation>Transfers particle values only to the closest node.</a:documentation>
+                <empty/>
+              </element>
+            </choice>
+          </element>
+        </group>
+      </element>
+      <element name="algorithm">
+        <a:documentation>This diagnostic is calculated from the number of particles present per
+control volume, set within the Particle_Diagnostics.F90 routine.</a:documentation>
+        <attribute name="name">
+          <value>number_of_particles</value>
+        </attribute>
+        <attribute name="material_phase_support">
+          <value>multiple</value>
+        </attribute>
+        <element name="particle_group">
+          <a:documentation>Particle group used for calculation of diagnostic.</a:documentation>
+          <attribute name="name">
+            <data type="string"/>
+          </attribute>
+        </element>
+      </element>
+    </choice>
   </define>
   <define name="legacy_internal_algorithm">
     <element name="algorithm">
@@ -942,6 +1009,19 @@ boundaries.</a:documentation>
       <ref name="tensor_source_field"/>
     </element>
   </define>
+  <define name="strain_rate_second_invariant_algorithm">
+    <element name="algorithm">
+      <a:documentation>Algorithm for the second invariant of the strain_rate tensor field.
+Note that the strain rate tensor is calculated automatically as a part
+of this algorithm and, hence, a separate tensor field is not required.</a:documentation>
+      <attribute name="name">
+        <value>strain_rate_second_invariant</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single </value>
+      </attribute>
+    </element>
+  </define>
   <define name="hessian_algorithm">
     <element name="algorithm">
       <a:documentation>algorithm for the Hessian (2nd derivative) of a scalar field</a:documentation>
@@ -1154,12 +1234,7 @@ take the value g.</a:documentation>
     <element name="algorithm">
       <a:documentation>The average (or bulk) viscosity formed from the MaterialViscosity for
 each material_phase, weighted according to the MaterialVolumeFraction
-fields from each material_phase:
-
-  \bar\nu = \alpha^i\nu^i
- 
-where \bar\nu is the bulk viscosity, \alpha^i is the volume fraction
-for material i and \nu^i is the viscosity of material i</a:documentation>
+from each material_phase.</a:documentation>
       <attribute name="name">
         <value>bulk_viscosity</value>
       </attribute>
@@ -1169,6 +1244,44 @@ for material i and \nu^i is the viscosity of material i</a:documentation>
       <attribute name="depends">
         <value>MaterialViscosity</value>
       </attribute>
+      <choice>
+        <element name="mean">
+          <a:documentation>Use an arithmetic mean (default):
+
+  \bar\nu = \alpha^i\nu^i
+ 
+where \bar\nu is the bulk viscosity, \alpha^i is the volume fraction
+for material i and \nu^i is the viscosity of material i.</a:documentation>
+          <attribute name="name">
+            <value>arithmetic</value>
+          </attribute>
+          <empty/>
+        </element>
+        <element name="mean">
+          <a:documentation>Use a harmonic mean:
+
+  1./\bar\nu = \alpha^i/\nu^i
+ 
+where \bar\nu is the bulk viscosity, \alpha^i is the volume fraction
+for material i and \nu^i is the viscosity of material i.</a:documentation>
+          <attribute name="name">
+            <value>harmonic</value>
+          </attribute>
+          <empty/>
+        </element>
+        <element name="mean">
+          <a:documentation>Use a geometric mean:
+
+  \bar\nu = (\nu^i)^(\alpha^i)
+ 
+where \bar\nu is the bulk viscosity, \alpha^i is the volume fraction
+for material i and \nu^i is the viscosity of material i.</a:documentation>
+          <attribute name="name">
+            <value>geometric</value>
+          </attribute>
+          <empty/>
+        </element>
+      </choice>
     </element>
   </define>
   <define name="sediment_concentration_dependent_viscosity_algorithm">
@@ -1752,10 +1865,15 @@ phases respectively, and d is the particle diameter.</a:documentation>
 and also the Density, PhaseVolumeFraction and Viscosity fields of the continuous phase.</a:documentation>
         <ref name="anystring"/>
       </element>
-      <element name="particle_diameter">
+      <choice>
         <a:documentation>The particle diameter</a:documentation>
-        <ref name="real"/>
-      </element>
+        <element name="particle_diameter">
+          <ref name="real"/>
+        </element>
+        <element name="particle_diameter_use_scalar_field">
+          <ref name="anystring"/>
+        </element>
+      </choice>
       <element name="continuous_phase_name">
         <a:documentation>The name of the state representing the continuous phase</a:documentation>
         <data type="string" datatypeLibrary=""/>
@@ -1790,6 +1908,18 @@ i.e. Density multiplied by the PhaseVolumeFraction field.</a:documentation>
     </element>
   </define>
   <!-- Mesh -->
+  <define name="region_id_algorithm">
+    <element name="algorithm">
+      <a:documentation>Convert the region_ids to a field. This field must be on a P0 mesh
+(i.e. degree 0 and discontinuous) as these are element-wise values.</a:documentation>
+      <attribute name="name">
+        <value>region_ids</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single</value>
+      </attribute>
+    </element>
+  </define>
   <define name="column_id_algorithm">
     <element name="algorithm">
       <a:documentation>Convert the column_ids to a field.
@@ -1814,6 +1944,74 @@ The mesh must be directly extruded.</a:documentation>
       <attribute name="material_phase_support">
         <value>single</value>
       </attribute>
+    </element>
+  </define>
+  <define name="mesh_quality_algorithm">
+    <element name="algorithm">
+      <a:documentation>Mesh Quality function. Basics taken from VTK. See the documentation
+there for further details of specific function choices.
+
+The output mesh for this field must be discontinous P0 and the
+underlying CoordinateMesh must consist of linear triangles
+ or tetrahedra only.</a:documentation>
+      <attribute name="name">
+        <value>mesh_quality</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single</value>
+      </attribute>
+      <choice>
+        <element name="quality_function">
+          <attribute name="name">
+            <value>radius_ratio</value>
+          </attribute>
+        </element>
+        <element name="quality_function">
+          <attribute name="name">
+            <value>aspect_ratio</value>
+          </attribute>
+        </element>
+        <element name="quality_function">
+          <attribute name="name">
+            <value>aspect_frobenius</value>
+          </attribute>
+        </element>
+        <element name="quality_function">
+          <attribute name="name">
+            <value>edge_ratio</value>
+          </attribute>
+        </element>
+        <element name="quality_function">
+          <attribute name="name">
+            <value>condition</value>
+          </attribute>
+        </element>
+        <element name="quality_function">
+          <attribute name="name">
+            <value>min_angle</value>
+          </attribute>
+        </element>
+        <element name="quality_function">
+          <attribute name="name">
+            <value>max_angle</value>
+          </attribute>
+        </element>
+        <element name="quality_function">
+          <attribute name="name">
+            <value>shape</value>
+          </attribute>
+        </element>
+        <element name="quality_function">
+          <attribute name="name">
+            <value>shape_and_size</value>
+          </attribute>
+        </element>
+        <element name="quality_function">
+          <attribute name="name">
+            <value>area_or_volume</value>
+          </attribute>
+        </element>
+      </choice>
     </element>
   </define>
   <define name="viscous_dissipation_algorithm">
@@ -1842,6 +2040,208 @@ The mesh must be directly extruded.</a:documentation>
       </element>
     </element>
   </define>
+  <define name="viscous_dissipation_plus_surface_adiabat_and_latent_heating_algorithm">
+    <element name="algorithm">
+      <a:documentation>algorithm for calculating the viscous dissipation with a surface adiabat term.</a:documentation>
+      <attribute name="name">
+        <value>viscous_dissipation_plus_surface_terms</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single </value>
+      </attribute>
+      <ref name="latent_heating_options"/>
+      <element name="surface_temperature">
+        <a:documentation>The surface temperature for the adiabat term</a:documentation>
+        <ref name="real"/>
+      </element>
+    </element>
+  </define>
+  <define name="phase_change_latent_heating_absorption">
+    <element name="algorithm">
+      <a:documentation>algorithm for calculating the latent heating due to a phase change</a:documentation>
+      <attribute name="name">
+        <value>phase_change_latent_heating_absorption</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single</value>
+      </attribute>
+      <ref name="latent_heating_options"/>
+    </element>
+  </define>
+  <define name="phase_change_latent_heating">
+    <element name="algorithm">
+      <a:documentation>algorithm for calculating the latent heating due to a phase change</a:documentation>
+      <attribute name="name">
+        <value>phase_change_latent_heating</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single</value>
+      </attribute>
+      <ref name="latent_heating_options"/>
+      <optional>
+        <element name="surface_temperature">
+          <a:documentation>The surface temperature (if extracted from the full temperature)</a:documentation>
+          <ref name="real"/>
+        </element>
+      </optional>
+    </element>
+  </define>
+  <define name="latent_heating_options">
+    <oneOrMore>
+      <element name="phase_change_indicator_field">
+        <a:documentation>Provide the name of a field describing a phase change.</a:documentation>
+        <attribute name="name">
+          <data type="string"/>
+        </attribute>
+        <optional>
+          <element name="delta_rho_fraction">
+            <a:documentation>The fractional change in the density across this phase change.
+
+This is the fractional change relative to the reference_density used with the eos.
+
+If activated the value given here is used.  
+Otherwise the negated expansivity for this field under a fluid linear eos is taken.
+
+Normaly the values used in the equation of state and here will be the same but this option is provided 
+for when they differ (e.g. non-dimensional simulations).</a:documentation>
+            <ref name="real"/>
+          </element>
+        </optional>
+        <optional>
+          <element name="clapeyron_slope">
+            <a:documentation>The Clapeyron slope of the phase change.
+
+If activated the value given here is used.  
+Otherwise we assume that a pressure/depth_dependent_clapeyron_phase_change_indicator
+diagnostic algorithm has been used for this field and taken the clapeyron slope from there.
+
+Normaly the values used in the algorithm and here will be the same but this option is provided 
+for when they differ (e.g. non-dimensional simulations).</a:documentation>
+            <ref name="real"/>
+          </element>
+        </optional>
+      </element>
+    </oneOrMore>
+    <element name="spatial_discretisation">
+      <a:documentation>Spatial discretisation options</a:documentation>
+      <element name="mass_terms">
+        <a:documentation>Options relating to the mass matrix</a:documentation>
+        <optional>
+          <element name="exclude_mass">
+            <a:documentation>Exclude the time derivative from the caluclation of the latent heating</a:documentation>
+            <ref name="comment"/>
+          </element>
+        </optional>
+      </element>
+    </element>
+    <element name="temporal_discretisation">
+      <a:documentation>Temporal discretisation options</a:documentation>
+      <element name="theta">
+        <a:documentation>Implicit/explicit control (THETA)
+ =0.  -- explicit
+ =0.5 -- Crank-Nicolson
+ =1.  -- implicit</a:documentation>
+        <ref name="real"/>
+      </element>
+    </element>
+    <optional>
+      <element name="solver">
+        <a:documentation>Consistent mass Galerkin projection of latent heating. Requires
+solver options.</a:documentation>
+        <ref name="linear_solver_options_sym"/>
+      </element>
+    </optional>
+  </define>
+  <define name="depth_dependent_clapeyron_phase_change_indicator">
+    <element name="algorithm">
+      <a:documentation>algorithm for calculating a temperature and depth dependent phase change indicator (0 to 1)
+using a Clausius-Clapeyron slope and a tanh function
+
+This mostly follows the description of Christensen &amp; Yuen, 1985.</a:documentation>
+      <attribute name="name">
+        <value>depth_dependent_clapeyron_phase_change_indicator</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single</value>
+      </attribute>
+      <element name="reference_depth">
+        <a:documentation>The depth of the phase change at the reference temperature (see below).
+
+NOTE that this is the depth from the top of the domain where the vertical coordinate is assumed 
+to be the last coordinate.
+
+NOTE that this will be scaled by rho0*g to convert it to a pressure.</a:documentation>
+        <ref name="real"/>
+      </element>
+      <element name="clapeyron_slope">
+        <a:documentation>The Clapeyron slope of the phase change.</a:documentation>
+        <ref name="real"/>
+      </element>
+      <element name="transition_width">
+        <a:documentation>The width of the phase transition.
+
+NOTE that this differs from the definition of Christensen &amp; Yuen, 1985 where the width used
+is actually a half width so equal to half this value.
+
+NOTE that this will be scaled by rho0*g to convert it to a pressure.</a:documentation>
+        <ref name="real"/>
+      </element>
+      <optional>
+        <element name="reference_temperature">
+          <a:documentation>The reference temperature at which the reference depth is assumed to lie.
+
+This is zero if not activated.</a:documentation>
+          <ref name="real"/>
+        </element>
+      </optional>
+    </element>
+  </define>
+  <define name="pressure_dependent_clapeyron_phase_change_indicator">
+    <element name="algorithm">
+      <a:documentation>algorithm for calculating a temperature and depth dependent phase change indicator (0 to 1)
+using a Clausius-Clapeyron slope and a tanh function
+
+This mostly follows the description of Christensen &amp; Yuen, 1985.</a:documentation>
+      <attribute name="name">
+        <value>pressure_dependent_clapeyron_phase_change_indicator</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single</value>
+      </attribute>
+      <element name="reference_pressure">
+        <a:documentation>The pressure of the phase change at the reference temperature (see below).</a:documentation>
+        <ref name="real"/>
+      </element>
+      <element name="clapeyron_slope">
+        <a:documentation>The Clapeyron slope of the phase change.</a:documentation>
+        <ref name="real"/>
+      </element>
+      <element name="transition_width">
+        <a:documentation>The width of the phase transition (in units of pressure).
+
+NOTE that this differs from the definition of Christensen &amp; Yuen, 1985 where the width used
+is actually a half width so equal to half this value and is in units of depth.</a:documentation>
+        <ref name="real"/>
+      </element>
+      <optional>
+        <element name="reference_temperature">
+          <a:documentation>The reference temperature at which the reference pressure is assumed to lie.
+
+This is zero if not activated.</a:documentation>
+          <ref name="real"/>
+        </element>
+      </optional>
+      <optional>
+        <element name="surface_temperature">
+          <a:documentation>The surface temperature for the adiabat term (added to temperature along with
+the CompressibleReferenceTemperature, if present).
+
+This is zero if not activated.</a:documentation>
+          <ref name="real"/>
+        </element>
+      </optional>
+    </element>
+  </define>
   <define name="adiabatic_heating_coefficient_algorithm">
     <element name="algorithm">
       <a:documentation>algorithm for calculating adiabatic_heating coefficient,
@@ -1865,6 +2265,36 @@ This is thus the full absorption term:</a:documentation>
       <attribute name="material_phase_support">
         <value>single </value>
       </attribute>
+    </element>
+  </define>
+  <define name="adiabatic_heating_plus_surface_temperature_absorption_algorithm">
+    <element name="algorithm">
+      <a:documentation>algorithm for calculating the adiabatic heating coefficient
+which is subsequently multiplied by T for output purposes.
+This is thus the full absorption term:</a:documentation>
+      <attribute name="name">
+        <value>adiabatic_heating_plus_surface_temperature_absorption</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single </value>
+      </attribute>
+      <element name="surface_temperature">
+        <a:documentation>The surface temperature for the adiabat term</a:documentation>
+        <ref name="real"/>
+      </element>
+    </element>
+  </define>
+  <define name="adiabatic_plus_latent_heating_algorithm">
+    <element name="algorithm">
+      <a:documentation>algorithm for calculating adiabatic and latent heating coefficient,
+needed when applying adiabatic heating absorption term.</a:documentation>
+      <attribute name="name">
+        <value>adiabatic_plus_latent_heating_coefficient</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single </value>
+      </attribute>
+      <ref name="latent_heating_options"/>
     </element>
   </define>
   <!-- Mass matrix -->
@@ -2000,6 +2430,89 @@ This field needs to be interpolated between adapts.</a:documentation>
       </optional>
     </element>
   </define>
+  <!-- surface algorithm -->
+  <define name="surface_horizontal_divergence_algorithm">
+    <element name="algorithm">
+      <a:documentation>Algorithm calculates the horizontally restricted divergence of
+a horizontal vector living on the specified surface.</a:documentation>
+      <attribute name="name">
+        <value>surface_horizontal_divergence</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single</value>
+      </attribute>
+      <ref name="vector_source_field"/>
+      <element name="surface_ids">
+        <ref name="integer_vector"/>
+      </element>
+    </element>
+  </define>
+  <define name="subtract_average_algorithm">
+    <element name="algorithm">
+      <a:documentation>Algorithm that subtracts the average from a scalar field. The integral
+of the resulting diagnostic field is therefore zero.
+
+This is useful for fields that are only defined up to a constant. During
+their solve it is typically best to remove this freedom by using the 
+"remove_null_space" option (which effectively introduces a mesh dependent 
+constraint on the sum of the nodal values). For diagnostic purposes however,
+it may be useful to impose the more natural constraint that the integrated
+average is zero.</a:documentation>
+      <attribute name="name">
+        <value>subtract_average</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single</value>
+      </attribute>
+      <ref name="scalar_source_field"/>
+    </element>
+  </define>
+  <define name="subtract_point_value_algorithm">
+    <element name="algorithm">
+      <a:documentation>Algorithm that subtracts the scalar field value in a certain point 
+from that same field. The resulting diagnostic field will therefore be zero in that point.
+
+This is useful for fields that are only defined up to a constant. It is similar
+to pinning using a reference node during the solve, except it is only imposed afterwards.
+This can be useful because during the solve it is typically better to pin the 
+arbitrary constant with the "remove_null_space" option instead.</a:documentation>
+      <attribute name="name">
+        <value>subtract_point_value</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single</value>
+      </attribute>
+      <ref name="scalar_source_field"/>
+      <element name="coordinates">
+        <ref name="real_dim_vector">
+          <a:documentation>coordinates of the point whose value should be subtracted</a:documentation>
+        </ref>
+      </element>
+    </element>
+  </define>
+  <define name="subtract_surface_average_algorithm">
+    <element name="algorithm">
+      <a:documentation>Algorithm that subtracts the surface average from a scalar field. The 
+surface integral of the resulting diagnostic field is therefore zero.
+
+This is useful for fields that are only defined up to a constant. During
+their solve it is typically best to remove this freedom by using the 
+"remove_null_space" option (which effectively introduces a mesh dependent 
+constraint on the sum of the nodal values). For diagnostic purposes however,
+it may be useful to impose a more natural constraint such as the surface 
+integral being zero.</a:documentation>
+      <attribute name="name">
+        <value>subtract_surface_average</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single</value>
+      </attribute>
+      <ref name="scalar_source_field"/>
+      <element name="surface_ids">
+        <ref name="integer_vector"/>
+      </element>
+    </element>
+  </define>
   <define name="scalar_diagnostic_algorithms">
     <ref name="viscous_dissipation_plus_surface_adiabat_algorithm"/>
   </define>
@@ -2019,7 +2532,13 @@ This field needs to be interpolated between adapts.</a:documentation>
     <ref name="tensor_second_invariant_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="strain_rate_second_invariant_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="temporalmin_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="surface_horizontal_divergence_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="scalar_temporalmax_algorithm"/>
@@ -2043,6 +2562,15 @@ This field needs to be interpolated between adapts.</a:documentation>
     <ref name="scalar_laplacian_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="subtract_surface_average_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="subtract_point_value_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="subtract_average_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="scalar_galerkin_projection_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
@@ -2061,6 +2589,9 @@ This field needs to be interpolated between adapts.</a:documentation>
     <ref name="projection_scalar_potential_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="phase_change_latent_heating"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="particle_reynolds_number_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
@@ -2068,6 +2599,9 @@ This field needs to be interpolated between adapts.</a:documentation>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="node_halo_diagnostic_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="mesh_quality_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="lumped_mass_smoothed_scalar_algorithm"/>
@@ -2103,13 +2637,25 @@ This field needs to be interpolated between adapts.</a:documentation>
     <ref name="div_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="depth_dependent_clapeyron_phase_change_indicator"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="pressure_dependent_clapeyron_phase_change_indicator"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="curl_2d_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="region_id_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="column_id_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="adiabatic_heating_coefficient_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="adiabatic_heating_plus_surface_temperature_absorption_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="adiabatic_heating_absorption_algorithm"/>

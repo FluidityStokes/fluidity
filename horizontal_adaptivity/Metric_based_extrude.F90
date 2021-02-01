@@ -2,24 +2,32 @@
 
 module hadapt_metric_based_extrude
 
-  use elements
-  use fields
-  use sparse_tools
-  use spud
-  use metric_tools
+  use fldebug
   use vector_tools
-  use meshdiagnostics
-  use halos
-  use vtk_interfaces
-  use hadapt_combine_meshes
   use global_parameters
+  use futils, only: present_and_true
+  use quadrature
+  use elements
+  use spud
   use quicksort
   use data_structures
-  use interpolation_module
+  use sparse_tools
+  use metric_tools
+  use parallel_fields
+  use fields
+  use meshdiagnostics
+  use vtk_interfaces
+  use halos
   use hadapt_advancing_front
+  use hadapt_combine_meshes
+  use interpolation_module
+
   implicit none
 
-  public :: metric_based_extrude, recombine_metric, get_1d_mesh, get_1d_tensor
+  private
+
+  public :: metric_based_extrude, recombine_metric, get_1d_mesh, get_1d_tensor,&
+       adapt_1d
 
   contains
 
@@ -46,7 +54,7 @@ module hadapt_metric_based_extrude
     !! want to adapt more than once with the same metric, so I won't make
     !! that assumption. Instead, we just assume that the background mesh
     !! is columnar.
-    type(vector_field), dimension(node_count(h_positions_new)) :: out_z_meshes
+    type(vector_field), dimension(:,:), allocatable :: out_z_meshes
     type(vector_field) :: back_z_mesh
     type(mesh_type) :: mesh
     type(scalar_field) :: back_sizing
@@ -56,7 +64,7 @@ module hadapt_metric_based_extrude
     integer :: quadrature_degree
     integer, parameter :: loc=2
     
-    integer :: i, column, h_old_ele, old_ele, prev_old_ele, old_face
+    integer :: i, column, h_old_ele, old_ele, prev_old_ele, old_face, nlayers
 
     type(csr_sparsity) :: columns_sparsity
     integer, dimension(:), pointer :: column_nodes
@@ -94,9 +102,11 @@ module hadapt_metric_based_extrude
       lmap => map
     else
       allocate(lmap(node_count(h_positions_new)))
-      lmap = get_element_mapping(h_positions_old, h_positions_new)
+      lmap = get_element_mapping(h_positions_old, h_positions_new, only_owned=.true.)
     end if
     
+    nlayers = 1
+    allocate(out_z_meshes(1:nlayers, 1:node_count(h_positions_new)))
     call allocate(top_surface_nodes)
     call allocate(bottom_surface_nodes)
 
@@ -291,7 +301,7 @@ module hadapt_metric_based_extrude
       call deallocate(column_faces)
       
       ! now let's adapt that and put the adapted mesh in out_z_meshes(column)...
-      call adapt_1d(back_z_mesh, back_sizing, oned_shape, out_z_meshes(column))
+      call adapt_1d(back_z_mesh, back_sizing, oned_shape, out_z_meshes(1, column))
       
       ! we're done with all that beautiful intersection work
       call deallocate(back_z_mesh)
@@ -315,7 +325,7 @@ module hadapt_metric_based_extrude
     call deallocate(oned_shape)
     do column=1,node_count(h_positions_new)
       if(node_owned(h_positions_new, column)) then
-        call deallocate(out_z_meshes(column))
+        call deallocate(out_z_meshes(1, column))
       end if
     end do
     

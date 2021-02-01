@@ -12,7 +12,7 @@
     </dimension>
     <mesh name="CoordinateMesh">
       <from_file file_name="0">
-        <format name="triangle"/>
+        <format name="gmsh"/>
         <stat>
           <include_in_stat/>
         </stat>
@@ -39,7 +39,7 @@
     </mesh>
     <mesh name="1">
       <from_file file_name="1">
-        <format name="triangle"/>
+        <format name="gmsh"/>
         <stat>
           <exclude_from_stat/>
         </stat>
@@ -48,7 +48,7 @@
     </mesh>
     <mesh name="2">
       <from_file file_name="2">
-        <format name="triangle"/>
+        <format name="gmsh"/>
         <stat>
           <exclude_from_stat/>
         </stat>
@@ -57,7 +57,7 @@
     </mesh>
     <mesh name="3">
       <from_file file_name="3">
-        <format name="triangle"/>
+        <format name="gmsh"/>
         <stat>
           <exclude_from_stat/>
         </stat>
@@ -66,7 +66,7 @@
     </mesh>
     <mesh name="4">
       <from_file file_name="4">
-        <format name="triangle"/>
+        <format name="gmsh"/>
         <stat>
           <exclude_from_stat/>
         </stat>
@@ -75,7 +75,7 @@
     </mesh>
     <mesh name="5">
       <from_file file_name="5">
-        <format name="triangle"/>
+        <format name="gmsh"/>
         <stat>
           <exclude_from_stat/>
         </stat>
@@ -84,7 +84,7 @@
     </mesh>
     <mesh name="6">
       <from_file file_name="6">
-        <format name="triangle"/>
+        <format name="gmsh"/>
         <stat>
           <exclude_from_stat/>
         </stat>
@@ -93,7 +93,7 @@
     </mesh>
     <mesh name="7">
       <from_file file_name="7">
-        <format name="triangle"/>
+        <format name="gmsh"/>
         <stat>
           <exclude_from_stat/>
         </stat>
@@ -102,7 +102,7 @@
     </mesh>
     <mesh name="8">
       <from_file file_name="8">
-        <format name="triangle"/>
+        <format name="gmsh"/>
         <stat>
           <exclude_from_stat/>
         </stat>
@@ -111,7 +111,7 @@
     </mesh>
     <mesh name="9">
       <from_file file_name="9">
-        <format name="triangle"/>
+        <format name="gmsh"/>
         <stat>
           <exclude_from_stat/>
         </stat>
@@ -149,12 +149,12 @@
   </timestepping>
   <physical_parameters/>
   <material_phase name="Fluid">
-    <vector_field name="Velocity" rank="1">
+    <vector_field rank="1" name="Velocity">
       <prescribed>
         <mesh name="VelocityMesh"/>
         <value name="WholeMesh">
           <constant>
-            <real_value shape="2" dim1="dim" rank="1">0.0 0.0</real_value>
+            <real_value rank="1" dim1="dim" shape="2">0.0 0.0</real_value>
           </constant>
         </value>
         <output>
@@ -166,9 +166,12 @@
         <detectors>
           <exclude_from_detectors/>
         </detectors>
+        <particles>
+          <exclude_from_particles/>
+        </particles>
       </prescribed>
     </vector_field>
-    <scalar_field name="Tracer" rank="0">
+    <scalar_field rank="0" name="Tracer">
       <prognostic>
         <mesh name="VelocityMesh"/>
         <equation name="AdvectionDiffusion"/>
@@ -214,7 +217,7 @@
         </solver>
         <initial_condition name="WholeMesh">
           <python>
-            <string_value lines="20" type="code" language="python">def val(x, t):
+            <string_value type="code" language="python" lines="20">def val(x, t):
 	import math
 	r = math.sqrt((x[0] - 0.5) ** 2 + (x[1] - 0.5) ** 2)
 
@@ -232,6 +235,9 @@
         <detectors>
           <include_in_detectors/>
         </detectors>
+        <particles>
+          <exclude_from_particles/>
+        </particles>
         <steady_state>
           <include_in_steady_state/>
         </steady_state>
@@ -245,7 +251,7 @@
     <prescribed_adaptivity>
       <adapt_interval>
         <python>
-          <string_value lines="20" type="code" language="python">def val(t):
+          <string_value type="code" language="python" lines="20">def val(t):
 	if "meshCounter" in persistent:
 		if persistent["meshCounter"] &gt;= 9:
 			return 0
@@ -258,7 +264,7 @@
       <mesh>
         <name>
           <python>
-            <string_value lines="20" type="code" language="python">def val(t):
+            <string_value type="code" language="python" lines="20">def val(t):
 	if "meshCounter" in persistent:
 		persistent["meshCounter"] += 1
 	else:

@@ -36,12 +36,14 @@ module petsc_solve_state_module
 !!< in state is fluidity specific and should therefore not be dealt with
 !!< in femtools/.
 use spud
+use fldebug
+use global_parameters, only: OPTION_PATH_LEN, FIELD_NAME_LEN
 use sparse_tools
+use parallel_fields
 use fields
-use solvers
 use sparse_tools_petsc
 use state_module
-use global_parameters, only: OPTION_PATH_LEN
+use solvers
 use field_options
 ! modules from assemble:
 use free_surface_module
@@ -358,7 +360,7 @@ contains
     integer, dimension(:), pointer:: p1_nodes, pn_nodes
     integer:: rows, columns
     integer:: i, j, k, node, ele
-    real:: val
+    real, dimension(p1_mesh%shape%loc):: N
     
     rows=nowned_nodes(pn_mesh)
     columns=node_count(p1_mesh)
@@ -405,10 +407,10 @@ contains
       do j=1, size(pn_nodes)
         node=pn_nodes(j)
         if (node_owned(pn_mesh, node) .and. .not. nodes_visited(node)) then
-          do k=1, size(p1_nodes)
-            val=eval_shape(p1_mesh%shape, k, local_coords(j, pn_mesh%shape))
-            do i=1, ncomponents
-              call addto(P, i, i, node, p1_nodes(k), val)
+          N = eval_shape(p1_mesh%shape, local_coords(j, pn_mesh%shape))
+          do i=1, ncomponents
+            do k=1, size(p1_nodes)
+              call addto(P, i, i, node, p1_nodes(k), N(k))
             end do
           end do
           nodes_visited(node)=.true.

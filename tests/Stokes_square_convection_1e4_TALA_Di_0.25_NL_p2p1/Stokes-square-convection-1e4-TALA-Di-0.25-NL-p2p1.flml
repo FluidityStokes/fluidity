@@ -13,7 +13,7 @@
     </dimension>
     <mesh name="CoordinateMesh">
       <from_file file_name="square-structured-linear">
-        <format name="triangle"/>
+        <format name="gmsh"/>
         <stat>
           <include_in_stat/>
         </stat>
@@ -121,7 +121,7 @@
           <mesh name="CoordinateMesh"/>
           <value name="WholeMesh">
             <constant>
-              <real_value shape="2" dim1="dim" rank="1">0.0 -1.0</real_value>
+              <real_value rank="1" dim1="dim" shape="2">0.0 -1.0</real_value>
             </constant>
           </value>
           <output>
@@ -133,6 +133,9 @@
           <detectors>
             <exclude_from_detectors/>
           </detectors>
+          <particles>
+            <exclude_from_particles/>
+          </particles>
         </prescribed>
       </vector_field>
     </gravity>
@@ -145,7 +148,7 @@
         </linearised_mantle>
       </compressible>
     </equation_of_state>
-    <scalar_field name="Pressure" rank="0">
+    <scalar_field rank="0" name="Pressure">
       <prognostic>
         <mesh name="CoordinateMesh"/>
         <spatial_discretisation>
@@ -214,13 +217,16 @@
         <detectors>
           <exclude_from_detectors/>
         </detectors>
+        <particles>
+          <exclude_from_particles/>
+        </particles>
         <steady_state>
           <exclude_from_steady_state/>
         </steady_state>
         <consistent_interpolation/>
       </prognostic>
     </scalar_field>
-    <scalar_field name="Density" rank="0">
+    <scalar_field rank="0" name="Density">
       <prognostic>
         <mesh name="VelocityMesh"/>
         <spatial_discretisation>
@@ -245,12 +251,12 @@
         </temporal_discretisation>
         <initial_condition name="WholeMesh">
           <python>
-            <string_value lines="20" type="code" language="python">def val(X,t):
+            <string_value type="code" language="python" lines="20">def val(X,t):
 
   import math
-  from constants import *
+  import constants as c
   depth = 1.0 - X[1]
-  rho_ref = rho_0 * math.exp((depth*Di)/gamma)
+  rho_ref = c.rho_0 * math.exp((depth*c.Di)/c.gamma)
   return rho_ref</string_value>
           </python>
         </initial_condition>
@@ -262,13 +268,16 @@
         <detectors>
           <include_in_detectors/>
         </detectors>
+        <particles>
+          <exclude_from_particles/>
+        </particles>
         <steady_state>
           <include_in_steady_state/>
         </steady_state>
         <consistent_interpolation/>
       </prognostic>
     </scalar_field>
-    <vector_field name="Velocity" rank="1">
+    <vector_field rank="1" name="Velocity">
       <prognostic>
         <mesh name="VelocityMesh"/>
         <equation name="LinearMomentum"/>
@@ -286,6 +295,7 @@
             <stress_terms>
               <stress_form/>
             </stress_terms>
+            <buoyancy/>
           </continuous_galerkin>
           <conservative_advection>
             <real_value rank="0">1.0</real_value>
@@ -317,12 +327,12 @@
         </solver>
         <initial_condition name="WholeMesh">
           <constant>
-            <real_value shape="2" dim1="dim" rank="1">0.0 0.0</real_value>
+            <real_value rank="1" dim1="dim" shape="2">0.0 0.0</real_value>
           </constant>
         </initial_condition>
         <boundary_conditions name="FreeSlipX">
           <surface_ids>
-            <integer_value shape="2" rank="1">1 2</integer_value>
+            <integer_value rank="1" shape="2">1 2</integer_value>
           </surface_ids>
           <type name="dirichlet">
             <align_bc_with_cartesian>
@@ -336,7 +346,7 @@
         </boundary_conditions>
         <boundary_conditions name="FreeSlipY">
           <surface_ids>
-            <integer_value shape="2" rank="1">3 4</integer_value>
+            <integer_value rank="1" shape="2">3 4</integer_value>
           </surface_ids>
           <type name="dirichlet">
             <align_bc_with_cartesian>
@@ -353,9 +363,9 @@
             <value name="WholeMesh">
               <anisotropic_symmetric>
                 <python>
-                  <string_value lines="20" type="code" language="python">def val(X, t):
-  from constants import *
-  mu = Di / Ra
+                  <string_value type="code" language="python" lines="20">def val(X, t):
+  import constants as c
+  mu = c.Di / c.Ra
   visc = numpy.zeros((2,2))
   for i in range(2):
     for j in range(2):
@@ -365,6 +375,9 @@
               </anisotropic_symmetric>
             </value>
             <output/>
+            <particles>
+              <exclude_from_particles/>
+            </particles>
           </prescribed>
         </tensor_field>
         <output/>
@@ -383,13 +396,16 @@
         <detectors>
           <include_in_detectors/>
         </detectors>
+        <particles>
+          <exclude_from_particles/>
+        </particles>
         <steady_state>
           <include_in_steady_state/>
         </steady_state>
         <consistent_interpolation/>
       </prognostic>
     </vector_field>
-    <scalar_field name="Temperature" rank="0">
+    <scalar_field rank="0" name="Temperature">
       <prognostic>
         <mesh name="VelocityMesh"/>
         <equation name="MantleAnelasticEnergy">
@@ -432,31 +448,31 @@
         </solver>
         <initial_condition name="WholeMesh">
           <python>
-            <string_value lines="20" type="code" language="python">def val(X,t):
+            <string_value type="code" language="python" lines="20">def val(X,t):
   import math
-  from constants import *
-  T_CMB  = 1.0 - (T_s*math.exp(Di) - T_s)
+  import constants as c
+  T_CMB  = 1.0 - (c.T_s*math.exp(c.Di) - c.T_s)
   T = (1 - X[0])*T_CMB
   return T</string_value>
           </python>
         </initial_condition>
         <boundary_conditions name="HotBase">
           <surface_ids>
-            <integer_value shape="1" rank="1">4</integer_value>
+            <integer_value rank="1" shape="1">4</integer_value>
           </surface_ids>
           <type name="dirichlet">
             <python>
-              <string_value type="code" lines="20" language="python">def val(X,t):
+              <string_value type="code" language="python" lines="20">def val(X,t):
   import math
-  from constants import *
-  T_CMB  = 1.0 - (T_s*math.exp(Di) - T_s)
+  import constants as c
+  T_CMB  = 1.0 - (c.T_s*math.exp(c.Di) - c.T_s)
   return T_CMB</string_value>
             </python>
           </type>
         </boundary_conditions>
         <boundary_conditions name="ColdTop">
           <surface_ids>
-            <integer_value shape="1" rank="1">3</integer_value>
+            <integer_value rank="1" shape="1">3</integer_value>
           </surface_ids>
           <type name="dirichlet">
             <constant>
@@ -466,7 +482,7 @@
         </boundary_conditions>
         <boundary_conditions name="Insulating">
           <surface_ids>
-            <integer_value shape="2" rank="1">1 2</integer_value>
+            <integer_value rank="1" shape="2">1 2</integer_value>
           </surface_ids>
           <type name="neumann">
             <constant>
@@ -484,6 +500,9 @@
               </isotropic>
             </value>
             <output/>
+            <particles>
+              <exclude_from_particles/>
+            </particles>
           </prescribed>
         </tensor_field>
         <scalar_field name="Source" rank="0">
@@ -495,6 +514,9 @@
             <detectors>
               <include_in_detectors/>
             </detectors>
+            <particles>
+              <exclude_from_particles/>
+            </particles>
           </diagnostic>
         </scalar_field>
         <scalar_field name="Absorption" rank="0">
@@ -506,28 +528,31 @@
             <detectors>
               <include_in_detectors/>
             </detectors>
+            <particles>
+              <exclude_from_particles/>
+            </particles>
           </diagnostic>
         </scalar_field>
         <output/>
         <stat>
-          <surface_integral type="gradient_normal" name="LeftH">
+          <surface_integral name="LeftH" type="gradient_normal">
             <surface_ids>
-              <integer_value shape="1" rank="1">1</integer_value>
+              <integer_value rank="1" shape="1">1</integer_value>
             </surface_ids>
           </surface_integral>
-          <surface_integral type="gradient_normal" name="RightH">
+          <surface_integral name="RightH" type="gradient_normal">
             <surface_ids>
-              <integer_value shape="1" rank="1">2</integer_value>
+              <integer_value rank="1" shape="1">2</integer_value>
             </surface_ids>
           </surface_integral>
-          <surface_integral type="gradient_normal" name="TopH">
+          <surface_integral name="TopH" type="gradient_normal">
             <surface_ids>
-              <integer_value shape="1" rank="1">3</integer_value>
+              <integer_value rank="1" shape="1">3</integer_value>
             </surface_ids>
           </surface_integral>
-          <surface_integral type="gradient_normal" name="BottomH">
+          <surface_integral name="BottomH" type="gradient_normal">
             <surface_ids>
-              <integer_value shape="1" rank="1">4</integer_value>
+              <integer_value rank="1" shape="1">4</integer_value>
             </surface_ids>
           </surface_integral>
         </stat>
@@ -537,24 +562,27 @@
         <detectors>
           <include_in_detectors/>
         </detectors>
+        <particles>
+          <exclude_from_particles/>
+        </particles>
         <steady_state>
           <include_in_steady_state/>
         </steady_state>
         <consistent_interpolation/>
       </prognostic>
     </scalar_field>
-    <scalar_field name="CompressibleReferenceDensity" rank="0">
+    <scalar_field rank="0" name="CompressibleReferenceDensity">
       <prescribed>
         <mesh name="VelocityMesh"/>
         <value name="WholeMesh">
           <python>
-            <string_value lines="20" type="code" language="python">def val(X,t):
+            <string_value type="code" language="python" lines="20">def val(X,t):
 
   import math
-  from constants import *
+  import constants as c
  
   depth = 1.0 - X[1]
-  rho_ref = rho_0 * math.exp((depth*Di)/gamma)
+  rho_ref = c.rho_0 * math.exp((depth*c.Di)/c.gamma)
   return rho_ref</string_value>
           </python>
         </value>
@@ -563,9 +591,12 @@
         <detectors>
           <exclude_from_detectors/>
         </detectors>
+        <particles>
+          <exclude_from_particles/>
+        </particles>
       </prescribed>
     </scalar_field>
-    <scalar_field name="IsobaricThermalExpansivity" rank="0">
+    <scalar_field rank="0" name="IsobaricThermalExpansivity">
       <prescribed>
         <mesh name="CoordinateMesh"/>
         <value name="WholeMesh">
@@ -578,9 +609,12 @@
         <detectors>
           <exclude_from_detectors/>
         </detectors>
+        <particles>
+          <exclude_from_particles/>
+        </particles>
       </prescribed>
     </scalar_field>
-    <scalar_field name="CompressibleEOSDensity" rank="0">
+    <scalar_field rank="0" name="CompressibleEOSDensity">
       <diagnostic>
         <algorithm name="Internal" material_phase_support="multiple"/>
         <mesh name="VelocityMesh"/>
@@ -592,23 +626,26 @@
         <detectors>
           <include_in_detectors/>
         </detectors>
+        <particles>
+          <exclude_from_particles/>
+        </particles>
         <steady_state>
           <include_in_steady_state/>
         </steady_state>
       </diagnostic>
     </scalar_field>
-    <scalar_field name="CompressibleReferenceTemperature" rank="0">
+    <scalar_field rank="0" name="CompressibleReferenceTemperature">
       <prescribed>
         <mesh name="VelocityMesh"/>
         <value name="WholeMesh">
           <python>
-            <string_value lines="20" type="code" language="python">def val(X,t):
+            <string_value type="code" language="python" lines="20">def val(X,t):
 
   import math
-  from constants import *  
+  import constants as c  
   depth = 1.0 - X[1]
   # Note - to ensure full T field lies between 0 and 1, we subtract (T_Surf/Delta_T) here:
-  temp_ref =  T_s*math.exp(depth*Di) - T_s
+  temp_ref =  c.T_s*math.exp(depth*c.Di) - c.T_s
   return temp_ref</string_value>
           </python>
         </value>
@@ -617,9 +654,12 @@
         <detectors>
           <exclude_from_detectors/>
         </detectors>
+        <particles>
+          <exclude_from_particles/>
+        </particles>
       </prescribed>
     </scalar_field>
-    <scalar_field name="IsobaricSpecificHeatCapacity" rank="0">
+    <scalar_field rank="0" name="IsobaricSpecificHeatCapacity">
       <prescribed>
         <mesh name="CoordinateMesh"/>
         <value name="WholeMesh">
@@ -632,9 +672,12 @@
         <detectors>
           <exclude_from_detectors/>
         </detectors>
+        <particles>
+          <exclude_from_particles/>
+        </particles>
       </prescribed>
     </scalar_field>
-    <scalar_field name="Adiabatic_Absorption" rank="0">
+    <scalar_field rank="0" name="Adiabatic_Absorption">
       <diagnostic>
         <algorithm name="adiabatic_heating_absorption" material_phase_support="single "/>
         <mesh name="P4Mesh"/>
@@ -646,20 +689,23 @@
         <detectors>
           <include_in_detectors/>
         </detectors>
+        <particles>
+          <exclude_from_particles/>
+        </particles>
         <steady_state>
           <include_in_steady_state/>
         </steady_state>
       </diagnostic>
     </scalar_field>
-    <scalar_field name="FullTemperature" rank="0">
+    <scalar_field rank="0" name="FullTemperature">
       <diagnostic>
-        <algorithm source_field_2_type="scalar" name="scalar_sum" source_field_1_name="Temperature" source_field_2_name="CompressibleReferenceTemperature" material_phase_support="single" source_field_1_type="scalar"/>
+        <algorithm name="scalar_sum" material_phase_support="single" source_field_1_name="Temperature" source_field_1_type="scalar" source_field_2_name="CompressibleReferenceTemperature" source_field_2_type="scalar"/>
         <mesh name="VelocityMesh"/>
         <output/>
         <stat>
-          <surface_integral type="gradient_normal" name="TopH">
+          <surface_integral name="TopH" type="gradient_normal">
             <surface_ids>
-              <integer_value shape="1" rank="1">3</integer_value>
+              <integer_value rank="1" shape="1">3</integer_value>
             </surface_ids>
           </surface_integral>
         </stat>
@@ -669,6 +715,9 @@
         <detectors>
           <include_in_detectors/>
         </detectors>
+        <particles>
+          <exclude_from_particles/>
+        </particles>
         <steady_state>
           <include_in_steady_state/>
         </steady_state>

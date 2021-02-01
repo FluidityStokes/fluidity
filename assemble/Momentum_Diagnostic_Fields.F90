@@ -27,19 +27,19 @@
 #include "fdebug.h"
 
 module momentum_diagnostic_fields
-  use FLDebug
-  use equation_of_state
+  use fldebug
+  use spud
+  use global_parameters, only: FIELD_NAME_LEN, OPTION_PATH_LEN
+  use futils
   use fields
   use state_module
-  use spud
-  use state_module
+  use equation_of_state
   use field_priority_lists
-  use global_parameters, only: FIELD_NAME_LEN, OPTION_PATH_LEN
-  use multimaterial_module
   use multiphase_module
-  use diagnostic_fields_wrapper_new
-  use k_epsilon
+  use k_epsilon, only: keps_momentum_diagnostics
   use initialise_fields_module
+  use multimaterial_module
+  use diagnostic_fields_wrapper_new
   implicit none
 
   interface calculate_densities
@@ -51,7 +51,7 @@ module momentum_diagnostic_fields
 
 contains
 
-  subroutine calculate_momentum_diagnostics(state, istate, submaterials, submaterials_istate)
+  subroutine calculate_momentum_diagnostics(state, istate, submaterials, submaterials_istate, submaterials_indices)
     !< A subroutine to group together all the diagnostic calculations that
     !< must happen before a momentum solve.
   
@@ -60,15 +60,18 @@ contains
     ! An array of submaterials of the current phase in state(istate).
     type(state_type), dimension(:), intent(inout) :: submaterials
     ! The index of the current phase (i.e. state(istate)) in the submaterials array
-    integer :: submaterials_istate
+    integer, intent(in) :: submaterials_istate
+    integer, dimension(:), intent(in) :: submaterials_indices
     
     ! Local variables  
+    type(state_type), dimension(size(state)) :: calculated_state
+    type(state_type), dimension(size(submaterials)) :: calculated_submaterials
     type(scalar_field), pointer :: bulk_density, buoyancy_density, sfield
-    type(vector_field), pointer :: vfield, x, velocity
-    type(vector_field) :: prescribed_source
+    type(vector_field), pointer :: vfield, velocity
     type(tensor_field), pointer :: tfield
     
-    integer :: stat, i
+    character(len=FIELD_NAME_LEN) :: sfield_name
+    integer :: stat, i, n_generic_scalar_fields, j
     logical :: gravity, diagnostic
     
     ewrite(1,*) 'Entering calculate_momentum_diagnostics'
@@ -78,8 +81,7 @@ contains
     call calculate_diagnostic_phase_volume_fraction(state)
 
     ! Calculate the density according to the eos... do the buoyancy density and the density
-    ! at the same time to save computations
-    ! don't calculate buoyancy if no gravity
+    ! at the same time to save computations. Do not calculate buoyancy if there is no gravity.
     gravity = have_option("/physical_parameters/gravity")
 
     ! submaterials_istate should always have a Velocity
@@ -88,6 +90,35 @@ contains
       ! for the swe there's no buoyancy term
       gravity = .false.
     end if
+
+    ! generic scalar field dependencies of the eos need to be updated before the density is calculated
+    do i = 1, size(state) ! really we should be looping over submaterials here but we need to pass state into
+                          ! calculate_diagnostic_variable and there's no way to relate the index in submaterials 
+                          ! to the one in state
+       n_generic_scalar_fields = option_count(trim(state(i)%option_path) // "/equation_of_state/fluids/linear" &
+                                                                         //"/generic_scalar_field_dependency")
+       do j = 1, n_generic_scalar_fields
+         call get_option(trim(state(i)%option_path) // "/equation_of_state/fluids/linear" &
+                                                    // "/generic_scalar_field_dependency[" // int2str(j-1) // "]/name", &
+                         sfield_name)
+         sfield => extract_scalar_field(state(i), sfield_name)
+         if (have_option(trim(sfield%option_path) // "/diagnostic")) then
+           call calculate_diagnostic_variable(state, i, sfield)
+         end if
+       end do
+
+       n_generic_scalar_fields = option_count(trim(state(i)%option_path) // "/equation_of_state/fluids/linearised_mantle" &
+                                                                         //"/generic_scalar_field_dependency")
+       do j = 1, n_generic_scalar_fields
+         call get_option(trim(state(i)%option_path) // "/equation_of_state/fluids/linearised_mantle" &
+                                                    // "/generic_scalar_field_dependency[" // int2str(j-1) // "]/name", &
+                         sfield_name)
+         sfield => extract_scalar_field(state(i), sfield_name)
+         if (have_option(trim(sfield%option_path) // "/diagnostic")) then
+           call calculate_diagnostic_variable(state, i, sfield)
+         end if
+       end do
+    end do
 
     bulk_density => extract_scalar_field(submaterials(submaterials_istate), 'Density', stat)
     diagnostic = .false.
@@ -116,10 +147,15 @@ contains
     vfield => extract_vector_field(submaterials(submaterials_istate), "VelocityAbsorption", stat = stat)
     if(stat == 0) then
       if(have_option(trim(vfield%option_path) // "/diagnostic")) then
+         ! Update VelocityAbsorption Field and all associated dependencies (dep) using the generic subroutine
+         ! calculate_diagnostic_variable_dep. To maximise efficiency, we track the various dependencies through a calculated mask (dep_states_mask),
+         ! which requires some copying back and forth between two arrays of states (one for all states the other for the phase/submaterials).
         if(have_option(trim(vfield%option_path) // "/diagnostic/algorithm::vector_python_diagnostic")) then
-          call calculate_diagnostic_variable(state, istate, vfield)
+          call calculate_diagnostic_variable_dep(state, istate, vfield, dep_states_mask=calculated_state)
+          call update_calculated_submaterials(calculated_submaterials, calculated_state, submaterials_indices)
         else
-          call calculate_diagnostic_variable(submaterials, submaterials_istate, vfield)
+          call calculate_diagnostic_variable_dep(submaterials, submaterials_istate, vfield, dep_states_mask=calculated_submaterials)
+          call update_calculated_state(calculated_state, calculated_submaterials, submaterials_indices)
         end if
       end if
     end if
@@ -127,33 +163,35 @@ contains
     vfield => extract_vector_field(submaterials(submaterials_istate), "VelocitySource", stat = stat)
     if(stat == 0) then
       if(have_option(trim(vfield%option_path) // "/diagnostic")) then
+         ! Update VelocitySource Field and all associated dependencies (dep) using the generic subroutine
+         ! calculate_diagnostic_variable_dep. To maximise efficiency, we track the various dependencies through a calculated mask (dep_states_mask),
+         ! which requires some copying back and forth between two arrays of states (one for all states the other for the phase/submaterials).
         if(have_option(trim(vfield%option_path) // "/diagnostic/algorithm::vector_python_diagnostic")) then
-          call calculate_diagnostic_variable(state, istate, vfield)
+          call calculate_diagnostic_variable_dep(state, istate, vfield, dep_states_mask=calculated_state)
+          call update_calculated_submaterials(calculated_submaterials, calculated_state, submaterials_indices)
         else
-          call calculate_diagnostic_variable(submaterials, submaterials_istate, vfield)
+          call calculate_diagnostic_variable_dep(submaterials, submaterials_istate, vfield, dep_states_mask=calculated_submaterials)
+          call update_calculated_state(calculated_state, calculated_submaterials, submaterials_indices)
         end if
       end if
     end if
-
-    do i = 1, size(state) ! really we should be looping over submaterials here but we need to pass state into
-                          ! calculate_diagnostic_variable and there's no way to relate the index in submaterials 
-                          ! to the one in state
-      tfield => extract_tensor_field(state(i),'MaterialViscosity',stat)
-      if (stat==0) then
-        if(have_option(trim(tfield%option_path) // "/diagnostic/algorithm::tensor_python_diagnostic")) then
-          call calculate_diagnostic_variable(state, i, tfield)
-        end if
-      end if
-    end do
 
     tfield => extract_tensor_field(submaterials(submaterials_istate),'Viscosity',stat)
     if (stat==0) then
       diagnostic = have_option(trim(tfield%option_path)//'/diagnostic')
       if(diagnostic) then
+         ! Update Viscosity Field and all associated dependencies (dep). In certain simulations, there is the need to
+         ! update the second invariant of the strain rate tensor and other fields before updating the viscosity (e.g. Non Newtonian
+         ! Stokes simulations). Calculate_diagnostic_variable_dep does so. To maximise efficiency, we track the various dependencies
+         ! through a calculated mask (dep_states_mask), which requires some copying back and forth of updated dependencies between
+         ! two arrays of states (one for all states the other for the phase/submaterials). The calculated dependencies are stored in
+         ! calculated_state and calculate_submaterials, respectively.
         if(have_option(trim(tfield%option_path) // "/diagnostic/algorithm::tensor_python_diagnostic")) then
-          call calculate_diagnostic_variable(state, istate, tfield)
+          call calculate_diagnostic_variable_dep(state, istate, tfield, dep_states_mask=calculated_state)
+          call update_calculated_submaterials(calculated_submaterials, calculated_state, submaterials_indices)
         else
-          call calculate_diagnostic_variable(submaterials, submaterials_istate, tfield)
+          call calculate_diagnostic_variable_dep(submaterials, submaterials_istate, tfield, dep_states_mask=calculated_submaterials)
+          call update_calculated_state(calculated_state, calculated_submaterials, submaterials_indices)
         end if
       end if
     end if
@@ -184,13 +222,54 @@ contains
        call keps_momentum_diagnostics(state(istate))
     end if
 
+    ! clean up
+    do i = 1, size(calculated_state)
+      call deallocate(calculated_state(i))
+    end do
+    do i = 1, size(calculated_submaterials)
+      call deallocate(calculated_submaterials(i))
+    end do
+
     ewrite(1,*) 'Exiting calculate_momentum_diagnostics'
     
   end subroutine calculate_momentum_diagnostics
 
+  subroutine update_calculated_state(calculated_state, calculated_submaterials, submaterials_indices)
+    ! When updating diagnostic dependencies, we track the various dependencies through a calculated mask. This requires some copying back and forth
+    ! between two arrays of states (one for all states the other for the phase/submaterials). This routine updates the state mask (target) by copying across
+    ! references from the submaterials mask (donor).
+
+    type(state_type), dimension(:), intent(inout) :: calculated_state
+    type(state_type), dimension(:), intent(in) :: calculated_submaterials
+    integer, dimension(:), intent(in) :: submaterials_indices
+
+    integer :: i
+
+    do i = 1, size(calculated_submaterials)
+      call insert(calculated_state(submaterials_indices(i)), calculated_submaterials(i))
+    end do
+
+  end subroutine update_calculated_state
+
+  subroutine update_calculated_submaterials(calculated_submaterials, calculated_state, submaterials_indices)
+    ! When updating diagnostic dependencies, we track the various dependencies through a calculated mask. This requires some copying back and forth
+    ! between two arrays of states (one for all states the other for the phase/submaterials). This routine updates the submaterials mask (target) by copying across
+    ! references from the state mask (donor).
+    type(state_type), dimension(:), intent(inout) :: calculated_submaterials
+    type(state_type), dimension(:), intent(in) :: calculated_state
+    integer, dimension(:), intent(in) :: submaterials_indices
+
+    integer :: i
+
+    do i = 1, size(calculated_submaterials)
+      call insert(calculated_submaterials(i), calculated_state(submaterials_indices(i)))
+    end do
+
+  end subroutine update_calculated_submaterials
+
   subroutine calculate_densities_single_state(state, buoyancy_density, bulk_density, &
                                               momentum_diagnostic)
-  
+
     type(state_type), intent(inout) :: state
     type(scalar_field), intent(inout), optional, target :: buoyancy_density
     type(scalar_field), intent(inout), optional, target :: bulk_density
@@ -213,13 +292,15 @@ contains
     type(scalar_field), intent(inout), optional, target :: bulk_density
     logical, intent(in), optional ::momentum_diagnostic
     
-    type(scalar_field) :: eosdensity
+    type(scalar_field) :: eosdensity, dummydrhodp
     type(scalar_field), pointer :: tmpdensity
     type(scalar_field) :: bulksumvolumefractionsbound
     type(scalar_field) :: buoyancysumvolumefractionsbound
+    type(scalar_field) :: reference_density_field, hydrostatic_rho0_field
     type(mesh_type), pointer :: mesh
     integer, dimension(size(state)) :: state_order
     logical :: subtract_out_hydrostatic, multimaterial
+    logical :: subtract_out_field, subtract_out_constant
     character(len=OPTION_PATH_LEN) :: option_path
     integer :: subtract_count, materialvolumefraction_count
     real :: hydrostatic_rho0, reference_density
@@ -239,8 +320,10 @@ contains
     
     if(present(bulk_density)) then
       mesh => bulk_density%mesh
-    else
+    else if (present(buoyancy_density)) then
       mesh => buoyancy_density%mesh
+    else
+      FLAbort("Called calculate_densities without asking for a density.")
     end if
     
     multimaterial = .false.
@@ -256,14 +339,15 @@ contains
         
         subtract_count = subtract_count + &
             option_count(trim(option_path)//'/fluids/linear/subtract_out_hydrostatic_level') + &
-            option_count(trim(option_path)//'/fluids/ocean_pade_approximation')
+            option_count(trim(option_path)//'/fluids/ocean_pade_approximation') + &
+            option_count(trim(option_path)//'/fluids/linearised_mantle/subtract_out_hydrostatic_level')
         
       end do
       if(size(state)/=materialvolumefraction_count) then
         FLExit("Multiple material_phases but not all of them have MaterialVolumeFractions.")
       end if
       if(subtract_count>1) then
-        FLExit("You can only select one material_phase to use the reference_density from to subtract out the hydrostatic level.")
+        FLExit("You can only select one material_phase to use the reference density from to subtract out the hydrostatic level.")
       end if
       
       multimaterial = .true.
@@ -291,12 +375,15 @@ contains
     
     boussinesq = .false.
     hydrostatic_rho0 = 0.0
+    subtract_out_constant = .false.
+    subtract_out_field = .false.
     state_loop: do i = 1, size(state)
   
       option_path='/material_phase::'//trim(state(state_order(i))%name)//'/equation_of_state'
       
-      if(have_option(trim(option_path)//'/fluids')) then
-        ! we have a fluids eos
+      if(have_option(trim(option_path)//'/fluids/linear') .or. &
+         have_option(trim(option_path)//'/fluids/ocean_pade_approximation')) then
+        ! we have a fluids eos (linear or ocean_pade_approximation)
       
         subtract_out_hydrostatic = &
           have_option(trim(option_path)//'/fluids/linear/subtract_out_hydrostatic_level') .or. &
@@ -318,6 +405,7 @@ contains
               ! if multimaterial we have to subtract out a single global value at the end
               ! so save it for now
               hydrostatic_rho0 = reference_density
+              subtract_out_constant = .true.
             end if
             call add_scaled_material_property(state(state_order(i)), buoyancy_density, eosdensity, &
                                               sumvolumefractionsbound=buoyancysumvolumefractionsbound, &
@@ -366,6 +454,60 @@ contains
         
         call deallocate(eosdensity)
         
+      else if(have_option(trim(option_path)//'/fluids/linearised_mantle')) then
+        ! we have another type of fluid (incompressible) eos (linearised_mantle)
+
+        subtract_out_hydrostatic = &
+          have_option(trim(option_path)//'/fluids/linearised_mantle/subtract_out_hydrostatic_level')
+        
+        ! here we use a "compressible" eos routine so allocate a dummy drhodp 
+        ! (not really used because we exclude the compressible component)
+        call allocate(dummydrhodp, mesh, "DummyChangeInDensityWithPressure")
+
+        call allocate(eosdensity, mesh, "LocalPerturbationDensity")
+
+        ! not using this eos in a compressible way
+        call compressible_eos_linearised_mantle(state(state_order(i)), dummydrhodp, density=eosdensity, &
+                                                reference_density=reference_density_field, &
+                                                exclude_pressure_buoyancy=.true.)
+
+        if(present(buoyancy_density)) then
+          if(multimaterial) then
+            if(subtract_out_hydrostatic) then
+              ! if multimaterial we have to subtract out a single global value at the end
+              ! so save it for now
+              hydrostatic_rho0_field = reference_density_field
+              call incref(hydrostatic_rho0_field)
+              subtract_out_field = .true.
+            end if
+            call add_scaled_material_property(state(state_order(i)), buoyancy_density, eosdensity, &
+                                              sumvolumefractionsbound=buoyancysumvolumefractionsbound, &
+                                              momentum_diagnostic=momentum_diagnostic)
+          else
+            call set(buoyancy_density, eosdensity)
+            if(subtract_out_hydrostatic) then
+              call addto(buoyancy_density, reference_density_field, scale=-1.0)
+            end if
+          end if
+          
+        end if
+        
+        if(present(bulk_density)) then
+          if(multimaterial) then
+            ! the perturbation density has already had the reference density added to it
+            ! if you're multimaterial
+            call add_scaled_material_property(state(state_order(i)), bulk_density, eosdensity, &
+                                              sumvolumefractionsbound=bulksumvolumefractionsbound, &
+                                              momentum_diagnostic=momentum_diagnostic)
+          else
+            call set(bulk_density, eosdensity)
+          end if
+        end if
+
+        call deallocate(dummydrhodp)
+        call deallocate(reference_density_field)
+        call deallocate(eosdensity)
+
       else
         ! we don't have a fluids eos
         
@@ -423,7 +565,15 @@ contains
     end do state_loop
     
     if(present(buoyancy_density)) then
-      if(multimaterial) call addto(buoyancy_density, -hydrostatic_rho0)
+      if(multimaterial) then
+        if (subtract_out_constant) then
+          call addto(buoyancy_density, -hydrostatic_rho0)
+        end if
+        if (subtract_out_field) then
+          call addto(buoyancy_density, hydrostatic_rho0_field, scale=-1.0)
+          call deallocate(hydrostatic_rho0_field)
+        end if
+      end if
       
       if(boussinesq) then
         ! the buoyancy density is being used in a Boussinesq eqn

@@ -2,11 +2,11 @@ default: input
 
 input: clean
 	gmsh -2 -o src/square.msh src/square.geo
-	../../bin/gmsh2triangle --2d src/square.msh
+	cp src/square.msh .
 
 clean: clean-mesh clean-run
 clean-mesh:
-	rm -f *.ele *.edge *.face *.node *.halo *.pvtu *.vtu *.detectors *.detectors.dat *.stat
+	rm -f *.ele *.edge *.face *.node *.halo *.pvtu *.vtu *.detectors.h5part *.stat
 	rm -f gmsh.log gmsh_err.log
 clean-run:
 	rm -f matrixdump matrixdump.info

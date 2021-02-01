@@ -4,18 +4,29 @@ module geometric_constraints_metric
 !!< This module wraps Gerard's geometric constraints
 !!< code and applied it during metric formation.
 
-  use vtk_interfaces
+  use spud
+  use fldebug
+  use mpi_interfaces, only: mpi_allreduce
+  use parallel_tools
   use metric_tools
+  use fields
+  use state_module
+  use field_options
+  use vtk_interfaces
   use merge_tensors
   use edge_length_module
-  use fields
+  use halos
+  use surfacelabels, only: FindGeometryConstraints
   use node_boundary
   use form_metric_field
   use gradation_metric
-  use parallel_tools
-  use halos
-  use state_module
+
   implicit none
+
+  private
+  public :: use_geometric_constraints_metric,&
+            initialise_geometric_constraints_metric,&
+	    form_geometric_constraints_metric
 
   logical :: use_geometric_constraints_metric = .false.
   logical :: geometric_constraints_initialised = .false.
@@ -30,14 +41,14 @@ module geometric_constraints_metric
     geometric_constraints_initialised = .true.
   end subroutine initialise_geometric_constraints_metric
 
-  subroutine form_geometric_constraints_metric(positions, error_metric, state)
+  subroutine form_geometric_constraints_metric(error_metric, state)
     type(tensor_field), intent(inout) :: error_metric !!< The metric formed so far
-    type(vector_field), intent(in) :: positions
     type(state_type), intent(in) :: state
 
     integer :: dim
     integer :: stat, stat2
 
+    type(vector_field) :: metric_positions
     real, dimension(error_metric%dim(1) * error_metric%dim(2) * node_count(error_metric)) :: geometric_edge_lengths_raw
     type(tensor_field) :: geometric_edge_lengths
     integer :: snloc, nselements
@@ -50,7 +61,6 @@ module geometric_constraints_metric
     integer::noits_max, ierr
 #endif
 
-    integer, dimension(:), pointer :: lsenlist
     logical :: debug_metric
     
     if(.not.use_geometric_constraints_metric) then
@@ -61,26 +71,23 @@ module geometric_constraints_metric
 
     snloc = face_loc(error_metric%mesh, 1)
     nselements = surface_element_count(error_metric%mesh)
-    allocate(lsenlist(1:nselements*snloc))
-    call getsndgln(error_metric%mesh, lsenlist)
     
     dim = error_metric%dim(1)
     ewrite(2,*) "++: Applying geometric constraints"
 
-    call FindGeometryConstraints(positions, geometric_edge_lengths_raw)
+    metric_positions = get_coordinate_field(state, error_metric%mesh)
+    call FindGeometryConstraints(metric_positions, geometric_edge_lengths_raw)
     
-    deallocate(lsenlist)
-
     geometric_edge_lengths = wrap_tensor_field(error_metric%mesh, geometric_edge_lengths_raw, "GeometricEdgeLengths")
 
     call bound_metric(geometric_edge_lengths, state)
     if (.not. isparallel()) then
-      call form_gradation_metric(positions, geometric_edge_lengths)
+      call form_gradation_metric(metric_positions, geometric_edge_lengths)
     else
       noits = 2
       grad_count = 0
       do while ((noits.gt.1).and.(grad_count.le.3))
-         call form_gradation_metric(positions, geometric_edge_lengths, noits)
+         call form_gradation_metric(metric_positions, geometric_edge_lengths, noits)
          call halo_update(error_metric)
          grad_count = grad_count + 1
 #ifdef HAVE_MPI
@@ -95,7 +102,7 @@ module geometric_constraints_metric
       call allocate(geometric_edgelen, error_metric%mesh, "Geometric edge lengths")
       call get_edge_lengths(geometric_edge_lengths, geometric_edgelen)
       call get_edge_lengths(error_metric, edgelen)
-      call vtk_write_fields(trim("geometric_constraints_metric"), adaptcnt, positions, positions%mesh, &
+      call vtk_write_fields(trim("geometric_constraints_metric"), adaptcnt, metric_positions, metric_positions%mesh, &
                              sfields=(/edgelen, geometric_edgelen/), tfields=(/error_metric, geometric_edge_lengths/))
       call deallocate(edgelen)
       call deallocate(geometric_edgelen)
@@ -104,6 +111,8 @@ module geometric_constraints_metric
     call merge_tensor_fields(error_metric, geometric_edge_lengths)
 
     call deallocate(geometric_edge_lengths)
+    call deallocate(metric_positions)
+
   end subroutine form_geometric_constraints_metric
 
 end module geometric_constraints_metric

@@ -48,6 +48,14 @@
 #include "vtkmeshio.h"
 
 
+// deal with changes to GetCellPoints interface in vtk9
+#if VTK_MAJOR_VERSION >= 9
+#define GetCellPointer const vtkIdType
+#else
+#define GetCellPointer vtkIdType
+#endif
+
+
 using namespace std;
 
 void AddToFront(vtkIdType *front, vtkIdType i)
@@ -87,7 +95,7 @@ char FaceCutType(vtkUnstructuredGrid *dataSet, int *hexcut,
                         vtkIdType i,vtkIdList *fcpts)
 {
     vtkIdType npts;
-    vtkIdType *pts;
+    GetCellPointer *pts;
     int locpos[4];
     int fcid=0,maxpos=0,d1=0,d2=0;
     dataSet->GetCellPoints(i,npts,pts);
@@ -342,7 +350,7 @@ REAL CheckTetVol(vtkIdType p1, vtkIdType p2, vtkIdType p3, vtkIdType p4,
   return (REAL) vol;
 }
 
-int AddOneLine(vtkIdType *pts, int cellcnt, int *ENLBas, int *ENList,
+int AddOneLine(GetCellPointer *pts, int cellcnt, int *ENLBas, int *ENList,
                REAL *X, REAL *Y, REAL *Z )
 {
   if( ENLBas != NULL && ENList != NULL ) {
@@ -354,7 +362,7 @@ int AddOneLine(vtkIdType *pts, int cellcnt, int *ENLBas, int *ENList,
   return cellcnt+1;
 }
 
-int AddOneAnything(vtkIdType *pts, int cellcnt, int *ENLBas, int *ENList,
+int AddOneAnything(GetCellPointer *pts, int cellcnt, int *ENLBas, int *ENList,
                REAL *X, REAL *Y, REAL *Z, int nloc)
 // general version only works for elements that don't need reordering
 {
@@ -367,7 +375,7 @@ int AddOneAnything(vtkIdType *pts, int cellcnt, int *ENLBas, int *ENList,
   return cellcnt+1;
 }
 
-int AddOneTri(vtkIdType *pts, int cellcnt, int *ENLBas, int *ENList,
+int AddOneTri(GetCellPointer *pts, int cellcnt, int *ENLBas, int *ENList,
               REAL *X, REAL *Y, REAL *Z )
 {
   if( ENLBas != NULL && ENList != NULL ) {
@@ -379,7 +387,7 @@ int AddOneTri(vtkIdType *pts, int cellcnt, int *ENLBas, int *ENList,
   return cellcnt+1;
 }
 
-int AddOneQuad(vtkIdType *pts, int cellcnt, int *ENLBas, int *ENList,
+int AddOneQuad(GetCellPointer *pts, int cellcnt, int *ENLBas, int *ENList,
                REAL *X, REAL *Y, REAL *Z )
 {
   if( ENLBas != NULL && ENList != NULL ) {
@@ -394,7 +402,7 @@ int AddOneQuad(vtkIdType *pts, int cellcnt, int *ENLBas, int *ENList,
   return cellcnt+1;
 }
 
-int AddOneHexa(vtkIdType *pts, int cellcnt, int *ENLBas, int *ENList,
+int AddOneHexa(GetCellPointer *pts, int cellcnt, int *ENLBas, int *ENList,
                REAL *X, REAL *Y, REAL *Z )
 {
   if( ENLBas != NULL && ENList != NULL ) {
@@ -411,7 +419,7 @@ int AddOneHexa(vtkIdType *pts, int cellcnt, int *ENLBas, int *ENList,
   return cellcnt+1;
 }
 
-int AddOneWedge(vtkIdType *pts, int cellcnt, int *ENLBas, int *ENList,
+int AddOneWedge(GetCellPointer *pts, int cellcnt, int *ENLBas, int *ENList,
                 REAL *X, REAL *Y, REAL *Z )
 {
   if( ENLBas != NULL && ENList != NULL ) {
@@ -550,6 +558,7 @@ int readVTKFile(const char * const filename,
       return -1;
     }else
       dataSet = read1->GetUnstructuredGridOutput();
+      read1->Update();
   } else if( strncmp(ext,".vtu",4)==0 ) {
     //printf("Reading from VTK XML file: %s\n",filename);
     read2 = vtkXMLUnstructuredGridReader::New();
@@ -560,6 +569,7 @@ int readVTKFile(const char * const filename,
     read2->SetFileName(filename);
     //reader->SetScalarsName("temp");
     dataSet = read2->GetOutput();
+    read2->Update();
   }else{
     const char * const pext = filename + strlen(filename) - 5;
     if( strncmp(pext,".pvtu",5)==0 ) {
@@ -572,6 +582,7 @@ int readVTKFile(const char * const filename,
       read3->SetFileName(filename);
       //reader->SetScalarsName("temp");
       dataSet = read3->GetOutput();
+      read3->Update();
     }else{
       cerr<<"ERROR: Filename: "<<filename<<endl
           <<"Don't know what this file is (should end in .vtk, .vtu or .pvtu)\n";
@@ -589,7 +600,6 @@ int readVTKFile(const char * const filename,
     return -1;
   }
 
-  dataSet->Update();
   vtkIdType nnodes = dataSet->GetNumberOfPoints();
   if( nnodes==0 ) {
     cerr<<"ERROR: Something went wrong (got no nodes) - aborting\n";
@@ -612,7 +622,7 @@ int readVTKFile(const char * const filename,
   
   {
     vtkIdType npts;
-    vtkIdType *pts;
+    GetCellPointer *pts;
     dataSet->GetCellPoints(0,npts,pts);
     if(npts==8 && onlytets!=0) ntets = 6*ncells;
   }
@@ -641,8 +651,8 @@ int readVTKFile(const char * const filename,
           if( addall==0 ) {
             Field_Info *newfld=fieldlst, *gotfld=NULL;
             while( newfld!=NULL ) {
-              if( strlen(&(newfld->name))==l ) {
-                if( strncmp(&(newfld->name),T->GetName(),l)==0 ) {
+              if( strlen(newfld->name)==l ) {
+                if( strncmp(newfld->name,T->GetName(),l)==0 ) {
                   gotfld = newfld;
                   gotfld->ncomponents = k;
                   gotfld->identifier = i;
@@ -664,9 +674,10 @@ int readVTKFile(const char * const filename,
               0;
               //cerr<<" (only for output)\n";
           } else {
-            Field_Info *newfld=(Field_Info *)malloc(l+sizeof(Field_Info));
+            Field_Info *newfld=(Field_Info *)malloc(sizeof(Field_Info));
             assert(newfld!=NULL);
-            strcpy(&(newfld->name),T->GetName());
+            newfld->name = (char*)malloc(l+1);
+            strcpy(newfld->name, T->GetName());
             newfld->interperr = 1.0;
             newfld->ncomponents = k;
             newfld->next = NULL;
@@ -712,8 +723,8 @@ int readVTKFile(const char * const filename,
           if( addall==0 ) {
             Field_Info *newfld=fieldlst, *gotfld=NULL;
             while( newfld!=NULL ) {
-              if( strlen(&(newfld->name))==l ) {
-                if( strncmp(&(newfld->name),P->GetName(),l)==0 ) {
+              if( strlen(newfld->name)==l ) {
+                if( strncmp(newfld->name,P->GetName(),l)==0 ) {
                   gotfld = newfld;
                   gotfld->ncomponents = k;
                   gotfld->identifier = i;
@@ -735,9 +746,10 @@ int readVTKFile(const char * const filename,
               0;
               //cerr<<" (only for output)\n";
           } else {
-            Field_Info *newfld=(Field_Info *)malloc(l+sizeof(Field_Info));
+            Field_Info *newfld=(Field_Info *)malloc(sizeof(Field_Info));
             assert(newfld!=NULL);
-            strcpy(&(newfld->name),P->GetName());
+            newfld->name = (char*)malloc(l+1);
+            strcpy(newfld->name, P->GetName());
             newfld->interperr = 1.0;
             newfld->ncomponents = k;
             newfld->next = NULL;
@@ -767,7 +779,7 @@ int readVTKFile(const char * const filename,
 //      printf("3D element types: TET=%d  WEDGE=%d  HEX=%d\n",VTK_TETRA,VTK_WEDGE,VTK_HEXAHEDRON);
       for(vtkIdType i=0; i<ncells; i++) {
         vtkIdType npts=0, ct;
-        vtkIdType *pts;
+        GetCellPointer *pts;
         ct = dataSet->GetCellType(i);
         dataSet->GetCellPoints(i,npts,pts);
         if( npts == 2 ) {
@@ -846,7 +858,7 @@ int readVTKFile(const char * const filename,
       used[i] = 0;
     for(vtkIdType i=0; i<ncells; i++) {
       vtkIdType npts=0, ct;
-      vtkIdType *pts;
+      GetCellPointer *pts;
       ct = dataSet->GetCellType(i);
       dataSet->GetCellPoints(i,npts,pts);
       if( curdim == 1 ) {
@@ -882,11 +894,12 @@ int readVTKFile(const char * const filename,
       // renumber the cell data
       for(vtkIdType i=0; i<ncells; i++) {
         vtkIdType npts;
-        vtkIdType *pts;
+        GetCellPointer *pts;
+	vtkIdType upts[20];
         dataSet->GetCellPoints(i,npts,pts);
         for(vtkIdType j=0; j<npts; j++)
-          pts[j] = used[pts[j]]-1;
-        dataSet->ReplaceCell(i,npts,pts);
+          upts[j] = used[pts[j]]-1;
+        dataSet->ReplaceCell(i,npts,upts);
       }
     }
     {
@@ -997,7 +1010,7 @@ int readVTKFile(const char * const filename,
 //    printf("Counting allowable %dd cells...\n",*ndim);
     for(vtkIdType i=0; i<ncells; i++){
       vtkIdType npts;
-      vtkIdType *pts;
+      GetCellPointer *pts;
       dataSet->GetCellPoints(i,npts,pts);
       if( curdim == 3 ) {
         if( npts == 4 ) {
@@ -1047,7 +1060,7 @@ int readVTKFile(const char * const filename,
       ENLBS[0] = 0;
       for(vtkIdType i=0; i<ncells; i++){
         vtkIdType npts;
-        vtkIdType *pts;
+        GetCellPointer *pts;
         dataSet->GetCellPoints(i,npts,pts);
         if( curdim == 3 ) {
           if( npts == 4 ) {
@@ -1131,7 +1144,7 @@ int readVTKFile(const char * const filename,
         hexcut[k*6] = 0;
       for(vtkIdType k=0; k<ncells; k++){
         vtkIdType npts;
-        vtkIdType *pts;
+        GetCellPointer *pts;
         vtkIdType i = NextFrontCell(front);
         dataSet->GetCellPoints(i,npts,pts);
         assert(npts==8);
@@ -1286,11 +1299,18 @@ int readVTKFile(const char * const filename,
   }
 
   if(onlyinfo==0) {
-    if(read1) read1->ReleaseDataFlagOn();
-    if(read2) read2->ReleaseDataFlagOn();
-    if(read3) read3->ReleaseDataFlagOn();
-    dataSet->ReleaseDataFlagOn();
-    dataSet->Update();
+    if (read1) {
+      read1->ReleaseDataFlagOn();
+      read1->Update();
+    }
+    if (read2) {
+      read2->ReleaseDataFlagOn();
+      read2->Update();
+    }
+    if (read3) {
+      read3->ReleaseDataFlagOn();
+      read3->Update();
+    }
   }
 
   //dataSet->Delete();
@@ -1350,13 +1370,14 @@ int fgetvtksizes(char *fortname, int *namelen,
   while( fieldlst != NULL ) {
     Field_Info *newfld = fieldlst;
     fieldlst = newfld->next;
-    char *thisname=&(newfld->name);
+    char *thisname=newfld->name;
     int l = strlen(thisname);
     if( newfld->ncomponents > 9 )
       l+=2;
     else if( newfld->ncomponents > 1 )
       l++;
     if( l > *maxlen )  *maxlen = l;
+    free(newfld->name);
     free(newfld);
   }
 
@@ -1413,7 +1434,7 @@ int freadvtkfile(char *fortname, int *namelen,
   while( fieldlst != NULL ) {
     Field_Info *newfld = fieldlst;
     fieldlst = newfld->next;
-    char *thisname=&(newfld->name);
+    char *thisname=newfld->name;
     int l = strlen(thisname), j=0;
     if( l>*maxlen )
       l = *maxlen;
@@ -1439,6 +1460,7 @@ int freadvtkfile(char *fortname, int *namelen,
         NAMES[ipos+i] = 32;
       ipos += *maxlen;
     }
+    free(newfld->name);
     free(newfld);
   }
 

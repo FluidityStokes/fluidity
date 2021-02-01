@@ -3,9 +3,11 @@
 module fetools
   !!< Module containing general tools for discretising Finite Element problems.
 
+  use fldebug
   use elements
-  use transform_elements
+  use fields_data_types
   use fields_base
+  use transform_elements
   implicit none
 
   !! X, Y and Z indices.
@@ -24,7 +26,11 @@ module fetools
      module procedure integral_element_scalar, integral_element_vector, integral_element_scalars
   end interface
 
-  private :: norm2_element
+  interface dot_integral_element
+     module procedure dot_integral_element_vector
+  end interface
+
+  private :: norm2_element, dot_integral_element_vector
   private :: integral_element_scalar, integral_element_vector, integral_element_scalars
 
 contains
@@ -861,6 +867,25 @@ contains
     integral=matmul(matmul(ele_val(field, ele), field%mesh%shape%n), detwei)
 
   end function integral_element_vector
+
+  function dot_integral_element_vector(fieldA, fieldB, X, ele) result&
+       & (integral)
+    !!< Return the integral of dot(fieldA, fieldB) over the element ele
+    type(vector_field), intent(in) :: fieldA, fieldB
+    ! positions field
+    type(vector_field), intent(in) :: X
+    ! The number of the current element
+    integer, intent(in) :: ele
+    
+    real :: integral
+
+    real, dimension(ele_ngi(fieldA, ele)) :: detwei
+    
+    call transform_to_physical(X, ele, detwei=detwei)
+    
+    integral = sum(sum(ele_val_at_quad(fieldA, ele) * ele_val_at_quad(fieldB, ele), dim=1)*detwei)
+
+  end function dot_integral_element_vector
 
   function integral_element_scalars(fields, X, ele) result&
        & (integral)

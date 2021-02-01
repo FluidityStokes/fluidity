@@ -29,13 +29,13 @@
 
 #include "confdefs.h"
 
-#ifdef HAVE_MPI
-#include <mpi.h>
-#endif
-
 #ifdef HAVE_VTK
 
 #include <vtk.h>
+
+#if VTK_MAJOR_VERSION>6
+#define VTK_USES_MPI 1
+#endif
 
 #include <vector>
 #include <string>
@@ -158,6 +158,7 @@ extern "C" {
 
     vtkIdType cell[20];
     int *elem = enlist;
+    dataSet->Allocate(ecnt);
     for(unsigned i=0; i<ecnt; i++){
       // Node ordering blues
       if(elementTypes[i] == 9){
@@ -217,6 +218,7 @@ extern "C" {
 
     vtkIdType cell[20];
     int *elem = enlist;
+    dataSet->Allocate(ecnt);
     for(unsigned i=0; i<ecnt; i++){
       // Node ordering blues
       if(elementTypes[i] == 9){
@@ -669,8 +671,11 @@ extern "C" {
     writer->SetDataModeToAppended();
     writer->EncodeAppendedDataOff();
 
-
+#if VTK_MAJOR_VERSION <= 5
     writer->SetInput(dataSet);
+#else
+    writer->SetInputData(dataSet);
+#endif
   
     writer->SetCompressor(compressor);
     compressor->Delete();
@@ -717,7 +722,11 @@ extern "C" {
     writer->SetGhostLevel(1);
     writer->SetStartPiece(*rank);
     writer->SetEndPiece(*rank);
+#if VTK_MAJOR_VERSION <= 5
     writer->SetInput(dataSet);
+#else
+    writer->SetInputData(dataSet);
+#endif
     writer->SetCompressor(compressor);
     
     compressor->Delete();
@@ -725,7 +734,18 @@ extern "C" {
     // Set to true binary format (not encoded as base 64)
     writer->SetDataModeToAppended();
     writer->EncodeAppendedDataOff();
-
+#ifdef VTK_USES_MPI
+    // From version 6.3 VTK uses parallel communication to decide
+    // which files have been written
+    if (!writer->GetController()) {
+      vtkMPIController *cont = vtkMPIController::New();
+      cont->SetCommunicator(vtkMPICommunicator::GetWorldCommunicator());
+      writer->SetController(cont);
+    }
+    writer->SetWriteSummaryFile(true);
+#else
+    writer->SetWriteSummaryFile((*rank)==0);
+#endif
     
     writer->Write();
     writer->Delete();
@@ -734,9 +754,11 @@ extern "C" {
     dataSet->Delete();
     dataSet = NULL;
   
-    if(is_pvtu && (*rank)==0){
-      rename(filename.c_str(), fl_vtkFileName.c_str());
-      pvtu_fix_path(fl_vtkFileName.c_str(), basename.c_str());
+    if(is_pvtu){
+      if((*rank)==0){
+        rename(filename.c_str(), fl_vtkFileName.c_str());
+        pvtu_fix_path(fl_vtkFileName.c_str(), basename.c_str());
+      }
     }
 
     return;
@@ -747,25 +769,7 @@ extern "C" {
   */
   void vtkpclose(int *rank, int *npartitions){
 
-#ifdef HAVE_MPI
-    // Interleaving is experimental - play at your own risk
-#define INTERLEAVE_IO_TRESHOLD 64000
-#define CORES_PER_NODE 8
-    if(*npartitions>INTERLEAVE_IO_TRESHOLD){
-      int nwrites = (int)(sqrt(*npartitions)+0.5);
-      
-      for(int lrank=0; lrank<nwrites; lrank++){
-        if((*rank)%nwrites==lrank){
-          _vtkpclose_nointerleave(rank, npartitions);
-        }
-        MPI::COMM_WORLD.Barrier();
-      }
-    }else{
-#endif
-      _vtkpclose_nointerleave(rank, npartitions);
-#ifdef HAVE_MPI
-    }
-#endif
+    _vtkpclose_nointerleave(rank, npartitions);
     return;
   }
   

@@ -49,7 +49,7 @@ from math import sqrt, log
 file1 = 'stokes-A.stat'
 file2 = 'stokes-B.stat'
 
-print file1, "->", file2
+print(file1, "->", file2)
 
 stat1 = stat(file1)
 stat2 = stat(file2)
@@ -58,17 +58,17 @@ error_l2_1 = sqrt(stat1["Fluid"]["DifferenceSquared"]["surface_integral%TopSurfa
 error_l2_2 = sqrt(stat2["Fluid"]["DifferenceSquared"]["surface_integral%TopSurfaceL2Norm"][-1])
 convergence_l2 = log((error_l2_1/error_l2_2), 2)
 
-print '  convergence_l2 = ', convergence_l2
-print '    error_l2_1 = ', error_l2_1
-print '    error_l2_2 = ', error_l2_2
+print('  convergence_l2 = ', convergence_l2)
+print('    error_l2_1 = ', error_l2_1)
+print('    error_l2_2 = ', error_l2_2)
 
 error_linf_1 = stat1["Fluid"]["FreeSurfaceDifference"]["max"][-1]
 error_linf_2 = stat2["Fluid"]["FreeSurfaceDifference"]["max"][-1]
 convergence_linf = log((error_linf_1/error_linf_2), 2)
 
-print '  convergence_linf = ', convergence_linf
-print '    error_linf_1 = ', error_linf_1
-print '    error_linf_2 = ', error_linf_2
+print('  convergence_linf = ', convergence_linf)
+print('    error_linf_1 = ', error_linf_1)
+print('    error_linf_2 = ', error_linf_2)
 
 convergenceAB = [convergence_l2, convergence_linf]
 </variable>

@@ -199,6 +199,28 @@ prognostic_scalar_field =
             ## Option to set a unique isotropic background diffusivity for this field.
             element background_diffusivity { real }?
          }|
+         ## Turning this option on enables a turbulent diffusion term for this field when using LES.
+         ## This is only implemented for cases where velocity is discontinuous and this scalar field is discontiuous.
+         ##
+         ## The turbulent diffusion term is identical to the molecular diffusion term but takes its value of diffusivity
+         ## from the LES eddy viscosity, scaled by a Prandtl number. 
+         ##
+         ## k_T = nu_T / Pr
+         ##
+         ## where k_T = turbulent diffusivity, nu_T = eddy viscosity and Pr = prandtl number
+         ##
+         ## See "Experimental and large eddy simulation results for the purging of salt water from a cavity by an 
+         ## overflow of fresh water", Kirkpatrick 2005
+         element subgridscale_parameterisation {
+            attribute name { "LES"},
+            ## Ratio of turbulent momentum diffusivity to turbulent molecular diffusivity. 
+            ## Default = 1.0, i.e. SGS viscosity = SGS diffusivity
+            element PrandtlNumber { real }?,
+            ## Richardson number (Ri) dependent SGS diffusivity. Specify the critical Ri number. 
+            ##
+            ## See Stevens et al., 1998; Dornbrack, 1998, Ozgokmen et. al. 2007
+            element Ri_c { real }?
+         }|
          element subgridscale_parameterisation {
             attribute name { "prescribed_diffusivity"}
          }         
@@ -266,7 +288,8 @@ prognostic_scalar_field =
                   scalar_python_diagnostic_algorithm |
                   internal_algorithm |
                   viscous_dissipation_algorithm |
-                  viscous_dissipation_plus_surface_adiabat_algorithm
+                  viscous_dissipation_plus_surface_adiabat_algorithm |
+                  viscous_dissipation_plus_surface_adiabat_and_latent_heating_algorithm
                ),
                ## Add the source field directly to the 
                ## matrix system right hand side. To be 
@@ -294,7 +317,9 @@ prognostic_scalar_field =
                (
                   scalar_python_diagnostic_algorithm |
                   internal_algorithm |
-		  adiabatic_heating_coefficient_algorithm
+                  adiabatic_heating_coefficient_algorithm |
+                  phase_change_latent_heating_absorption |
+                  adiabatic_plus_latent_heating_algorithm
                ),
                diagnostic_scalar_field_no_adapt
             }
@@ -326,11 +351,11 @@ prognostic_scalar_field =
             }
          )
       }?,
-      porosity_include?,
       prognostic_scalar_output_options,
       prognostic_scalar_stat_options,
       scalar_convergence_options,
       prognostic_detector_options,
+      prognostic_particle_options,
       scalar_steady_state_options,
       adaptivity_options_prognostic_scalar_field,
       interpolation_algorithm_scalar,
@@ -720,7 +745,18 @@ prognostic_velocity_field =
                    element activation_energy {
                     real
                    }
-               }?
+               }?,
+               ## Options dealing with buoyancy
+               element buoyancy {
+                 ## Align the gravity opposite to the radial direction (-(x,y) in 2d, -(x,y,z) in 3d)
+                 ## and evaluate it at the gauss points.
+                 ##
+                 ## NOTE: this ignores whatever values are set under /physical_parameters/gravity/vector_field::GravityDirection 
+                 ## for the buoyancy terms.
+                 element radial_gravity_direction_at_gauss_points {
+                   comment
+                 }?
+               }
             }|
             ## Discontinuous galerkin formulation. Confusingly it is not necessary to provide
             ## a discontinuous velocity field for this to work!
@@ -919,6 +955,81 @@ prognostic_velocity_field =
                   element integrate_conservation_term_by_parts {
                     empty
                   }?
+               },
+               ## Large-eddy simulation (LES) models. Currently restricted to use in incompressible flow cases, where the discrete velocity is divergence-free and the eddy viscosity tensor is traceless.
+               ## Also restricted to the Bassi-Rebay viscosity scheme which must be in partial stress form
+               element les_model{
+                  ## literature symbol: Cs
+                  ##
+                  ## suggested value 0.1
+                  element smagorinsky_coefficient {
+                    real
+                  },
+                  ## In adaptive simulations you may want to prescribe a filter width to use throught the domain
+                  element scalar_field {
+                     attribute rank { "0" },
+                     attribute name { "FilterWidth" },
+                     (
+                        element prescribed {
+                           velocity_mesh_choice,
+                           prescribed_scalar_field
+                        }
+                     )
+                  }?,
+                  ## If distance to wall is enabled a Van Driest damping function will be applied based upon the wall distances set in this field.
+                  element scalar_field {
+                     attribute rank { "0" },
+                     attribute name { "DistanceToWall" },
+                     (
+                        element prescribed {
+                           velocity_mesh_choice,
+                           prescribed_scalar_field
+                        }
+                     )
+                  }?,
+                  element debug {
+                     ## YPlus - the wall Reynolds number on the Van Driest formulation. Requires an LES model
+                     ## to be applied to the velocity field.
+                     element scalar_field {
+                        attribute rank { "0" },
+                        attribute name { "YPlus" },
+                        (
+                           element prescribed {
+                              velocity_mesh_choice,
+                              internal_algorithm,
+                              diagnostic_scalar_field
+                           }
+                        )
+                     }?,
+                     ## DampedFilterWidth - Mixing length following application of the
+                     ## Van Driest formula:
+                     ##
+                     ## L_damped = L_{grid} * (1.0 - exp(-YPlus/25))
+                     ##
+                     ## Requires an LES model to be applied to the velocity field.
+                     element scalar_field {
+                        attribute rank { "0" },
+                        attribute name { "DampedFilterWidth" },
+                        (
+                           element prescribed {
+                              velocity_mesh_choice,
+                              internal_algorithm,
+                              diagnostic_scalar_field
+                           }
+                        )
+                     }?
+                  }?
+               }?,
+               ## Options dealing with buoyancy
+               element buoyancy {
+                 ## Align the gravity opposite to the radial direction (-(x,y) in 2d, -(x,y,z) in 3d)
+                 ## and evaluate it at the gauss points.
+                 ##
+                 ## NOTE: this ignores whatever values are set under /physical_parameters/gravity/vector_field::GravityDirection 
+                 ## for the buoyancy terms.
+                 element radial_gravity_direction_at_gauss_points {
+                   comment
+                 }?
                }
             }
          ),
@@ -1279,6 +1390,7 @@ prognostic_velocity_field =
       prognostic_velocity_stat_options,
       vector_convergence_options,
       prognostic_detector_options,
+      prognostic_particle_options,
       vector_steady_state_options,
       adaptivity_options_prognostic_vector_field,
       interpolation_algorithm_vector,
@@ -1304,9 +1416,10 @@ prognostic_pressure_field =
                }?,
                ## Test the continuity equation with the control volume dual mesh of the finite element pressure mesh.
                ## This will make the pressure matrix non symmetric which must be 
-               ## considered when selecting the pressure solver options. This will not work with the free surface and 
+               ## considered when selecting the pressure solver options. This cannot be used with the standard p=0 
+               ## free surface model (but can be used with the zero normal stress free surface). It will not work with 
                ## wetting and drying models. Also the mesh assoicated with the pressure field must use the lagrangian 
-               ## element type (the default). This will not work with the implicit solids model using two way coupling. 
+               ## element type (the default).
                element test_continuity_with_cv_dual {
                   comment
                }?
@@ -1390,6 +1503,8 @@ prognostic_pressure_field =
                 ## Make sure you've not lumped your mass in the velocity spatial_discretisation if you want to be consistent!
                 element inner_matrix {
                   attribute name { "FullMassMatrix" },
+                  ## Solver options to solve the inner (mass) matrix in the schur complement solve, also used
+                  ## to solve the correction solve afterwards.
                   element solver {
                     linear_solver_options_sym
                   }
@@ -1400,9 +1515,11 @@ prognostic_pressure_field =
                 ## Doesn't really matter if you've lumped your mass or not but why would you if you're doing a full inner solve anyway?
                 element inner_matrix {
                   attribute name { "FullMomentumMatrix" },
+                  ## Solver options to solve the inner (momentum) matrix in the schur complement solve, also used
+                  ## to solve the correction solve afterwards. If not provided uses the solver options under Velocity
                   element solver {
                     linear_solver_options_asym_vector
-                  }
+                  }?
                 }
               ),
               (
@@ -1502,6 +1619,7 @@ prognostic_pressure_field =
       prognostic_scalar_stat_options,
       scalar_convergence_options,
       detector_options_disabled_default,
+      particle_options_disabled_default,
       scalar_steady_state_options,
       adaptivity_options_prognostic_scalar_field,
       interpolation_algorithm_scalar_full,
@@ -1591,6 +1709,7 @@ prognostic_geostrophic_pressure_field =
       prognostic_scalar_stat_options,
       scalar_convergence_options,
       prognostic_detector_options,
+      prognostic_particle_options,
       scalar_steady_state_options,
       adaptivity_options_prognostic_scalar_field,
       interpolation_algorithm_scalar_full,
@@ -1627,6 +1746,7 @@ prognostic_vertical_balance_pressure_field =
       prognostic_scalar_stat_options,
       scalar_convergence_options,
       prognostic_detector_options,
+      prognostic_particle_options,
       scalar_steady_state_options,
       adaptivity_options_prognostic_scalar_field,
       interpolation_algorithm_scalar_full,
@@ -1677,6 +1797,7 @@ prognostic_hydrostatic_pressure_field =
       prognostic_scalar_stat_options,
       scalar_convergence_options,
       prognostic_detector_options,
+      prognostic_particle_options,
       scalar_steady_state_options,
       adaptivity_options_prognostic_scalar_field,
       interpolation_algorithm_scalar_full,
@@ -1693,6 +1814,7 @@ prognostic_hydrostatic_pressure_gradient_field =
       prognostic_velocity_stat_options,
       vector_convergence_options,
       prognostic_detector_options,
+      prognostic_particle_options,
       vector_steady_state_options,
       adaptivity_options_prognostic_vector_field,
       interpolation_algorithm_vector_full
@@ -1781,6 +1903,7 @@ prognostic_foam_velocity_potential_field =
       prognostic_scalar_output_options,
       prognostic_scalar_stat_options,
       prognostic_detector_options,
+      prognostic_particle_options,
       scalar_steady_state_options,
       adaptivity_options_prognostic_scalar_field,
       interpolation_algorithm_scalar_full,
@@ -1806,6 +1929,7 @@ prognostic_stream_function_field =
       prognostic_scalar_output_options,
       prognostic_scalar_stat_options,
       prognostic_detector_options,
+      prognostic_particle_options,
       adaptivity_options_prognostic_scalar_field,
       interpolation_algorithm_scalar_full,
       discrete_properties_algorithm_scalar?
@@ -1882,6 +2006,7 @@ prognostic_multipath_stream_function_field =
       prognostic_scalar_output_options,
       prognostic_scalar_stat_options,
       prognostic_detector_options,
+      prognostic_particle_options,
       scalar_steady_state_options,
       adaptivity_options_prognostic_scalar_field,
       interpolation_algorithm_scalar_full,
@@ -2033,11 +2158,6 @@ scalar_equation_choice =
                 }?
               }
             )
-         }|
-         ## Option to solve for electrical potential from
-         ## electrokinetic, electrochemical or electrothermal sources 
-         element equation { 
-            attribute name { "ElectricalPotential" }
          }|
          ## Equation type for the k-epsilon model fields.
          ## Note: Only works for continuous galerkin or control volume discretisations.

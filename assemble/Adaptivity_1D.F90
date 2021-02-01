@@ -29,8 +29,14 @@
 
 module adaptivity_1d
   
-  use fields
   use fldebug
+  use spud
+  use futils, only: present_and_true
+  use elements
+  use parallel_tools
+  use metric_tools, only: edge_length_from_eigenvalue
+  use transform_elements
+  use fields
   use hadapt_metric_based_extrude
   use node_locking
   use tictoc

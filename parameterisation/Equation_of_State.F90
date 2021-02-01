@@ -28,17 +28,21 @@
 
 module equation_of_state
   !!< This module contains functions used to evaluate the equation of state.
+
   use fldebug
+  use global_parameters, only: OPTION_PATH_LEN, FIELD_NAME_LEN
+  use futils, only: int2str
+  use spud
   use fields
   use state_module
-  use global_parameters, only: OPTION_PATH_LEN
   use sediment, only: get_n_sediment_fields, get_sediment_item
-  use spud
+
   implicit none
   
   private
   public :: calculate_perturbation_density, mcD_J_W_F2002, &
-            compressible_eos, compressible_material_eos
+            compressible_eos, compressible_material_eos, &
+            compressible_eos_linearised_mantle
 
 contains
 
@@ -127,7 +131,7 @@ contains
        if (have_option(trim(option_path)//'/generic_scalar_field_dependency')) then
           do f = 1, option_count(trim(option_path)//'/generic_scalar_field_dependency')
              dep_option_path=trim(option_path)//'/generic_scalar_field_dependency['//int2str(f-1)//']'
-             call get_option(trim(dep_option_path)//'/scalar_field_name', sfield_name)
+             call get_option(trim(dep_option_path)//'/name', sfield_name)
              call get_option(trim(dep_option_path)//'/reference_value', T0)
              call get_option(trim(dep_option_path)//'/expansion_coefficient', gamma)
              T => extract_scalar_field(state, trim(sfield_name))
@@ -731,27 +735,48 @@ contains
   end subroutine compressible_eos_foam
         
   subroutine compressible_eos_linearised_mantle(state, drhodp, &
-    density, pressure, buoyancy_density)
+    density, pressure, buoyancy_density, reference_density, exclude_pressure_buoyancy)
     ! Linearised mantle equation of state
     type(state_type), intent(in) :: state
     type(scalar_field), intent(inout) :: drhodp
     type(scalar_field), intent(inout), optional :: density, pressure, buoyancy_density
+    type(scalar_field), intent(inout), optional :: reference_density ! if present this needs to be deallocated by the caller
+    logical, optional :: exclude_pressure_buoyancy
     
     !locals
     integer :: stat
     type(scalar_field), pointer :: pressure_local, temperature_local, density_local, &
-                                   referencedensity_local, bulkmodulus_local, thermalexpansion_local
+                                   referencedensity_local, bulkmodulus_local, thermalexpansion_local, &
+                                   dep_local
     type(scalar_field) :: pressure_remap, density_remap, referencedensity_remap, &
                           compressibility, dpdrho, thermalexpansion_remap, &
                           temperatureproduct
-    logical :: implicit_pressure_buoyancy, exclude_pressure_buoyancy
-    character(len=OPTION_PATH_LEN) :: linearised_mantle_eos_path
+    type(scalar_field), dimension(:), allocatable :: depproducts
+    logical :: implicit_pressure_buoyancy, l_exclude_pressure_buoyancy
+    character(len=OPTION_PATH_LEN) :: comp_linearised_mantle_eos_path, fluids_linearised_mantle_eos_path, &
+                                      linearised_mantle_eos_path, dep_option_path
+    character(len=FIELD_NAME_LEN) :: dep_name
+    real :: dep_gamma, dep_0
+    integer :: d, n_deps
     
     call zero(drhodp)
 
-    linearised_mantle_eos_path = "/equation_of_state/compressible/linearised_mantle/"
-    exclude_pressure_buoyancy = have_option(trim(state%option_path)//&
-         trim(linearised_mantle_eos_path)//"/exclude_pressure_buoyancy")
+    if (present(exclude_pressure_buoyancy)) then
+      l_exclude_pressure_buoyancy = exclude_pressure_buoyancy
+    else
+      l_exclude_pressure_buoyancy = have_option(trim(state%option_path)//&
+           "/equation_of_state/compressible/linearised_mantle/exclude_pressure_buoyancy")
+    end if
+
+    comp_linearised_mantle_eos_path = trim(state%option_path)//"/equation_of_state/compressible/linearised_mantle"
+    fluids_linearised_mantle_eos_path = trim(state%option_path)//"/equation_of_state/fluids/linearised_mantle"
+    if (have_option(trim(comp_linearised_mantle_eos_path))) then
+      linearised_mantle_eos_path = comp_linearised_mantle_eos_path
+    else if (have_option(trim(fluids_linearised_mantle_eos_path))) then
+      linearised_mantle_eos_path = fluids_linearised_mantle_eos_path
+    else
+      FLAbort("Unknown linearised mantle eos.")
+    end if
     
     ! Extract relevant parameters from state and remap to drhodp mesh so that all
     ! parameters are on same mesh:    
@@ -760,7 +785,7 @@ contains
     call remap_field(referencedensity_local, referencedensity_remap)
     call set(drhodp, referencedensity_remap)
     
-    if(.not.(exclude_pressure_buoyancy)) then
+    if(.not.(l_exclude_pressure_buoyancy)) then
        bulkmodulus_local=>extract_scalar_field(state,'IsothermalBulkModulus')
        call allocate(compressibility, drhodp%mesh, 'RemappedIsothermalBulkModulus')
        call remap_field(bulkmodulus_local, compressibility)
@@ -782,20 +807,42 @@ contains
        call scale(temperatureproduct, thermalexpansion_remap)
        call scale(temperatureproduct, referencedensity_remap)
        
+       n_deps = option_count(trim(linearised_mantle_eos_path)//'/generic_scalar_field_dependency')
+       allocate(depproducts(n_deps))
+       do d = 1, n_deps
+          dep_option_path=trim(linearised_mantle_eos_path)//'/generic_scalar_field_dependency['//int2str(d-1)//']'
+          call get_option(trim(dep_option_path)//'/name', dep_name)
+          call get_option(trim(dep_option_path)//'/reference_value', dep_0)
+          call get_option(trim(dep_option_path)//'/expansion_coefficient', dep_gamma)
+
+          dep_local => extract_scalar_field(state, trim(dep_name))
+          call allocate(depproducts(d), drhodp%mesh, "GenericScalarFieldDependencyProduct")
+          call remap_field(dep_local, depproducts(d))
+          call addto(depproducts(d), -dep_0)
+          call scale(depproducts(d), dep_gamma)
+          call scale(depproducts(d), referencedensity_remap)
+       end do
+       
        if(present(density).or.present(buoyancy_density)) then
           ! Calculate the density field:          
-          if(exclude_pressure_buoyancy) then ! TALA Cases
+          if(l_exclude_pressure_buoyancy) then ! TALA Cases
              ! density = reference_density + (referencedensity*thermalexpansion*temperature)
              if(present(density)) then
                 assert(density%mesh==drhodp%mesh)
-                call set(density, drhodp)
+                call set(density, referencedensity_remap)
                 call addto(density, temperatureproduct, -1.0)
+                do d = 1, n_deps
+                  call addto(density, depproducts(d), -1.0)
+                end do
              end if
              
              if(present(buoyancy_density)) then
                 assert(buoyancy_density%mesh==drhodp%mesh)
                 call zero(buoyancy_density)
                 call addto(buoyancy_density, temperatureproduct, -1.0)
+                do d = 1, n_deps
+                  call addto(buoyancy_density, depproducts(d), -1.0)
+                end do
              end if
              
           else ! ALA Cases
@@ -811,6 +858,9 @@ contains
                    call scale(density, pressure_remap)
                    call addto(density, temperatureproduct, -1.0)
                    call addto(density, referencedensity_remap)
+                   do d = 1, n_deps
+                     call addto(density, depproducts(d), -1.0)
+                   end do
                 end if
                 
                 if(present(buoyancy_density)) then
@@ -824,6 +874,9 @@ contains
                       call scale(buoyancy_density, pressure_remap)
                    end if
                    call addto(buoyancy_density, temperatureproduct, -1.0)
+                   do d = 1, n_deps
+                     call addto(buoyancy_density, depproducts(d), -1.0)
+                   end do
                 end if
                 call deallocate(pressure_remap)
              else
@@ -846,6 +899,9 @@ contains
              call set(pressure, density_remap)
              call addto(pressure, referencedensity_remap, -1.0)
              call addto(pressure, temperatureproduct)
+             do d = 1, n_deps
+               call addto(pressure, depproducts(d))
+             end do
              
              call allocate(dpdrho, drhodp%mesh, "dpdrho")
              call invert(drhodp, dpdrho)
@@ -860,10 +916,18 @@ contains
 
        call deallocate(thermalexpansion_remap)
        call deallocate(temperatureproduct)
+       do d = 1, n_deps
+         call deallocate(depproducts(d))
+       end do
+       deallocate(depproducts)
 
     end if
 
-    call deallocate(referencedensity_remap)
+    if (present(reference_density)) then
+      reference_density = referencedensity_remap
+    else
+      call deallocate(referencedensity_remap)
+    end if
 
   end subroutine compressible_eos_linearised_mantle
 
