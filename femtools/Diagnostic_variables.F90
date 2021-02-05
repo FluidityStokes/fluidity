@@ -2725,6 +2725,8 @@ contains
        ewrite(2,*) "total_num_det", detector_list%total_num_det
     end if
 
+    h5_ierror = h5_flushstep(detector_list%h5_id)
+
     ewrite(1,*) "Exiting write_detectors"
   end subroutine write_detectors
 
