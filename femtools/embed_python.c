@@ -65,6 +65,11 @@ int eval_user_func(char *function, int function_len, PyObject *pLocals, PyObject
 
   // Execute the user's code and clean up allocated string.
   pCode = PyRun_String(function_c, Py_file_input, pGlobals, pLocals);
+  // Check for errors in executing user code.
+  if (PyErr_Occurred()) {
+    PyErr_Print();
+    return 1;
+  }
   free(function_c);
   Py_DECREF(pCode);
 
