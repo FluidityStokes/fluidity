@@ -203,6 +203,23 @@ compressible_eos_options =
             ## approximation (ALA) - unless pressure is excluded from the buoyancy in which case
             ## this is truncated (TALA).
             element linearised_mantle {
+              ## Enable to add a generic scalar field
+              ## dependency to the equation of state.
+              ##
+              ## The name of this dependency must correspond to a scalar field in this material_phase.
+              element generic_scalar_field_dependency {
+                 attribute name { xsd:string },
+                 ## The reference or background value 
+                 ## for the generic scalar field.
+                 element reference_value {
+                    real
+                 },
+                 ## The expansion coefficient associated 
+                 ## with this generic scalar field.
+                 element expansion_coefficient {
+                    real
+                 }
+              }*,
             	## Exclude pressure terms from the buoyancy.  This is equivalent of a truncated equation of state.
             	element exclude_pressure_buoyancy {
               	  empty

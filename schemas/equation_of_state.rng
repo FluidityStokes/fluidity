@@ -222,6 +222,27 @@ underneath Density and the option to use the reference density in the continuity
 equation (also underneath Density).  In this form this becomes the anelastic liquid
 approximation (ALA) - unless pressure is excluded from the buoyancy in which case
 this is truncated (TALA).</a:documentation>
+          <zeroOrMore>
+            <element name="generic_scalar_field_dependency">
+              <a:documentation>Enable to add a generic scalar field
+dependency to the equation of state.
+
+The name of this dependency must correspond to a scalar field in this material_phase.</a:documentation>
+              <attribute name="name">
+                <data type="string"/>
+              </attribute>
+              <element name="reference_value">
+                <a:documentation>The reference or background value 
+for the generic scalar field.</a:documentation>
+                <ref name="real"/>
+              </element>
+              <element name="expansion_coefficient">
+                <a:documentation>The expansion coefficient associated 
+with this generic scalar field.</a:documentation>
+                <ref name="real"/>
+              </element>
+            </element>
+          </zeroOrMore>
           <optional>
             <element name="exclude_pressure_buoyancy">
               <a:documentation>Exclude pressure terms from the buoyancy.  This is equivalent of a truncated equation of state.</a:documentation>
