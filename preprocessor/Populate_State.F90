@@ -3886,8 +3886,10 @@ if (.not.have_option("/material_phase[0]/vector_field::Velocity/prognostic/vecto
                    FLExit("The use of CompressibleReferenceDensity / Density must be consistent for continuity and energy equations!")
                 end if
              else
-                ewrite(-1,*) "For compressible Stokes problems, only the Mantle Anelastic Energy equation type has been configured correctly."
-                FLExit("The Mantle Analastic Energy equation type must be used for compressible Stokes problems.")
+                if(have_option(trim(temperature_path)//'/prognostic')) then
+                   ewrite(-1,*) "For compressible Stokes problems with a prognostic Temperature, only the Mantle Anelastic Energy equation type has been configured correctly."
+                   FLExit("The Mantle Analastic Energy equation type must be used for compressible Stokes problems.")
+                end if
              end if
 
           else
